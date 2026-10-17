@@ -13,7 +13,7 @@ npm ci
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.4.1/win-x64/Sheet-Studio-0.4.1-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.5.0/win-x64/Sheet-Studio-0.5.0-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
 **Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon) 또는 `--arch=x64`(Intel)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS 실제 실행 검증은 아직 하지 않았습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 
@@ -35,6 +35,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 - 정렬, 텍스트 필터, 중복 행 제거, 표 서식, 양수·음수 색상 표시
 - 차트 10종·18개 조합: 여러 계열, 누적·100% 누적, 혼합 보조축, 범례·데이터 레이블·축 제목, 이동·8방향 크기 조절, 실제 XLSX 차트 입출력 ([차트 안내](docs/CHARTS.md))
 - 피벗테이블: 여러 행·열·값 필드, 6종 집계, 다중 항목 필터, 총합계, 새로 고침 및 XLSX 피벗 내보내기 ([사용 안내](docs/PIVOT.md))
+- 함수 검색·자동 완성·인수 안내, 배열 상수와 범위 연산을 사용하는 SUMPRODUCT, Excel 최신 함수 접두사 보존
 - XLSX·CSV 읽기/쓰기, JSON 저장/복원, 인쇄/PDF
 - 기존 XLSM 열기, 설치된 Excel의 VBA 실행 연결, 결과 가져오기, VBA 프로젝트를 유지하는 XLSM 저장
 
@@ -46,7 +47,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 계산 엔진은 JavaScript `eval`을 사용하지 않습니다. 산술, 비교, 문자열, 절대·상대 참조, 범위, 오류 전파, 순환 참조 감지와 다음 함수 등을 지원합니다.
 
-`SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `COUNTA`, `IF`, `IFERROR`, `AND`, `OR`, `NOT`, `ROUND`, `ROUNDUP`, `ROUNDDOWN`, `ABS`, `SQRT`, `POWER`, `MOD`, `INT`, `LEN`, `LEFT`, `RIGHT`, `MID`, `CONCAT`, `CONCATENATE`, `TRIM`, `UPPER`, `LOWER`, `SUMIF`, `COUNTIF`, `VLOOKUP`, `XLOOKUP`, `TODAY`, `DATE`, `YEAR`, `MONTH`, `DAY`.
+**379개 함수 이름**(이전 버전 별칭 30개 포함)을 지원합니다. `SUMIFS/COUNTIFS/AVERAGEIFS`, `INDEX/MATCH/XMATCH`, `INDIRECT/OFFSET`, `PMT/IRR/XIRR`, `STDEV/VAR`와 확률 분포, 공학·텍스트·날짜 함수가 포함됩니다. **수식 → 함수 삽입**에서 이름·한국어 설명·범주로 검색하고 구문과 예시를 확인하세요. 수식 입력 중에는 ↑↓로 함수를 선택하고 Tab으로 완성하며, 현재 인수 안내가 표시됩니다. [전체 함수 목록과 호환 범위](docs/FUNCTIONS.md)를 참조하세요.
 
 ## 범위와 차이
 
@@ -62,6 +63,8 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 - [분석 요약](docs/ANALYSIS.md): 네이티브 분석과 화면 관찰의 범위 및 구현과의 구분
 - [검증 기록](VALIDATION.md): 테스트 실행과 실행 파일 확인
+- `node tests/ui-functions.mjs --packaged`: 함수 검색·범주·삽입·자동 완성·인수 안내·수식 저장 검사
+- `node scripts/functions-native-smoke.mjs`: 설치된 Windows Excel과 계산 결과 및 XLSX 실제 열기 대조
 - `npm test`: 계산, 파일 왕복, 차트 유형·참조·원본 보존·크기 및 플랫폼 설정 테스트
 - `node tests/ui-excel-charts.mjs --packaged`: 10종 차트의 생성·설정·XLSX 저장/열기·변환 검사
 - `node scripts/chart-native-smoke.mjs`: 설치된 Windows Excel에서 18개 새 차트 조합과 기존 차트 왕복 검사
@@ -69,3 +72,5 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 - `node tests/ui-smoke.mjs`: 로컬 개발 서버에 대한 실제 브라우저 상호작용 테스트 (설치된 Microsoft Edge 사용)
 
 원본 Microsoft 실행 파일, 리소스, 아이콘 또는 디컴파일 코드는 앱과 이 저장소에 포함하지 않았습니다. 상세 원본 분석 산출물은 로컬에 보관하며 공개 저장소에는 독립 앱 코드와 분석 요약만 포함합니다.
+
+수학·통계·공학 함수의 일부는 MIT 라이선스의 [Formula.js](https://github.com/formulajs/formulajs) 4.6.1을 사용하며, 셀 참조·공백·오류·날짜·조건 집계는 앱의 호환 계층에서 처리합니다. 배포 앱에 [오픈 소스 고지](public/THIRD-PARTY-NOTICES.txt)를 포함합니다.

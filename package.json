@@ -1,6 +1,6 @@
 {
   "name": "lattice-sheet-studio",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Independent local spreadsheet editor with formulas and XLSX exchange",
   "author": "Sheet Studio",
   "private": true,
@@ -20,6 +20,7 @@
     "package:win": "npm run build && node scripts/package.cjs --win"
   },
   "dependencies": {
+    "@formulajs/formulajs": "4.6.1",
     "@xmldom/xmldom": "0.9.12",
     "exceljs": "4.4.0",
     "jszip": "3.10.2"

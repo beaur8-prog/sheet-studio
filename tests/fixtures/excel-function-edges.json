@@ -1,0 +1,563 @@
+{
+  "capturedAt": "2026-10-17T18:11:50.2272330Z",
+  "excelBuild": 19127,
+  "cases": [
+    {
+      "expected": "-₩1,234.57",
+      "formula": "=DOLLAR(-1234.567,2)",
+      "name": "edge-0"
+    },
+    {
+      "expected": "₩1,200",
+      "formula": "=DOLLAR(1234,-2)",
+      "name": "edge-1"
+    },
+    {
+      "expected": 59,
+      "formula": "=EDATE(60,0)",
+      "name": "edge-2"
+    },
+    {
+      "expected": 60,
+      "formula": "=WORKDAY(60,0)",
+      "name": "edge-3"
+    },
+    {
+      "expected": 7,
+      "formula": "=WEEKDAY(0)",
+      "name": "edge-4"
+    },
+    {
+      "expected": 1,
+      "formula": "=WEEKDAY(1)",
+      "name": "edge-5"
+    },
+    {
+      "expected": 4,
+      "formula": "=WEEKDAY(60)",
+      "name": "edge-6"
+    },
+    {
+      "expected": 5,
+      "formula": "=WEEKDAY(61)",
+      "name": "edge-7"
+    },
+    {
+      "expected": 5,
+      "formula": "=NETWORKDAYS.INTL(DATE(2024,1,1),DATE(2024,1,7),2)",
+      "name": "edge-8"
+    },
+    {
+      "expected": 6,
+      "formula": "=NETWORKDAYS.INTL(DATE(2024,1,1),DATE(2024,1,7),17)",
+      "name": "edge-9"
+    },
+    {
+      "expected": 0.6693989071038251,
+      "formula": "=YEARFRAC(DATE(2024,3,1),DATE(2024,11,1),1)",
+      "name": "edge-10"
+    },
+    {
+      "expected": 1,
+      "formula": "=YEARFRAC(DATE(2023,3,1),DATE(2024,3,1),1)",
+      "name": "edge-11"
+    },
+    {
+      "expected": 30,
+      "formula": "=DAYS360(DATE(2024,2,29),DATE(2024,3,31))",
+      "name": "edge-12"
+    },
+    {
+      "expected": 365,
+      "formula": "=DATEDIF(DATE(2020,2,29),DATE(2021,2,28),\"YD\")",
+      "name": "edge-13"
+    },
+    {
+      "expected": -1,
+      "formula": "=DATEDIF(DATE(2024,1,31),DATE(2024,3,1),\"MD\")",
+      "name": "edge-14"
+    },
+    {
+      "expected": 0,
+      "formula": "=COUNTIF(A1:A5,\"*\")",
+      "name": "edge-15"
+    },
+    {
+      "expected": 2,
+      "formula": "=COUNTIFS(A1:A5,\">1\",A1:A5,\"<=3\")",
+      "name": "edge-16"
+    },
+    {
+      "expected": "#VALUE!",
+      "formula": "=COUNTIFS(A1:A5,\">1\",A1:A4,\"<=3\")",
+      "name": "edge-17"
+    },
+    {
+      "expected": 0.3333333333333333,
+      "formula": "=AVERAGEA({1,TRUE,\"x\",\"\"})",
+      "name": "edge-18"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=STDEVA({1,TRUE,\"x\",\"\"})",
+      "name": "edge-19"
+    },
+    {
+      "expected": 0,
+      "formula": "=VARPA({1,TRUE,\"x\",\"\"})",
+      "name": "edge-20"
+    },
+    {
+      "expected": 1.5,
+      "formula": "=MEDIAN({1,2,\"3\",TRUE})",
+      "name": "edge-21"
+    },
+    {
+      "expected": "#N/A",
+      "formula": "=MODE.SNGL(1,2,3)",
+      "name": "edge-22"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=LARGE({1,2,3},0)",
+      "name": "edge-23"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=SMALL({1,2,3},0)",
+      "name": "edge-24"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=PERCENTILE.EXC({1,2,3},0.1)",
+      "name": "edge-25"
+    },
+    {
+      "expected": "#N/A",
+      "formula": "=PERCENTRANK.INC({1,2,3},4)",
+      "name": "edge-26"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=QUARTILE.EXC({1,2,3},0)",
+      "name": "edge-27"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=CORREL({1,1},{2,3})",
+      "name": "edge-28"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=COVARIANCE.S({1},{2})",
+      "name": "edge-29"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=SLOPE({1,2},{1,1})",
+      "name": "edge-30"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=INTERCEPT({1,2},{1,1})",
+      "name": "edge-31"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=STEYX({1,2},{2,4})",
+      "name": "edge-32"
+    },
+    {
+      "expected": true,
+      "formula": "=ISEVEN(\"4\")",
+      "name": "edge-33"
+    },
+    {
+      "expected": "#VALUE!",
+      "formula": "=ISEVEN(TRUE)",
+      "name": "edge-34"
+    },
+    {
+      "expected": true,
+      "formula": "=ISODD(-3.8)",
+      "name": "edge-35"
+    },
+    {
+      "expected": true,
+      "formula": "=ISERROR(NA())",
+      "name": "edge-37"
+    },
+    {
+      "expected": "#N/A",
+      "formula": "=N(NA())",
+      "name": "edge-38"
+    },
+    {
+      "expected": "#N/A",
+      "formula": "=T(NA())",
+      "name": "edge-39"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=IFNA(1/0,7)",
+      "name": "edge-40"
+    },
+    {
+      "expected": 7,
+      "formula": "=CHOOSE(1,7,1/0)",
+      "name": "edge-41"
+    },
+    {
+      "expected": 7,
+      "formula": "=IFS(TRUE,7,FALSE,1/0)",
+      "name": "edge-42"
+    },
+    {
+      "expected": 7,
+      "formula": "=SWITCH(1,1,7,1/0)",
+      "name": "edge-43"
+    },
+    {
+      "expected": 1,
+      "formula": "=FIND(\"\",\"abc\",1)",
+      "name": "edge-44"
+    },
+    {
+      "expected": 1,
+      "formula": "=FIND(\"\",\"\",1)",
+      "name": "edge-45"
+    },
+    {
+      "expected": 2,
+      "formula": "=SEARCH(\"~*\",\"a*b\")",
+      "name": "edge-46"
+    },
+    {
+      "expected": "abcx",
+      "formula": "=REPLACE(\"abc\",9,0,\"x\")",
+      "name": "edge-47"
+    },
+    {
+      "expected": "#VALUE!",
+      "formula": "=SUBSTITUTE(\"a\",\"a\",\"b\",0)",
+      "name": "edge-48"
+    },
+    {
+      "expected": 0.12,
+      "formula": "=VALUE(\"12%\")",
+      "name": "edge-49"
+    },
+    {
+      "expected": "#VALUE!",
+      "formula": "=NUMBERVALUE(\"1,23.4\",\",\",\".\")",
+      "name": "edge-50"
+    },
+    {
+      "expected": 123.4,
+      "formula": "=NUMBERVALUE(\"1.23,4\",\",\",\".\")",
+      "name": "edge-51"
+    },
+    {
+      "expected": "#VALUE!",
+      "formula": "=NUMBERVALUE(\"1,2,3\",\",\",\".\")",
+      "name": "edge-52"
+    },
+    {
+      "expected": 0,
+      "formula": "=GCD(0,0)",
+      "name": "edge-53"
+    },
+    {
+      "expected": 0,
+      "formula": "=LCM(0,3)",
+      "name": "edge-54"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=MROUND(-10,3)",
+      "name": "edge-55"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=LOG(10,1)",
+      "name": "edge-56"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=COT(0)",
+      "name": "edge-57"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=CSC(0)",
+      "name": "edge-58"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=CSCH(0)",
+      "name": "edge-59"
+    },
+    {
+      "expected": "#DIV/0!",
+      "formula": "=COTH(0)",
+      "name": "edge-60"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=BITAND(2.2,3)",
+      "name": "edge-61"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=BINOM.DIST(2,3,2,FALSE)",
+      "name": "edge-62"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=BINOM.INV(10,0.5,0)",
+      "name": "edge-63"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=BINOM.INV(10,0.5,1)",
+      "name": "edge-64"
+    },
+    {
+      "expected": 0.24197072451914337,
+      "formula": "=NORM.S.DIST(1,FALSE)",
+      "name": "edge-65"
+    },
+    {
+      "expected": 0.17044656615102993,
+      "formula": "=T.DIST(-1,10,TRUE)",
+      "name": "edge-66"
+    },
+    {
+      "expected": 0.8295534338489701,
+      "formula": "=T.DIST.RT(-1,10)",
+      "name": "edge-67"
+    },
+    {
+      "expected": 0,
+      "formula": "=T.INV(0.5,10)",
+      "name": "edge-68"
+    },
+    {
+      "expected": 0.8295534338489701,
+      "formula": "=T.DIST(1,10.9,TRUE)",
+      "name": "edge-69"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=BETA.DIST(0.5,0,2,TRUE)",
+      "name": "edge-70"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=GAMMA.DIST(1,0,2,TRUE)",
+      "name": "edge-71"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=POISSON.DIST(-1,2,TRUE)",
+      "name": "edge-72"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=WEIBULL.DIST(-1,2,3,TRUE)",
+      "name": "edge-73"
+    },
+    {
+      "expected": 499500,
+      "formula": "=COMBIN(1000,2)",
+      "name": "edge-74"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=COMBINA(0,1)",
+      "name": "edge-75"
+    },
+    {
+      "expected": 1,
+      "formula": "=PERMUT(0,0)",
+      "name": "edge-76"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=FACT(-0.5)",
+      "name": "edge-77"
+    },
+    {
+      "expected": 1,
+      "formula": "=FACTDOUBLE(-1)",
+      "name": "edge-78"
+    },
+    {
+      "expected": -100,
+      "formula": "=PMT(0,12,1200)",
+      "name": "edge-79"
+    },
+    {
+      "expected": -4.3434156497998736e-10,
+      "formula": "=RATE(12,-100,1200)",
+      "name": "edge-80"
+    },
+    {
+      "expected": 10.652588310535169,
+      "formula": "=NPV(0.1,A1:A5)",
+      "name": "edge-81"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=IPMT(0.1,0,12,1000)",
+      "name": "edge-82"
+    },
+    {
+      "expected": 0.10000000000000009,
+      "formula": "=IRR({-100,110})",
+      "name": "edge-83"
+    },
+    {
+      "expected": 0.0997135818004608,
+      "formula": "=XIRR({-100,110},{43831,44197})",
+      "name": "edge-84"
+    },
+    {
+      "expected": "R3C[2]",
+      "formula": "=ADDRESS(3,2,2,FALSE)",
+      "name": "edge-85"
+    },
+    {
+      "expected": 15,
+      "formula": "=SUM(INDEX(A1:A5,0))",
+      "name": "edge-86"
+    },
+    {
+      "expected": 5,
+      "formula": "=ROWS(OFFSET(A1,0,0,5,1))",
+      "name": "edge-87"
+    },
+    {
+      "expected": 30,
+      "formula": "=SUBTOTAL(9,A1:A5,A1:A5)",
+      "name": "edge-88"
+    },
+    {
+      "expected": 2,
+      "formula": "=MATCH(2,{3,2,1},-1)",
+      "name": "edge-89"
+    },
+    {
+      "expected": 3,
+      "formula": "=MATCH(2,{1,2,2,3},1)",
+      "name": "edge-90"
+    },
+    {
+      "expected": 30,
+      "formula": "=LOOKUP(2,{1,2,2,3},{10,20,30,40})",
+      "name": "edge-91"
+    },
+    {
+      "expected": "0012",
+      "formula": "=TEXT(12,\"0000\")",
+      "name": "edge-92"
+    },
+    {
+      "expected": "25.0%",
+      "formula": "=TEXT(0.25,\"0.0%\")",
+      "name": "edge-93"
+    },
+    {
+      "expected": "2024-02-29",
+      "formula": "=TEXT(DATE(2024,2,29),\"yyyy-mm-dd\")",
+      "name": "edge-94"
+    },
+    {
+      "expected": 1,
+      "formula": "=AVERAGEA({1,TRUE})",
+      "name": "probe"
+    },
+    {
+      "expected": 0.5,
+      "formula": "=AVERAGEA({1,\"x\"})",
+      "name": "probe"
+    },
+    {
+      "expected": 0.5,
+      "formula": "=AVERAGEA({1,\"\"})",
+      "name": "probe"
+    },
+    {
+      "expected": 0,
+      "formula": "=MAXA({0,TRUE})",
+      "name": "probe"
+    },
+    {
+      "expected": 1,
+      "formula": "=MINA({1,FALSE})",
+      "name": "probe"
+    },
+    {
+      "expected": 1.4142135623730951,
+      "formula": "=STDEVA({1,TRUE,3})",
+      "name": "probe"
+    },
+    {
+      "expected": 1.1547005383792515,
+      "formula": "=STDEVA(1,TRUE,3)",
+      "name": "probe"
+    },
+    {
+      "expected": 2,
+      "formula": "=VARA({1,\"x\",3})",
+      "name": "probe"
+    },
+    {
+      "expected": "#VALUE!",
+      "formula": "=VARA(1,\"x\",3)",
+      "name": "probe"
+    },
+    {
+      "expected": 2.6666666666666665,
+      "formula": "=AVERAGEA(A1:A5,TRUE)",
+      "name": "probe"
+    },
+    {
+      "expected": 59,
+      "formula": "=EOMONTH(DATE(1900,2,1),0)",
+      "name": "probe"
+    },
+    {
+      "expected": 2,
+      "formula": "=LARGE({1,2,3},1.5)",
+      "name": "probe"
+    },
+    {
+      "expected": 1,
+      "formula": "=SMALL({1,2,3},1.5)",
+      "name": "probe"
+    },
+    {
+      "expected": 64,
+      "formula": "=TYPE({1,2,3})",
+      "name": "probe"
+    },
+    {
+      "expected": 1,
+      "formula": "=COMBINA(0,0)",
+      "name": "probe"
+    },
+    {
+      "expected": "#NUM!",
+      "formula": "=FACTDOUBLE(-2)",
+      "name": "probe"
+    },
+    {
+      "expected": 0.5,
+      "formula": "=AVERAGEA({1,FALSE,\"x\"})",
+      "name": "probe"
+    }
+  ],
+  "excelVersion": "16.0",
+  "notes": "TYPE(A1:A5) excluded: legacy Excel Formula invokes implicit intersection at the result row; this engine deliberately supports ranges as arrays within formulas."
+}

@@ -75,9 +75,13 @@ npm run package
 
 The resolved Windows runtime is **Electron 42.11.15**, verified against the cached official release archive. Archive SHA-256: `f85fb7fb361508161bf0c3431e96518e34a9c10997048df21400a7da96658737`. The installed executable matches the archive's `electron.exe` at SHA-256 `8997a726173fb70b53bfb63b4f19865db759f9b247a66cd3b79b0b45c4eb626e`. Packaging writes `release/<version>/<platform>-<arch>/runtime-provenance.json` and changes only native product metadata/icon resources, checking that executable code-section hashes remain identical.
 
-Windows artifacts appear under `release/0.4.1/win-x64/`: the portable `Sheet-Studio-0.4.1-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
+Windows artifacts appear under `release/0.5.0/win-x64/`: the portable `Sheet-Studio-0.5.0-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
 
 ## Dependency provenance and verification
+
+Formula support in 0.5.0 covers 379 names, including 30 compatibility aliases, using an explicit registry and Formula.js 4.6.1 behind Excel-specific adapters. See [the function catalogue and limitations](docs/FUNCTIONS.md). The renderer bundle and `THIRD-PARTY-NOTICES.txt` are included in both Windows and macOS packages. No network service or installed Excel is needed for these functions.
+
+XLSX exports add the MS-XLSX `_xlfn.` prefix to future-function tokens, preserving strings and existing prefixes. This is required for Excel to recognize many newer functions after reopening the file. Unknown formulas and stored results retain the existing preservation behavior. `node scripts/functions-native-smoke.mjs` compares direct Excel calculations with actual reopening of an app-generated XLSX; the optional native check requires Windows Excel. The committed expected-value fixtures run on every platform through `npm test`.
 
 XLSX support uses [ExcelJS](https://github.com/exceljs/exceljs), pinned at version 4.4.0. Its browser bundle is compiled locally by Vite. Registry metadata and official repository documentation were inspected for the dependency choice and formula-result contract. ExcelJS stores formulas/results but does not calculate formulas itself; the app's independent engine supplies calculations.
 

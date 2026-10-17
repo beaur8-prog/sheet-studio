@@ -1,0 +1,1862 @@
+{
+  "capturedAt": "2026-10-17T18:06:15.0177165Z",
+  "excelBuild": 19127,
+  "cases": [
+    {
+      "expected": 3,
+      "formula": "=ABS(-3)",
+      "name": "ABS"
+    },
+    {
+      "expected": 1.0471975511965976,
+      "formula": "=ACOS(0.5)",
+      "name": "ACOS"
+    },
+    {
+      "expected": 1.3169578969248166,
+      "formula": "=ACOSH(2)",
+      "name": "ACOSH"
+    },
+    {
+      "expected": 0.4636476090008061,
+      "formula": "=ACOT(2)",
+      "name": "ACOT"
+    },
+    {
+      "expected": 0.5493061443340549,
+      "formula": "=ACOTH(2)",
+      "name": "ACOTH"
+    },
+    {
+      "expected": "Sheet1!B3",
+      "formula": "=ADDRESS(3,2,4,TRUE,\"Sheet1\")",
+      "name": "ADDRESS"
+    },
+    {
+      "expected": true,
+      "formula": "=AND(TRUE,3>2)",
+      "name": "AND"
+    },
+    {
+      "expected": 0.5235987755982989,
+      "formula": "=ASIN(0.5)",
+      "name": "ASIN"
+    },
+    {
+      "expected": 1.4436354751788103,
+      "formula": "=ASINH(2)",
+      "name": "ASINH"
+    },
+    {
+      "expected": 0.7853981633974483,
+      "formula": "=ATAN(1)",
+      "name": "ATAN"
+    },
+    {
+      "expected": 0.7853981633974483,
+      "formula": "=ATAN2(1,1)",
+      "name": "ATAN2"
+    },
+    {
+      "expected": 0.5493061443340549,
+      "formula": "=ATANH(0.5)",
+      "name": "ATANH"
+    },
+    {
+      "expected": 1.2,
+      "formula": "=AVEDEV(1,2,3,4,5)",
+      "name": "AVEDEV"
+    },
+    {
+      "expected": 2,
+      "formula": "=AVERAGE(1,2,3)",
+      "name": "AVERAGE"
+    },
+    {
+      "expected": 1.6666666666666667,
+      "formula": "=AVERAGEA(1,TRUE,3)",
+      "name": "AVERAGEA"
+    },
+    {
+      "expected": 4,
+      "formula": "=AVERAGEIF(A1:A5,\">2\")",
+      "name": "AVERAGEIF"
+    },
+    {
+      "expected": 3.5,
+      "formula": "=AVERAGEIFS(A1:A5,A1:A5,\">2\",A1:A5,\"<5\")",
+      "name": "AVERAGEIFS"
+    },
+    {
+      "expected": "001F",
+      "formula": "=BASE(31,16,4)",
+      "name": "BASE"
+    },
+    {
+      "expected": 0.981666428475166,
+      "formula": "=BESSELI(1.5,1)",
+      "name": "BESSELI"
+    },
+    {
+      "expected": 0.5579365078908043,
+      "formula": "=BESSELJ(1.5,1)",
+      "name": "BESSELJ"
+    },
+    {
+      "expected": 0.2773878036322587,
+      "formula": "=BESSELK(1.5,1)",
+      "name": "BESSELK"
+    },
+    {
+      "expected": -0.41230862689590375,
+      "formula": "=BESSELY(1.5,1)",
+      "name": "BESSELY"
+    },
+    {
+      "expected": 0.6875,
+      "formula": "=BETA.DIST(0.5,2,3,TRUE)",
+      "name": "BETA.DIST"
+    },
+    {
+      "expected": 0.3857275681323895,
+      "formula": "=BETA.INV(0.5,2,3)",
+      "name": "BETA.INV"
+    },
+    {
+      "expected": 0.3857275681323895,
+      "formula": "=BETAINV(0.5,2,3)",
+      "name": "BETAINV"
+    },
+    {
+      "expected": 10,
+      "formula": "=BIN2DEC(\"1010\")",
+      "name": "BIN2DEC"
+    },
+    {
+      "expected": "000A",
+      "formula": "=BIN2HEX(\"1010\",4)",
+      "name": "BIN2HEX"
+    },
+    {
+      "expected": "0012",
+      "formula": "=BIN2OCT(\"1010\",4)",
+      "name": "BIN2OCT"
+    },
+    {
+      "expected": 0.23347444050000005,
+      "formula": "=BINOM.DIST(2,10,0.3,FALSE)",
+      "name": "BINOM.DIST"
+    },
+    {
+      "expected": 0.7004233215,
+      "formula": "=BINOM.DIST.RANGE(10,0.3,2,4)",
+      "name": "BINOM.DIST.RANGE"
+    },
+    {
+      "expected": 3,
+      "formula": "=BINOM.INV(10,0.3,0.5)",
+      "name": "BINOM.INV"
+    },
+    {
+      "expected": 0.23347444050000005,
+      "formula": "=BINOMDIST(2,10,0.3,FALSE)",
+      "name": "BINOMDIST"
+    },
+    {
+      "expected": 5,
+      "formula": "=BITAND(13,7)",
+      "name": "BITAND"
+    },
+    {
+      "expected": 20,
+      "formula": "=BITLSHIFT(5,2)",
+      "name": "BITLSHIFT"
+    },
+    {
+      "expected": 15,
+      "formula": "=BITOR(13,7)",
+      "name": "BITOR"
+    },
+    {
+      "expected": 5,
+      "formula": "=BITRSHIFT(20,2)",
+      "name": "BITRSHIFT"
+    },
+    {
+      "expected": 10,
+      "formula": "=BITXOR(13,7)",
+      "name": "BITXOR"
+    },
+    {
+      "expected": 6,
+      "formula": "=CEILING(4.3,2)",
+      "name": "CEILING"
+    },
+    {
+      "expected": -6,
+      "formula": "=CEILING.MATH(-4.3,2,1)",
+      "name": "CEILING.MATH"
+    },
+    {
+      "expected": -4,
+      "formula": "=CEILING.PRECISE(-4.3,2)",
+      "name": "CEILING.PRECISE"
+    },
+    {
+      "expected": "A",
+      "formula": "=CHAR(65)",
+      "name": "CHAR"
+    },
+    {
+      "expected": 0.5578254003710746,
+      "formula": "=CHIDIST(3,4)",
+      "name": "CHIDIST"
+    },
+    {
+      "expected": 3.356693980033321,
+      "formula": "=CHIINV(0.5,4)",
+      "name": "CHIINV"
+    },
+    {
+      "expected": 0.44217459962892536,
+      "formula": "=CHISQ.DIST(3,4,TRUE)",
+      "name": "CHISQ.DIST"
+    },
+    {
+      "expected": 0.5578254003710746,
+      "formula": "=CHISQ.DIST.RT(3,4)",
+      "name": "CHISQ.DIST.RT"
+    },
+    {
+      "expected": 3.3566939800333215,
+      "formula": "=CHISQ.INV(0.5,4)",
+      "name": "CHISQ.INV"
+    },
+    {
+      "expected": 3.356693980033321,
+      "formula": "=CHISQ.INV.RT(0.5,4)",
+      "name": "CHISQ.INV.RT"
+    },
+    {
+      "expected": "b",
+      "formula": "=CHOOSE(2,\"a\",\"b\",\"c\")",
+      "name": "CHOOSE"
+    },
+    {
+      "expected": "ab",
+      "formula": "=CLEAN(\"a\"&CHAR(10)&\"b\")",
+      "name": "CLEAN"
+    },
+    {
+      "expected": 65,
+      "formula": "=CODE(\"A\")",
+      "name": "CODE"
+    },
+    {
+      "expected": 3,
+      "formula": "=COLUMN(C3)",
+      "name": "COLUMN"
+    },
+    {
+      "expected": 3,
+      "formula": "=COLUMNS(A1:C5)",
+      "name": "COLUMNS"
+    },
+    {
+      "expected": 120,
+      "formula": "=COMBIN(10,3)",
+      "name": "COMBIN"
+    },
+    {
+      "expected": 20,
+      "formula": "=COMBINA(4,3)",
+      "name": "COMBINA"
+    },
+    {
+      "expected": "3+4i",
+      "formula": "=COMPLEX(3,4)",
+      "name": "COMPLEX"
+    },
+    {
+      "expected": "안녕 Excel",
+      "formula": "=CONCAT(\"안녕\",\" \",\"Excel\")",
+      "name": "CONCAT"
+    },
+    {
+      "expected": "안녕 Excel",
+      "formula": "=CONCATENATE(\"안녕\",\" \",\"Excel\")",
+      "name": "CONCATENATE"
+    },
+    {
+      "expected": 0.39199279690801075,
+      "formula": "=CONFIDENCE(0.05,2,100)",
+      "name": "CONFIDENCE"
+    },
+    {
+      "expected": 0.39199279690801075,
+      "formula": "=CONFIDENCE.NORM(0.05,2,100)",
+      "name": "CONFIDENCE.NORM"
+    },
+    {
+      "expected": 0.39684339031728333,
+      "formula": "=CONFIDENCE.T(0.05,2,100)",
+      "name": "CONFIDENCE.T"
+    },
+    {
+      "expected": 1.609344,
+      "formula": "=CONVERT(1,\"mi\",\"km\")",
+      "name": "CONVERT"
+    },
+    {
+      "expected": 0.9759000729485332,
+      "formula": "=CORREL({1,2,3,4},{2,3,5,8})",
+      "name": "CORREL"
+    },
+    {
+      "expected": 0.5403023058681398,
+      "formula": "=COS(1)",
+      "name": "COS"
+    },
+    {
+      "expected": 1.5430806348152437,
+      "formula": "=COSH(1)",
+      "name": "COSH"
+    },
+    {
+      "expected": 0.6420926159343306,
+      "formula": "=COT(1)",
+      "name": "COT"
+    },
+    {
+      "expected": 1.3130352854993315,
+      "formula": "=COTH(1)",
+      "name": "COTH"
+    },
+    {
+      "expected": 2,
+      "formula": "=COUNT(1,2,\"a\")",
+      "name": "COUNT"
+    },
+    {
+      "expected": 3,
+      "formula": "=COUNTA(1,\"a\",TRUE)",
+      "name": "COUNTA"
+    },
+    {
+      "expected": 2,
+      "formula": "=COUNTBLANK(A1:A7)",
+      "name": "COUNTBLANK"
+    },
+    {
+      "expected": 3,
+      "formula": "=COUNTIF(A1:A5,\">2\")",
+      "name": "COUNTIF"
+    },
+    {
+      "expected": 2,
+      "formula": "=COUNTIFS(A1:A5,\">2\",A1:A5,\"<5\")",
+      "name": "COUNTIFS"
+    },
+    {
+      "expected": 2.5,
+      "formula": "=COVAR({1,2,3,4},{2,3,5,8})",
+      "name": "COVAR"
+    },
+    {
+      "expected": 2.5,
+      "formula": "=COVARIANCE.P({1,2,3,4},{2,3,5,8})",
+      "name": "COVARIANCE.P"
+    },
+    {
+      "expected": 3.3333333333333335,
+      "formula": "=COVARIANCE.S({1,2,3,4},{2,3,5,8})",
+      "name": "COVARIANCE.S"
+    },
+    {
+      "expected": 3,
+      "formula": "=CRITBINOM(10,0.3,0.5)",
+      "name": "CRITBINOM"
+    },
+    {
+      "expected": 1.1883951057781212,
+      "formula": "=CSC(1)",
+      "name": "CSC"
+    },
+    {
+      "expected": 0.8509181282393216,
+      "formula": "=CSCH(1)",
+      "name": "CSCH"
+    },
+    {
+      "expected": -48.01379665024956,
+      "formula": "=CUMIPMT(0.01,12,1000,1,6,0)",
+      "name": "CUMIPMT"
+    },
+    {
+      "expected": -485.0789354198005,
+      "formula": "=CUMPRINC(0.01,12,1000,1,6,0)",
+      "name": "CUMPRINC"
+    },
+    {
+      "expected": 45351,
+      "formula": "=DATE(2024,2,29)",
+      "name": "DATE"
+    },
+    {
+      "expected": 50,
+      "formula": "=DATEDIF(DATE(2020,1,15),DATE(2024,3,20),\"M\")",
+      "name": "DATEDIF"
+    },
+    {
+      "expected": 45351,
+      "formula": "=DATEVALUE(\"2024-02-29\")",
+      "name": "DATEVALUE"
+    },
+    {
+      "expected": 29,
+      "formula": "=DAY(DATE(2024,2,29))",
+      "name": "DAY"
+    },
+    {
+      "expected": 2,
+      "formula": "=DAYS(DATE(2024,3,1),DATE(2024,2,28))",
+      "name": "DAYS"
+    },
+    {
+      "expected": 60,
+      "formula": "=DAYS360(DATE(2024,1,1),DATE(2024,3,1),FALSE)",
+      "name": "DAYS360"
+    },
+    {
+      "expected": 3690,
+      "formula": "=DB(10000,1000,5,1)",
+      "name": "DB"
+    },
+    {
+      "expected": 4000,
+      "formula": "=DDB(10000,1000,5,1)",
+      "name": "DDB"
+    },
+    {
+      "expected": "00001010",
+      "formula": "=DEC2BIN(10,8)",
+      "name": "DEC2BIN"
+    },
+    {
+      "expected": "00FF",
+      "formula": "=DEC2HEX(255,4)",
+      "name": "DEC2HEX"
+    },
+    {
+      "expected": "0100",
+      "formula": "=DEC2OCT(64,4)",
+      "name": "DEC2OCT"
+    },
+    {
+      "expected": 255,
+      "formula": "=DECIMAL(\"FF\",16)",
+      "name": "DECIMAL"
+    },
+    {
+      "expected": 180,
+      "formula": "=DEGREES(PI())",
+      "name": "DEGREES"
+    },
+    {
+      "expected": 1,
+      "formula": "=DELTA(3,3)",
+      "name": "DELTA"
+    },
+    {
+      "expected": 10,
+      "formula": "=DEVSQ(1,2,3,4,5)",
+      "name": "DEVSQ"
+    },
+    {
+      "expected": "₩1,234.57",
+      "formula": "=DOLLAR(1234.567,2)",
+      "name": "DOLLAR"
+    },
+    {
+      "expected": 1.125,
+      "formula": "=DOLLARDE(1.02,16)",
+      "name": "DOLLARDE"
+    },
+    {
+      "expected": 1.02,
+      "formula": "=DOLLARFR(1.125,16)",
+      "name": "DOLLARFR"
+    },
+    {
+      "expected": 45351,
+      "formula": "=EDATE(DATE(2024,1,31),1)",
+      "name": "EDATE"
+    },
+    {
+      "expected": 0.12682503013196977,
+      "formula": "=EFFECT(0.12,12)",
+      "name": "EFFECT"
+    },
+    {
+      "expected": 45351,
+      "formula": "=EOMONTH(DATE(2024,1,10),1)",
+      "name": "EOMONTH"
+    },
+    {
+      "expected": 0.8427007929497149,
+      "formula": "=ERF(0,1)",
+      "name": "ERF"
+    },
+    {
+      "expected": 0.8427007929497149,
+      "formula": "=ERF.PRECISE(1)",
+      "name": "ERF.PRECISE"
+    },
+    {
+      "expected": 0.15729920705028513,
+      "formula": "=ERFC(1)",
+      "name": "ERFC"
+    },
+    {
+      "expected": 0.15729920705028513,
+      "formula": "=ERFC.PRECISE(1)",
+      "name": "ERFC.PRECISE"
+    },
+    {
+      "expected": 2,
+      "formula": "=ERROR.TYPE(1/0)",
+      "name": "ERROR.TYPE"
+    },
+    {
+      "expected": -4,
+      "formula": "=EVEN(-3)",
+      "name": "EVEN"
+    },
+    {
+      "expected": false,
+      "formula": "=EXACT(\"Abc\",\"abc\")",
+      "name": "EXACT"
+    },
+    {
+      "expected": 2.718281828459045,
+      "formula": "=EXP(1)",
+      "name": "EXP"
+    },
+    {
+      "expected": 0.6321205588285577,
+      "formula": "=EXPON.DIST(2,0.5,TRUE)",
+      "name": "EXPON.DIST"
+    },
+    {
+      "expected": 0.6321205588285577,
+      "formula": "=EXPONDIST(2,0.5,TRUE)",
+      "name": "EXPONDIST"
+    },
+    {
+      "expected": 0.788325672500624,
+      "formula": "=F.DIST(2,5,6,TRUE)",
+      "name": "F.DIST"
+    },
+    {
+      "expected": 0.21167432749937592,
+      "formula": "=F.DIST.RT(2,5,6)",
+      "name": "F.DIST.RT"
+    },
+    {
+      "expected": 0.9765363971139297,
+      "formula": "=F.INV(0.5,5,6)",
+      "name": "F.INV"
+    },
+    {
+      "expected": 0.9765363971139296,
+      "formula": "=F.INV.RT(0.5,5,6)",
+      "name": "F.INV.RT"
+    },
+    {
+      "expected": 720,
+      "formula": "=FACT(6)",
+      "name": "FACT"
+    },
+    {
+      "expected": 105,
+      "formula": "=FACTDOUBLE(7)",
+      "name": "FACTDOUBLE"
+    },
+    {
+      "expected": false,
+      "formula": "=FALSE()",
+      "name": "FALSE"
+    },
+    {
+      "expected": 0.21167432749937592,
+      "formula": "=FDIST(2,5,6)",
+      "name": "FDIST"
+    },
+    {
+      "expected": 5,
+      "formula": "=FIND(\"b\",\"abcabc\",3)",
+      "name": "FIND"
+    },
+    {
+      "expected": 0.9765363971139296,
+      "formula": "=FINV(0.5,5,6)",
+      "name": "FINV"
+    },
+    {
+      "expected": 0.5493061443340549,
+      "formula": "=FISHER(0.5)",
+      "name": "FISHER"
+    },
+    {
+      "expected": 0.46211715726000974,
+      "formula": "=FISHERINV(0.5)",
+      "name": "FISHERINV"
+    },
+    {
+      "expected": "1,234.57",
+      "formula": "=FIXED(1234.567,2,FALSE)",
+      "name": "FIXED"
+    },
+    {
+      "expected": 4,
+      "formula": "=FLOOR(4.3,2)",
+      "name": "FLOOR"
+    },
+    {
+      "expected": -4,
+      "formula": "=FLOOR.MATH(-4.3,2,1)",
+      "name": "FLOOR.MATH"
+    },
+    {
+      "expected": -6,
+      "formula": "=FLOOR.PRECISE(-4.3,2)",
+      "name": "FLOOR.PRECISE"
+    },
+    {
+      "expected": 10,
+      "formula": "=FORECAST(5,{2,4,6,8},{1,2,3,4})",
+      "name": "FORECAST"
+    },
+    {
+      "expected": 10,
+      "formula": "=FORECAST.LINEAR(5,{2,4,6,8},{1,2,3,4})",
+      "name": "FORECAST.LINEAR"
+    },
+    {
+      "expected": "=SUM(A1:A5)",
+      "formula": "=FORMULATEXT(B1)",
+      "name": "FORMULATEXT"
+    },
+    {
+      "expected": 2395.0753314516674,
+      "formula": "=FV(0.01,12,-100,-1000)",
+      "name": "FV"
+    },
+    {
+      "expected": 1320,
+      "formula": "=FVSCHEDULE(1000,{0.1,0.2})",
+      "name": "FVSCHEDULE"
+    },
+    {
+      "expected": 6,
+      "formula": "=GAMMA(4)",
+      "name": "GAMMA"
+    },
+    {
+      "expected": 0.08030139707139419,
+      "formula": "=GAMMA.DIST(2,3,2,TRUE)",
+      "name": "GAMMA.DIST"
+    },
+    {
+      "expected": 5.348120627447122,
+      "formula": "=GAMMA.INV(0.5,3,2)",
+      "name": "GAMMA.INV"
+    },
+    {
+      "expected": 0.08030139707139419,
+      "formula": "=GAMMADIST(2,3,2,TRUE)",
+      "name": "GAMMADIST"
+    },
+    {
+      "expected": 5.348120627447122,
+      "formula": "=GAMMAINV(0.5,3,2)",
+      "name": "GAMMAINV"
+    },
+    {
+      "expected": 1.791759469228055,
+      "formula": "=GAMMALN(4)",
+      "name": "GAMMALN"
+    },
+    {
+      "expected": 1.791759469228055,
+      "formula": "=GAMMALN.PRECISE(4)",
+      "name": "GAMMALN.PRECISE"
+    },
+    {
+      "expected": 0.34134474606854304,
+      "formula": "=GAUSS(1)",
+      "name": "GAUSS"
+    },
+    {
+      "expected": 12,
+      "formula": "=GCD(24,36)",
+      "name": "GCD"
+    },
+    {
+      "expected": 4,
+      "formula": "=GEOMEAN(2,4,8)",
+      "name": "GEOMEAN"
+    },
+    {
+      "expected": 1,
+      "formula": "=GESTEP(3,2)",
+      "name": "GESTEP"
+    },
+    {
+      "expected": 3.4285714285714284,
+      "formula": "=HARMEAN(2,4,8)",
+      "name": "HARMEAN"
+    },
+    {
+      "expected": "00001010",
+      "formula": "=HEX2BIN(\"A\",8)",
+      "name": "HEX2BIN"
+    },
+    {
+      "expected": 255,
+      "formula": "=HEX2DEC(\"FF\")",
+      "name": "HEX2DEC"
+    },
+    {
+      "expected": "0377",
+      "formula": "=HEX2OCT(\"FF\",4)",
+      "name": "HEX2OCT"
+    },
+    {
+      "expected": 20,
+      "formula": "=HLOOKUP(2,{1,2,3;10,20,30},2,FALSE)",
+      "name": "HLOOKUP"
+    },
+    {
+      "expected": 13,
+      "formula": "=HOUR(TIME(13,24,35))",
+      "name": "HOUR"
+    },
+    {
+      "expected": 0.3632610939112486,
+      "formula": "=HYPGEOM.DIST(1,4,8,20,FALSE)",
+      "name": "HYPGEOM.DIST"
+    },
+    {
+      "expected": 42,
+      "formula": "=IF(TRUE,42,1/0)",
+      "name": "IF"
+    },
+    {
+      "expected": "오류",
+      "formula": "=IFERROR(1/0,\"오류\")",
+      "name": "IFERROR"
+    },
+    {
+      "expected": "없음",
+      "formula": "=IFNA(NA(),\"없음\")",
+      "name": "IFNA"
+    },
+    {
+      "expected": 2,
+      "formula": "=IFS(FALSE,1,TRUE,2)",
+      "name": "IFS"
+    },
+    {
+      "expected": 5,
+      "formula": "=IMABS(\"3+4i\")",
+      "name": "IMABS"
+    },
+    {
+      "expected": 4,
+      "formula": "=IMAGINARY(\"3+4i\")",
+      "name": "IMAGINARY"
+    },
+    {
+      "expected": 0.9272952180016122,
+      "formula": "=IMARGUMENT(\"3+4i\")",
+      "name": "IMARGUMENT"
+    },
+    {
+      "expected": "3-4i",
+      "formula": "=IMCONJUGATE(\"3+4i\")",
+      "name": "IMCONJUGATE"
+    },
+    {
+      "expected": "0.833730025131149-0.988897705762865i",
+      "formula": "=IMCOS(\"1+i\")",
+      "name": "IMCOS"
+    },
+    {
+      "expected": "0.833730025131149+0.988897705762865i",
+      "formula": "=IMCOSH(\"1+i\")",
+      "name": "IMCOSH"
+    },
+    {
+      "expected": "0.217621561854403-0.868014142895925i",
+      "formula": "=IMCOT(\"1+i\")",
+      "name": "IMCOT"
+    },
+    {
+      "expected": "0.621518017170428-0.303931001628427i",
+      "formula": "=IMCSC(\"1+i\")",
+      "name": "IMCSC"
+    },
+    {
+      "expected": "0.303931001628426-0.621518017170429i",
+      "formula": "=IMCSCH(\"1+i\")",
+      "name": "IMCSCH"
+    },
+    {
+      "expected": "3.5+0.5i",
+      "formula": "=IMDIV(\"3+4i\",\"1+i\")",
+      "name": "IMDIV"
+    },
+    {
+      "expected": "1.46869393991589+2.28735528717884i",
+      "formula": "=IMEXP(\"1+i\")",
+      "name": "IMEXP"
+    },
+    {
+      "expected": "0.346573590279973+0.785398163397448i",
+      "formula": "=IMLN(\"1+i\")",
+      "name": "IMLN"
+    },
+    {
+      "expected": "0.150514997831991+0.34109408846046i",
+      "formula": "=IMLOG10(\"1+i\")",
+      "name": "IMLOG10"
+    },
+    {
+      "expected": "0.5+1.1330900354568i",
+      "formula": "=IMLOG2(\"1+i\")",
+      "name": "IMLOG2"
+    },
+    {
+      "expected": "1.22514845490862E-16+2i",
+      "formula": "=IMPOWER(\"1+i\",2)",
+      "name": "IMPOWER"
+    },
+    {
+      "expected": "1+3i",
+      "formula": "=IMPRODUCT(\"1+i\",\"2+i\")",
+      "name": "IMPRODUCT"
+    },
+    {
+      "expected": 3,
+      "formula": "=IMREAL(\"3+4i\")",
+      "name": "IMREAL"
+    },
+    {
+      "expected": "0.498337030555187+0.591083841721045i",
+      "formula": "=IMSEC(\"1+i\")",
+      "name": "IMSEC"
+    },
+    {
+      "expected": "0.498337030555187-0.591083841721045i",
+      "formula": "=IMSECH(\"1+i\")",
+      "name": "IMSECH"
+    },
+    {
+      "expected": "1.29845758141598+0.634963914784736i",
+      "formula": "=IMSIN(\"1+i\")",
+      "name": "IMSIN"
+    },
+    {
+      "expected": "0.634963914784736+1.29845758141598i",
+      "formula": "=IMSINH(\"1+i\")",
+      "name": "IMSINH"
+    },
+    {
+      "expected": "2+i",
+      "formula": "=IMSQRT(\"3+4i\")",
+      "name": "IMSQRT"
+    },
+    {
+      "expected": "2+3i",
+      "formula": "=IMSUB(\"3+4i\",\"1+i\")",
+      "name": "IMSUB"
+    },
+    {
+      "expected": "3+2i",
+      "formula": "=IMSUM(\"1+i\",\"2+i\")",
+      "name": "IMSUM"
+    },
+    {
+      "expected": "0.271752585319512+1.08392332733869i",
+      "formula": "=IMTAN(\"1+i\")",
+      "name": "IMTAN"
+    },
+    {
+      "expected": 4,
+      "formula": "=INDEX({1,2;3,4},2,2)",
+      "name": "INDEX"
+    },
+    {
+      "expected": 3,
+      "formula": "=INDIRECT(\"A\"&3)",
+      "name": "INDIRECT"
+    },
+    {
+      "expected": -3,
+      "formula": "=INT(-2.1)",
+      "name": "INT"
+    },
+    {
+      "expected": -0.5,
+      "formula": "=INTERCEPT({2,3,5,8},{1,2,3,4})",
+      "name": "INTERCEPT"
+    },
+    {
+      "expected": -9.999999999999998,
+      "formula": "=IPMT(0.01,1,12,1000)",
+      "name": "IPMT"
+    },
+    {
+      "expected": 0.0889633946933499,
+      "formula": "=IRR({-1000,300,400,500})",
+      "name": "IRR"
+    },
+    {
+      "expected": true,
+      "formula": "=ISBLANK(A7)",
+      "name": "ISBLANK"
+    },
+    {
+      "expected": true,
+      "formula": "=ISERR(1/0)",
+      "name": "ISERR"
+    },
+    {
+      "expected": true,
+      "formula": "=ISERROR(1/0)",
+      "name": "ISERROR"
+    },
+    {
+      "expected": true,
+      "formula": "=ISEVEN(4)",
+      "name": "ISEVEN"
+    },
+    {
+      "expected": true,
+      "formula": "=ISFORMULA(B1)",
+      "name": "ISFORMULA"
+    },
+    {
+      "expected": true,
+      "formula": "=ISLOGICAL(TRUE)",
+      "name": "ISLOGICAL"
+    },
+    {
+      "expected": true,
+      "formula": "=ISNA(NA())",
+      "name": "ISNA"
+    },
+    {
+      "expected": true,
+      "formula": "=ISNONTEXT(42)",
+      "name": "ISNONTEXT"
+    },
+    {
+      "expected": true,
+      "formula": "=ISNUMBER(42)",
+      "name": "ISNUMBER"
+    },
+    {
+      "expected": -4,
+      "formula": "=ISO.CEILING(-4.3,2)",
+      "name": "ISO.CEILING"
+    },
+    {
+      "expected": true,
+      "formula": "=ISODD(3)",
+      "name": "ISODD"
+    },
+    {
+      "expected": 53,
+      "formula": "=ISOWEEKNUM(DATE(2021,1,1))",
+      "name": "ISOWEEKNUM"
+    },
+    {
+      "expected": -66.66666666666667,
+      "formula": "=ISPMT(0.1,1,3,1000)",
+      "name": "ISPMT"
+    },
+    {
+      "expected": true,
+      "formula": "=ISREF(A1)",
+      "name": "ISREF"
+    },
+    {
+      "expected": true,
+      "formula": "=ISTEXT(\"42\")",
+      "name": "ISTEXT"
+    },
+    {
+      "expected": 2.021017076374557,
+      "formula": "=KURT(1,2,3,4,8)",
+      "name": "KURT"
+    },
+    {
+      "expected": 4,
+      "formula": "=LARGE({1,4,2,5,3},2)",
+      "name": "LARGE"
+    },
+    {
+      "expected": 24,
+      "formula": "=LCM(6,8)",
+      "name": "LCM"
+    },
+    {
+      "expected": "ab",
+      "formula": "=LEFT(\"abcdef\",2)",
+      "name": "LEFT"
+    },
+    {
+      "expected": 5,
+      "formula": "=LEN(\"안녕하세요\")",
+      "name": "LEN"
+    },
+    {
+      "expected": 2,
+      "formula": "=LN(EXP(2))",
+      "name": "LN"
+    },
+    {
+      "expected": 3,
+      "formula": "=LOG(8,2)",
+      "name": "LOG"
+    },
+    {
+      "expected": 3,
+      "formula": "=LOG10(1000)",
+      "name": "LOG10"
+    },
+    {
+      "expected": 1,
+      "formula": "=LOGINV(0.5,0,1)",
+      "name": "LOGINV"
+    },
+    {
+      "expected": 0.7558914042144174,
+      "formula": "=LOGNORM.DIST(2,0,1,TRUE)",
+      "name": "LOGNORM.DIST"
+    },
+    {
+      "expected": 1,
+      "formula": "=LOGNORM.INV(0.5,0,1)",
+      "name": "LOGNORM.INV"
+    },
+    {
+      "expected": 20,
+      "formula": "=LOOKUP(2.5,{1,2,3},{10,20,30})",
+      "name": "LOOKUP"
+    },
+    {
+      "expected": "abc",
+      "formula": "=LOWER(\"AbC\")",
+      "name": "LOWER"
+    },
+    {
+      "expected": 2,
+      "formula": "=MATCH(2,{1,2,3},0)",
+      "name": "MATCH"
+    },
+    {
+      "expected": 3,
+      "formula": "=MAX(1,2,3)",
+      "name": "MAX"
+    },
+    {
+      "expected": 1,
+      "formula": "=MAXA(0,TRUE,0.5)",
+      "name": "MAXA"
+    },
+    {
+      "expected": 3,
+      "formula": "=MAXIFS(A1:A5,A1:A5,\"<4\")",
+      "name": "MAXIFS"
+    },
+    {
+      "expected": 3.5,
+      "formula": "=MEDIAN(1,2,5,8)",
+      "name": "MEDIAN"
+    },
+    {
+      "expected": "bcd",
+      "formula": "=MID(\"abcdef\",2,3)",
+      "name": "MID"
+    },
+    {
+      "expected": 1,
+      "formula": "=MIN(1,2,3)",
+      "name": "MIN"
+    },
+    {
+      "expected": 0,
+      "formula": "=MINA(2,FALSE,3)",
+      "name": "MINA"
+    },
+    {
+      "expected": 3,
+      "formula": "=MINIFS(A1:A5,A1:A5,\">2\")",
+      "name": "MINIFS"
+    },
+    {
+      "expected": 24,
+      "formula": "=MINUTE(TIME(13,24,35))",
+      "name": "MINUTE"
+    },
+    {
+      "expected": 0.09815669244631531,
+      "formula": "=MIRR({-1000,300,400,500},0.1,0.12)",
+      "name": "MIRR"
+    },
+    {
+      "expected": 1,
+      "formula": "=MOD(-3,2)",
+      "name": "MOD"
+    },
+    {
+      "expected": 2,
+      "formula": "=MODE(1,2,2,3)",
+      "name": "MODE"
+    },
+    {
+      "expected": 2,
+      "formula": "=MODE.SNGL(1,2,2,3)",
+      "name": "MODE.SNGL"
+    },
+    {
+      "expected": 2,
+      "formula": "=MONTH(DATE(2024,2,29))",
+      "name": "MONTH"
+    },
+    {
+      "expected": 9,
+      "formula": "=MROUND(10,3)",
+      "name": "MROUND"
+    },
+    {
+      "expected": 1259.999999999999,
+      "formula": "=MULTINOMIAL(2,3,4)",
+      "name": "MULTINOMIAL"
+    },
+    {
+      "expected": 1,
+      "formula": "=N(TRUE)",
+      "name": "N"
+    },
+    {
+      "expected": "#N/A",
+      "formula": "=NA()",
+      "name": "NA"
+    },
+    {
+      "expected": 0.12499999999999996,
+      "formula": "=NEGBINOM.DIST(3,2,0.5,FALSE)",
+      "name": "NEGBINOM.DIST"
+    },
+    {
+      "expected": 5,
+      "formula": "=NETWORKDAYS(DATE(2024,1,1),DATE(2024,1,7))",
+      "name": "NETWORKDAYS"
+    },
+    {
+      "expected": 6,
+      "formula": "=NETWORKDAYS.INTL(DATE(2024,1,1),DATE(2024,1,7),11)",
+      "name": "NETWORKDAYS.INTL"
+    },
+    {
+      "expected": 0.11386551521499655,
+      "formula": "=NOMINAL(0.12,12)",
+      "name": "NOMINAL"
+    },
+    {
+      "expected": 0.841344746068543,
+      "formula": "=NORM.DIST(1,0,1,TRUE)",
+      "name": "NORM.DIST"
+    },
+    {
+      "expected": 0.8416212335729147,
+      "formula": "=NORM.INV(0.8,0,1)",
+      "name": "NORM.INV"
+    },
+    {
+      "expected": 0.841344746068543,
+      "formula": "=NORM.S.DIST(1,TRUE)",
+      "name": "NORM.S.DIST"
+    },
+    {
+      "expected": 0.8416212335729147,
+      "formula": "=NORM.S.INV(0.8)",
+      "name": "NORM.S.INV"
+    },
+    {
+      "expected": 0.841344746068543,
+      "formula": "=NORMDIST(1,0,1,TRUE)",
+      "name": "NORMDIST"
+    },
+    {
+      "expected": 0.8416212335729147,
+      "formula": "=NORMINV(0.8,0,1)",
+      "name": "NORMINV"
+    },
+    {
+      "expected": 0.8416212335729147,
+      "formula": "=NORMSINV(0.8)",
+      "name": "NORMSINV"
+    },
+    {
+      "expected": true,
+      "formula": "=NOT(FALSE)",
+      "name": "NOT"
+    },
+    {
+      "expected": 10.58864445942323,
+      "formula": "=NPER(0.01,-100,1000)",
+      "name": "NPER"
+    },
+    {
+      "expected": -19.12437675022209,
+      "formula": "=NPV(0.1,-1000,300,400,500)",
+      "name": "NPV"
+    },
+    {
+      "expected": 1234.5,
+      "formula": "=NUMBERVALUE(\"1.234,5\",\",\",\".\")",
+      "name": "NUMBERVALUE"
+    },
+    {
+      "expected": "00001010",
+      "formula": "=OCT2BIN(\"12\",8)",
+      "name": "OCT2BIN"
+    },
+    {
+      "expected": 63,
+      "formula": "=OCT2DEC(\"77\")",
+      "name": "OCT2DEC"
+    },
+    {
+      "expected": "003F",
+      "formula": "=OCT2HEX(\"77\",4)",
+      "name": "OCT2HEX"
+    },
+    {
+      "expected": -3,
+      "formula": "=ODD(-2)",
+      "name": "ODD"
+    },
+    {
+      "expected": 2,
+      "formula": "=OFFSET(A1,1,0)",
+      "name": "OFFSET"
+    },
+    {
+      "expected": true,
+      "formula": "=OR(FALSE,TRUE)",
+      "name": "OR"
+    },
+    {
+      "expected": 7.272540897341714,
+      "formula": "=PDURATION(0.1,1000,2000)",
+      "name": "PDURATION"
+    },
+    {
+      "expected": 0.9759000729485332,
+      "formula": "=PEARSON({1,2,3,4},{2,3,5,8})",
+      "name": "PEARSON"
+    },
+    {
+      "expected": 2,
+      "formula": "=PERCENTILE({1,2,3,4,5},0.25)",
+      "name": "PERCENTILE"
+    },
+    {
+      "expected": 3,
+      "formula": "=PERCENTILE.EXC({1,2,3,4,5},0.5)",
+      "name": "PERCENTILE.EXC"
+    },
+    {
+      "expected": 2,
+      "formula": "=PERCENTILE.INC({1,2,3,4,5},0.25)",
+      "name": "PERCENTILE.INC"
+    },
+    {
+      "expected": 0.5,
+      "formula": "=PERCENTRANK({1,2,3,4,5},3)",
+      "name": "PERCENTRANK"
+    },
+    {
+      "expected": 0.5,
+      "formula": "=PERCENTRANK.EXC({1,2,3,4,5},3)",
+      "name": "PERCENTRANK.EXC"
+    },
+    {
+      "expected": 0.5,
+      "formula": "=PERCENTRANK.INC({1,2,3,4,5},3)",
+      "name": "PERCENTRANK.INC"
+    },
+    {
+      "expected": 720,
+      "formula": "=PERMUT(10,3)",
+      "name": "PERMUT"
+    },
+    {
+      "expected": 9,
+      "formula": "=PERMUTATIONA(3,2)",
+      "name": "PERMUTATIONA"
+    },
+    {
+      "expected": 0.24197072451914337,
+      "formula": "=PHI(1)",
+      "name": "PHI"
+    },
+    {
+      "expected": 3.141592653589793,
+      "formula": "=PI()",
+      "name": "PI"
+    },
+    {
+      "expected": -88.84878867834168,
+      "formula": "=PMT(0.01,12,1000)",
+      "name": "PMT"
+    },
+    {
+      "expected": 0.8571234604985469,
+      "formula": "=POISSON(3,2,TRUE)",
+      "name": "POISSON"
+    },
+    {
+      "expected": 0.8571234604985469,
+      "formula": "=POISSON.DIST(3,2,TRUE)",
+      "name": "POISSON.DIST"
+    },
+    {
+      "expected": 8,
+      "formula": "=POWER(2,3)",
+      "name": "POWER"
+    },
+    {
+      "expected": -78.84878867834168,
+      "formula": "=PPMT(0.01,1,12,1000)",
+      "name": "PPMT"
+    },
+    {
+      "expected": 0.5,
+      "formula": "=PROB({1,2,3},{0.2,0.3,0.5},1,2)",
+      "name": "PROB"
+    },
+    {
+      "expected": 24,
+      "formula": "=PRODUCT(2,3,4)",
+      "name": "PRODUCT"
+    },
+    {
+      "expected": "Hello World",
+      "formula": "=PROPER(\"hello WORLD\")",
+      "name": "PROPER"
+    },
+    {
+      "expected": 1125.5077473484635,
+      "formula": "=PV(0.01,12,-100)",
+      "name": "PV"
+    },
+    {
+      "expected": 2,
+      "formula": "=QUARTILE({1,2,3,4,5},1)",
+      "name": "QUARTILE"
+    },
+    {
+      "expected": 2,
+      "formula": "=QUARTILE.EXC({1,2,3,4,5,6,7},1)",
+      "name": "QUARTILE.EXC"
+    },
+    {
+      "expected": 2,
+      "formula": "=QUARTILE.INC({1,2,3,4,5},1)",
+      "name": "QUARTILE.INC"
+    },
+    {
+      "expected": -2,
+      "formula": "=QUOTIENT(-7,3)",
+      "name": "QUOTIENT"
+    },
+    {
+      "expected": 3.141592653589793,
+      "formula": "=RADIANS(180)",
+      "name": "RADIANS"
+    },
+    {
+      "expected": 2,
+      "formula": "=RANK(2,A1:A5,1)",
+      "name": "RANK"
+    },
+    {
+      "expected": 2,
+      "formula": "=RANK.AVG(2,A1:A5,1)",
+      "name": "RANK.AVG"
+    },
+    {
+      "expected": 2,
+      "formula": "=RANK.EQ(2,A1:A5,1)",
+      "name": "RANK.EQ"
+    },
+    {
+      "expected": 0.02922854076913774,
+      "formula": "=RATE(12,-100,1000)",
+      "name": "RATE"
+    },
+    {
+      "expected": "aXef",
+      "formula": "=REPLACE(\"abcdef\",2,3,\"X\")",
+      "name": "REPLACE"
+    },
+    {
+      "expected": "ababab",
+      "formula": "=REPT(\"ab\",3)",
+      "name": "REPT"
+    },
+    {
+      "expected": "ef",
+      "formula": "=RIGHT(\"abcdef\",2)",
+      "name": "RIGHT"
+    },
+    {
+      "expected": -1.3,
+      "formula": "=ROUND(-1.25,1)",
+      "name": "ROUND"
+    },
+    {
+      "expected": -1.2,
+      "formula": "=ROUNDDOWN(-1.29,1)",
+      "name": "ROUNDDOWN"
+    },
+    {
+      "expected": -1.3,
+      "formula": "=ROUNDUP(-1.21,1)",
+      "name": "ROUNDUP"
+    },
+    {
+      "expected": 3,
+      "formula": "=ROW(C3)",
+      "name": "ROW"
+    },
+    {
+      "expected": 5,
+      "formula": "=ROWS(A1:C5)",
+      "name": "ROWS"
+    },
+    {
+      "expected": 0.07177346253629313,
+      "formula": "=RRI(10,1000,2000)",
+      "name": "RRI"
+    },
+    {
+      "expected": 0.9523809523809522,
+      "formula": "=RSQ({2,3,5,8},{1,2,3,4})",
+      "name": "RSQ"
+    },
+    {
+      "expected": 2,
+      "formula": "=SEARCH(\"B?\",\"abcabc\",1)",
+      "name": "SEARCH"
+    },
+    {
+      "expected": 1.8508157176809255,
+      "formula": "=SEC(1)",
+      "name": "SEC"
+    },
+    {
+      "expected": 0.6480542736638855,
+      "formula": "=SECH(1)",
+      "name": "SECH"
+    },
+    {
+      "expected": 35,
+      "formula": "=SECOND(TIME(13,24,35))",
+      "name": "SECOND"
+    },
+    {
+      "expected": 17,
+      "formula": "=SERIESSUM(2,0,1,{1,2,3})",
+      "name": "SERIESSUM"
+    },
+    {
+      "expected": 1,
+      "formula": "=SHEET(\"Sheet1\")",
+      "name": "SHEET"
+    },
+    {
+      "expected": 1,
+      "formula": "=SHEETS()",
+      "name": "SHEETS"
+    },
+    {
+      "expected": -1,
+      "formula": "=SIGN(-4)",
+      "name": "SIGN"
+    },
+    {
+      "expected": 0.8414709848078965,
+      "formula": "=SIN(1)",
+      "name": "SIN"
+    },
+    {
+      "expected": 1.1752011936438014,
+      "formula": "=SINH(1)",
+      "name": "SINH"
+    },
+    {
+      "expected": 1.3385038869326564,
+      "formula": "=SKEW(1,2,3,4,8)",
+      "name": "SKEW"
+    },
+    {
+      "expected": 0.8978957037987335,
+      "formula": "=SKEW.P(1,2,3,4,8)",
+      "name": "SKEW.P"
+    },
+    {
+      "expected": 1800,
+      "formula": "=SLN(10000,1000,5)",
+      "name": "SLN"
+    },
+    {
+      "expected": 2,
+      "formula": "=SLOPE({2,3,5,8},{1,2,3,4})",
+      "name": "SLOPE"
+    },
+    {
+      "expected": 2,
+      "formula": "=SMALL({1,4,2,5,3},2)",
+      "name": "SMALL"
+    },
+    {
+      "expected": 3,
+      "formula": "=SQRT(9)",
+      "name": "SQRT"
+    },
+    {
+      "expected": 2.5066282746310002,
+      "formula": "=SQRTPI(2)",
+      "name": "SQRTPI"
+    },
+    {
+      "expected": 1,
+      "formula": "=STANDARDIZE(4,2,2)",
+      "name": "STANDARDIZE"
+    },
+    {
+      "expected": 1.5811388300841898,
+      "formula": "=STDEV(1,2,3,4,5)",
+      "name": "STDEV"
+    },
+    {
+      "expected": 1.4142135623730951,
+      "formula": "=STDEV.P(1,2,3,4,5)",
+      "name": "STDEV.P"
+    },
+    {
+      "expected": 1.5811388300841898,
+      "formula": "=STDEV.S(1,2,3,4,5)",
+      "name": "STDEV.S"
+    },
+    {
+      "expected": 1.1547005383792515,
+      "formula": "=STDEVA(1,TRUE,3)",
+      "name": "STDEVA"
+    },
+    {
+      "expected": 1.4142135623730951,
+      "formula": "=STDEVP(1,2,3,4,5)",
+      "name": "STDEVP"
+    },
+    {
+      "expected": 0.9428090415820634,
+      "formula": "=STDEVPA(1,TRUE,3)",
+      "name": "STDEVPA"
+    },
+    {
+      "expected": 0.7071067811865476,
+      "formula": "=STEYX({2,3,5,8},{1,2,3,4})",
+      "name": "STEYX"
+    },
+    {
+      "expected": "a-b-a",
+      "formula": "=SUBSTITUTE(\"a-a-a\",\"a\",\"b\",2)",
+      "name": "SUBSTITUTE"
+    },
+    {
+      "expected": 15,
+      "formula": "=SUBTOTAL(9,A1:A5)",
+      "name": "SUBTOTAL"
+    },
+    {
+      "expected": 6,
+      "formula": "=SUM(1,2,3)",
+      "name": "SUM"
+    },
+    {
+      "expected": 12,
+      "formula": "=SUMIF(A1:A5,\">2\")",
+      "name": "SUMIF"
+    },
+    {
+      "expected": 7,
+      "formula": "=SUMIFS(A1:A5,A1:A5,\">2\",A1:A5,\"<5\")",
+      "name": "SUMIFS"
+    },
+    {
+      "expected": 32,
+      "formula": "=SUMPRODUCT({1,2,3},{4,5,6})",
+      "name": "SUMPRODUCT"
+    },
+    {
+      "expected": 14,
+      "formula": "=SUMSQ(1,2,3)",
+      "name": "SUMSQ"
+    },
+    {
+      "expected": -63,
+      "formula": "=SUMX2MY2({1,2,3},{4,5,6})",
+      "name": "SUMX2MY2"
+    },
+    {
+      "expected": 91,
+      "formula": "=SUMX2PY2({1,2,3},{4,5,6})",
+      "name": "SUMX2PY2"
+    },
+    {
+      "expected": 27,
+      "formula": "=SUMXMY2({1,2,3},{4,5,6})",
+      "name": "SUMXMY2"
+    },
+    {
+      "expected": "b",
+      "formula": "=SWITCH(2,1,\"a\",2,\"b\",\"other\")",
+      "name": "SWITCH"
+    },
+    {
+      "expected": 3000,
+      "formula": "=SYD(10000,1000,5,1)",
+      "name": "SYD"
+    },
+    {
+      "expected": "text",
+      "formula": "=T(\"text\")",
+      "name": "T"
+    },
+    {
+      "expected": 0.8295534338489701,
+      "formula": "=T.DIST(1,10,TRUE)",
+      "name": "T.DIST"
+    },
+    {
+      "expected": 0.34089313230205986,
+      "formula": "=T.DIST.2T(1,10)",
+      "name": "T.DIST.2T"
+    },
+    {
+      "expected": 0.17044656615102993,
+      "formula": "=T.DIST.RT(1,10)",
+      "name": "T.DIST.RT"
+    },
+    {
+      "expected": 0.8790578285505891,
+      "formula": "=T.INV(0.8,10)",
+      "name": "T.INV"
+    },
+    {
+      "expected": 1.3721836411103363,
+      "formula": "=T.INV.2T(0.2,10)",
+      "name": "T.INV.2T"
+    },
+    {
+      "expected": 1.5574077246549023,
+      "formula": "=TAN(1)",
+      "name": "TAN"
+    },
+    {
+      "expected": 0.7615941559557649,
+      "formula": "=TANH(1)",
+      "name": "TANH"
+    },
+    {
+      "expected": "1,234.57",
+      "formula": "=TEXT(1234.567,\"#,##0.00\")",
+      "name": "TEXT"
+    },
+    {
+      "expected": "a, b",
+      "formula": "=TEXTJOIN(\", \",TRUE,\"a\",\"\",\"b\")",
+      "name": "TEXTJOIN"
+    },
+    {
+      "expected": 0.5587384259259259,
+      "formula": "=TIME(13,24,35)",
+      "name": "TIME"
+    },
+    {
+      "expected": 0.5587384259259259,
+      "formula": "=TIMEVALUE(\"13:24:35\")",
+      "name": "TIMEVALUE"
+    },
+    {
+      "expected": 1.3721836411103363,
+      "formula": "=TINV(0.2,10)",
+      "name": "TINV"
+    },
+    {
+      "expected": "one two",
+      "formula": "=TRIM(\"  one   two  \")",
+      "name": "TRIM"
+    },
+    {
+      "expected": 3,
+      "formula": "=TRIMMEAN({1,2,3,4,100},0.4)",
+      "name": "TRIMMEAN"
+    },
+    {
+      "expected": true,
+      "formula": "=TRUE()",
+      "name": "TRUE"
+    },
+    {
+      "expected": -12.34,
+      "formula": "=TRUNC(-12.345,2)",
+      "name": "TRUNC"
+    },
+    {
+      "expected": 4,
+      "formula": "=TYPE(TRUE)",
+      "name": "TYPE"
+    },
+    {
+      "expected": "☃",
+      "formula": "=UNICHAR(9731)",
+      "name": "UNICHAR"
+    },
+    {
+      "expected": 9731,
+      "formula": "=UNICODE(\"☃\")",
+      "name": "UNICODE"
+    },
+    {
+      "expected": "ABC",
+      "formula": "=UPPER(\"AbC\")",
+      "name": "UPPER"
+    },
+    {
+      "expected": 1234.5,
+      "formula": "=VALUE(\"1,234.5\")",
+      "name": "VALUE"
+    },
+    {
+      "expected": 2.5,
+      "formula": "=VAR(1,2,3,4,5)",
+      "name": "VAR"
+    },
+    {
+      "expected": 2,
+      "formula": "=VAR.P(1,2,3,4,5)",
+      "name": "VAR.P"
+    },
+    {
+      "expected": 2.5,
+      "formula": "=VAR.S(1,2,3,4,5)",
+      "name": "VAR.S"
+    },
+    {
+      "expected": 1.333333333333333,
+      "formula": "=VARA(1,TRUE,3)",
+      "name": "VARA"
+    },
+    {
+      "expected": 2,
+      "formula": "=VARP(1,2,3,4,5)",
+      "name": "VARP"
+    },
+    {
+      "expected": 0.8888888888888888,
+      "formula": "=VARPA(1,TRUE,3)",
+      "name": "VARPA"
+    },
+    {
+      "expected": 20,
+      "formula": "=VLOOKUP(2,{1,10;2,20;3,30},2,FALSE)",
+      "name": "VLOOKUP"
+    },
+    {
+      "expected": 1,
+      "formula": "=WEEKDAY(DATE(2024,1,1),2)",
+      "name": "WEEKDAY"
+    },
+    {
+      "expected": 1,
+      "formula": "=WEEKNUM(DATE(2024,1,1),2)",
+      "name": "WEEKNUM"
+    },
+    {
+      "expected": 0.11750309741540463,
+      "formula": "=WEIBULL(2,3,4,TRUE)",
+      "name": "WEIBULL"
+    },
+    {
+      "expected": 0.11750309741540463,
+      "formula": "=WEIBULL.DIST(2,3,4,TRUE)",
+      "name": "WEIBULL.DIST"
+    },
+    {
+      "expected": 45300,
+      "formula": "=WORKDAY(DATE(2024,1,5),2)",
+      "name": "WORKDAY"
+    },
+    {
+      "expected": 45299,
+      "formula": "=WORKDAY.INTL(DATE(2024,1,5),2,11)",
+      "name": "WORKDAY.INTL"
+    },
+    {
+      "expected": 0.0997135818004608,
+      "formula": "=XIRR({-1000,1100},{43831,44197})",
+      "name": "XIRR"
+    },
+    {
+      "expected": -0.26108969043878005,
+      "formula": "=XNPV(0.1,{-1000,1100},{43831,44197})",
+      "name": "XNPV"
+    },
+    {
+      "expected": false,
+      "formula": "=XOR(TRUE,FALSE,TRUE)",
+      "name": "XOR"
+    },
+    {
+      "expected": 2024,
+      "formula": "=YEAR(DATE(2024,2,29))",
+      "name": "YEAR"
+    },
+    {
+      "expected": 0.4986301369863014,
+      "formula": "=YEARFRAC(DATE(2024,1,1),DATE(2024,7,1),3)",
+      "name": "YEARFRAC"
+    },
+    {
+      "expected": 0.012673659338734126,
+      "formula": "=Z.TEST({1,2,3,4,5},2,1)",
+      "name": "Z.TEST"
+    },
+    {
+      "expected": 0.012673659338734126,
+      "formula": "=ZTEST({1,2,3,4,5},2,1)",
+      "name": "ZTEST"
+    }
+  ],
+  "excelVersion": "16.0"
+}

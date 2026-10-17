@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
-import { createEvaluator,transformFormulaReferences } from './engine.mjs';
+import { createEvaluator,transformFormulaReferences,formulaForXlsx } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
 import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
 import {applyPivot} from './pivot.mjs';
@@ -297,7 +297,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
         const result = cachedResult(evaluate, workbook, sheet, addr, cell);
         let formula=cell.raw;
         for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
-        targetCell.value = { formula: formula.slice(1), ...(result === undefined ? {} : { result }) };
+        targetCell.value = { formula: formulaForXlsx(formula).slice(1), ...(result === undefined ? {} : { result }) };
       } else targetCell.value = toScalar(cell.raw);
       applyStyle(targetCell, cell.style);
       if (typeof cell.raw === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim()) && (!cell.style?.format || cell.style.format === 'general')) targetCell.numFmt = '0.00%';

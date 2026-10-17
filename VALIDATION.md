@@ -2,6 +2,23 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.5.0 — Excel 함수 라이브러리 확장
+
+- 기존 37개에서 **379개 함수 이름**으로 확장했습니다. 이전 버전 별칭 30개를 포함합니다. Formula.js 4.6.1을 고정하고 Excel의 범위/배열/논리값/빈 셀/오류 처리, 참조 함수, 날짜 번호, 조건 집계, 일부 통계·재무·공학 계산을 앱에서 보정했습니다. 전체 목록과 제한은 [함수 안내](docs/FUNCTIONS.md)에 있습니다.
+- `npm test`: **77/77 통과**. Excel oracle 예시 **371개**와 추가 경계 사례 **111개**를 회귀 검사합니다. 오류·타입·범위·배열 상수/연산, 미평가 분기, 참조 좌표·순환, 1900년 날짜·주말·공휴일, 확률 분포·큰 정수·제한된 반복, 함수 검색·구문 분석 및 XLSX 왕복을 확인했습니다. UTC / America/New_York / Asia/Seoul의 날짜 검사도 통과했습니다.
+- `node scripts/functions-native-smoke.mjs`: Windows Excel **16.0, build 19127**에서 직접 수식을 입력한 결과와 앱 계산 371개를 대조했습니다. 앱이 생성한 XLSX의 375개 수식을 실제 Excel에서 다시 열어 계산한 결과도 직접 입력 결과와 모두 일치했습니다. 검사 파일은 읽기 전용으로 열었고 바이트 불변을 확인했습니다.
+- 로컬 Excel이 인식하지 않는 TEXTAFTER/TEXTBEFORE/XLOOKUP/XMATCH 네 함수는 위 371개 Excel 계산 대조에 포함하지 않고 문서 기반 기대값으로 따로 검사합니다. RAND/RANDBETWEEN/NOW/TODAY는 반환 형식·범위를 검사합니다. 수치 대조 허용 오차는 1e-7 × max(1, |Excel 값|), 복소수는 실수부/허수부 기준입니다. 111개 경계 사례에서 TYPE의 레거시 암시적 교차 동작 한 건은 제외했으며 이유를 fixture에 기록했습니다.
+- XLSX 저장 시 최신 함수 토큰에 필요한 `_xlfn.` 접두사를 추가했습니다. 최초 대조에서 이 접두사 누락으로 105개가 Excel에서 #NAME?을 반환했으며 수정 후 375개 파일 재계산 결과가 모두 일치했습니다. 문자열 안의 함수 이름은 바꾸지 않고 반복 저장 시 접두사를 중복하지 않습니다.
+- `npm run package:win`: 통과. 최종 배포 ASAR의 HTML·CSS·JavaScript·MIT 고지가 최종 dist와 바이트 단위로 일치함을 확인했습니다. 아래 모든 UI 검사를 **0.5.0 패키지**에서 통과했습니다.
+  - `node scripts/electron-smoke.cjs --packaged`
+  - `node tests/ui-functions.mjs --packaged`: 검색·범주·빈 결과, 구문/예시, 삽입 전 값 불변, 실행 취소, 키보드/마우스 자동 완성, 인수 강조, 수식 입력줄, 중첩 삽입, Esc, IME 이벤트, 재계산 및 재시작. 실제 함수 라이브러리와 인수 도움말 화면도 확인했습니다.
+  - `node tests/ui-formulas.mjs --packaged`: 자동 합계/참조 테두리와 기존 수식 편집 회귀 검사.
+  - `node tests/ui-charts.mjs --packaged`, `node tests/ui-excel-charts.mjs --packaged`, `node tests/ui-pivot.mjs --packaged`: 차트 크기·10종 차트·피벗·XLSX 왕복 회귀 검사.
+  - `node scripts/vba-ui-smoke.cjs --packaged`: XLSM 열기, Excel 연결, 결과 가져오기와 VBA 프로젝트 보존 저장. 사용자 매크로 전체의 실행 호환성 검사는 아닙니다.
+- macOS 워크플로에도 새 함수 UI 검사를 추가했습니다. **실제 Mac 빌드·실행은 미검증**입니다. 스필/LET/LAMBDA/외부 연결/모든 표시 형식과 Excel의 전체 경계 규칙을 지원하는 것은 아닙니다.
+
+0.5.0 휴대용 실행 파일: `release/0.5.0/win-x64/Sheet-Studio-0.5.0-Windows-x64.exe` (92,086,187 bytes). SHA-256: `468fa36475c405b1297bacd2bdc7d0450d7990d4d079d96342dea9d04d399f20`. Windows 실행 파일은 코드 서명하지 않았습니다.
+
 ## 0.4.1 — 자동 합계 범위 표시와 수식 편집
 
 - `npm test`: **54/54 통과**. 작성 중인 수식의 A1 참조 스캔, 문자열/함수 이름 제외, 시트 이름의 작은따옴표, F4의 네 가지 참조 형식, 괄호 보완, 위/왼쪽 자동 합계, 여러 열/행 합계, 빈 결과 셀 및 덮어쓰기 방지를 추가 검사했습니다.

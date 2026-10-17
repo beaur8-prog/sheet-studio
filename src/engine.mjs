@@ -1,5 +1,7 @@
 import {validateChart} from './chart-schema.mjs';
 import {validatePivot} from './pivot-schema.mjs';
+import {createFunctionRuntime} from './function-runtime.mjs';
+import {normalizeFunctionName,XLSX_FUTURE_FUNCTIONS} from './function-catalog.mjs';
 /** A small, original spreadsheet evaluator. No JavaScript evaluation is used. */
 const MAX_ROWS = 1048576;
 const MAX_COLS = 16384;
@@ -30,8 +32,8 @@ const numeric = value => {
   value = checked(value);
   if (value === BLANK || value === '') return 0;
   if (typeof value === 'boolean') return Number(value);
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string' && value.trim() !== '' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) return Number(value);
+  if (typeof value === 'number') return finite(value);
+  if (typeof value === 'string' && value.trim() !== '' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) return finite(Number(value));
   return fail('#VALUE!');
 };
 const finite = value => Number.isFinite(value) ? value : fail('#NUM!');
@@ -116,7 +118,7 @@ function tokenize(input) {
     if (word) { at += word[0].length; push('word', word[0], start, at); continue; }
     const comparison = /^(<>|<=|>=)/.exec(rest);
     if (comparison) { at += 2; push('op', comparison[0], start, at); continue; }
-    if ('+-*/^&%=<>():,;!'.includes(ch)) { at++; push('op', ch === ';' ? ',' : ch, start, at); continue; }
+    if ('+-*/^&%=<>():,;!{}'.includes(ch)) { at++; push('op', ch, start, at); continue; }
     fail('#VALUE!');
   }
   tokens.push({ type: 'end', value: '', start: at, end: at });
@@ -125,7 +127,7 @@ function tokenize(input) {
 
 class Parser {
   constructor(formula) { this.tokens = tokenize(formula.replace(/^=/, '')); this.at = 0; this.depth = 0; }
-  peek(value) { return this.tokens[this.at].value === value; }
+  peek(value) { return this.tokens[this.at].type === 'op' && this.tokens[this.at].value === value; }
   accept(value) { if (this.peek(value)) { this.at++; return true; } return false; }
   expect(value) { if (!this.accept(value)) fail('#VALUE!'); }
   parse() {
@@ -182,6 +184,19 @@ class Parser {
   }
   primary() {
     if (this.accept('(')) { const value = this.expression(); this.expect(')'); return value; }
+    if (this.accept('{')) {
+      const values=[],widths=[];let width=0;
+      const constant=node=>node.type==='literal'||node.type==='error'||node.type==='unary'&&constant(node.node);
+      do {
+        const node=this.expression();if(!constant(node))fail('#VALUE!');values.push(node);width++;
+        if(this.accept(','))continue;
+        widths.push(width);width=0;
+        if(this.accept(';'))continue;
+        this.expect('}');break;
+      } while(values.length<MAX_RANGE_CELLS);
+      if(widths.some(n=>n!==widths[0])||!widths.length)fail('#VALUE!');
+      return {type:'array',values,rows:widths.length,cols:widths[0]};
+    }
     const token = this.tokens[this.at++];
     if (token.type === 'number' || token.type === 'string') return { type: 'literal', value: token.value };
     if (token.type === 'error') return { type: 'error', value: token.value };
@@ -190,8 +205,8 @@ class Parser {
       const args = [];
       if (!this.accept(')')) {
         do {
-          args.push(this.peek(',') || this.peek(')') ? { type: 'literal', value: BLANK } : this.expression());
-        } while (this.accept(','));
+          args.push(this.peek(',') || this.peek(';') || this.peek(')') ? { type: 'literal', value: BLANK } : this.expression());
+        } while (this.accept(',') || this.accept(';'));
         this.expect(')');
       }
       return { type: 'call', name: token.value.toUpperCase(), args };
@@ -228,7 +243,7 @@ class Parser {
 function context(workbook, sheetId) {
   const sheet = workbook?.sheets?.find(item => item.id === sheetId);
   if (!sheet) fail('#REF!');
-  return { workbook, sheet, active: new Set(), cache: new Map(), steps: 0, depth: 0 };
+  return { workbook, sheet, position:{r:0,c:0}, active: new Set(), cache: new Map(), steps: 0, depth: 0 };
 }
 function step(ctx) { if (++ctx.steps > MAX_STEPS) fail('#NUM!'); }
 function resolveSheet(ctx, name) {
@@ -258,15 +273,15 @@ function readCell(ctx, sheet, ref) {
   ctx.active.add(key);
   ctx.depth++;
   let value;
-  const original = ctx.sheet;
+  const original = ctx.sheet, originalPosition=ctx.position;
   try {
-    ctx.sheet = sheet;
+    ctx.sheet = sheet;ctx.position=pos;
     const raw = sheet.cells?.[ref]?.raw ?? '';
     value = typeof raw === 'string' && raw.startsWith('=') ? checked(evaluateNode(new Parser(raw).parse(), ctx, 0)) : literal(raw);
     if (value === BLANK && raw.startsWith('=')) value = 0;
   } catch (error) {
     value = error instanceof FormulaError ? error : new FormulaError('#VALUE!');
-  } finally { ctx.sheet = original; ctx.depth--; ctx.active.delete(key); }
+  } finally { ctx.sheet = original;ctx.position=originalPosition; ctx.depth--; ctx.active.delete(key); }
   ctx.cache.set(key, value);
   return value;
 }
@@ -289,22 +304,25 @@ function evaluateNode(node, ctx, depth) {
   const evaluate = child => evaluateNode(child, ctx, depth + 1);
   if (node.type === 'literal') return node.value;
   if (node.type === 'error') fail(node.value);
-  if (node.type === 'ref') return { kind: 'reference', value: readCell(ctx, resolveSheet(ctx, node.sheet), address(node.pos.r, node.pos.c)) };
+  if (node.type === 'ref') {
+    const sheet=resolveSheet(ctx,node.sheet);
+    return { kind:'reference',sheet,top:node.pos.r,left:node.pos.c,rows:1,cols:1,value:readCell(ctx,sheet,address(node.pos.r,node.pos.c)) };
+  }
+  if(node.type==='array')return {kind:'range',rows:node.rows,cols:node.cols,values:node.values.map(child=>{try{return checked(evaluate(child));}catch(e){if(e instanceof FormulaError)return e;throw e;}})};
   if (node.type === 'range') {
     const sheet = resolveSheet(ctx, node.sheet);
     const top = Math.min(node.start.r, node.end.r), left = Math.min(node.start.c, node.end.c);
     const rows = Math.abs(node.start.r - node.end.r) + 1, cols = Math.abs(node.start.c - node.end.c) + 1;
-    if (rows * cols > MAX_RANGE_CELLS) fail('#NUM!');
-    const values = [];
-    for (let r = top; r < top + rows; r++) for (let c = left; c < left + cols; c++) values.push(readCell(ctx, sheet, address(r, c)));
-    return { kind: 'range', values, rows, cols };
+    return getRange(ctx,sheet,top,left,rows,cols);
   }
   if (node.type === 'unary') {
-    const value = numeric(evaluate(node.node));
-    return finite(node.op === '%' ? value / 100 : node.op === '-' ? -value : value);
+    const source=evaluate(node.node),apply=v=>{const value=numeric(v);return finite(node.op==='%'?value/100:node.op==='-'?-value:value);};
+    if(isRange(source))return {...source,sheet:undefined,values:source.values.map(v=>{try{return apply(v);}catch(e){if(e instanceof FormulaError)return e;throw e;}})};
+    return apply(source);
   }
   if (node.type === 'binary') {
     const left = evaluate(node.left), right = evaluate(node.right);
+    const apply=(left,right)=>{
     if (node.op === '&') return textual(left) + textual(right);
     if (['=', '<>', '<', '>', '<=', '>='].includes(node.op)) {
       const order = compare(left, right);
@@ -313,13 +331,25 @@ function evaluateNode(node, ctx, depth) {
     const a = numeric(left), b = numeric(right);
     if (node.op === '/' && b === 0) fail('#DIV/0!');
     return finite(({ '+': () => a + b, '-': () => a - b, '*': () => a * b, '/': () => a / b, '^': () => a ** b })[node.op]());
+    };
+    if(isRange(left)||isRange(right)){
+      const a=asRange(left),b=asRange(right),rows=Math.max(a.rows,b.rows),cols=Math.max(a.cols,b.cols);
+      if(rows*cols>MAX_RANGE_CELLS)fail('#NUM!');
+      if(a.rows!==b.rows&&a.rows!==1&&b.rows!==1||a.cols!==b.cols&&a.cols!==1&&b.cols!==1)fail('#VALUE!');
+      const values=[];for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+        try{values.push(apply(a.values[(a.rows===1?0:r)*a.cols+(a.cols===1?0:c)],b.values[(b.rows===1?0:r)*b.cols+(b.cols===1?0:c)]));}
+        catch(e){if(e instanceof FormulaError)values.push(e);else throw e;}
+      }
+      return {kind:'range',rows,cols,values};
+    }
+    return apply(left,right);
   }
-  if (node.type === 'call') return callFunction(node.name, node.args, evaluate);
+  if (node.type === 'call') return callFunction(normalizeFunctionName(node.name), node.args, evaluate,ctx);
   return fail('#VALUE!');
 }
 
 const flatten = args => args.flatMap(arg => isRange(arg) ? arg.values.map(value => ({ value, reference: true })) : [{ value: scalar(arg), reference: isRef(arg) }]);
-const asRange = arg => isRange(arg) ? arg : { kind: 'range', values: [scalar(arg)], rows: 1, cols: 1 };
+const asRange = arg => isRange(arg) ? arg : { ...(isRef(arg)?arg:{}), kind: 'range', values: [scalar(arg)], rows: 1, cols: 1 };
 function numericItems(args) {
   const numbers = [];
   for (const item of flatten(args)) {
@@ -402,7 +432,76 @@ function rounded(value, digits, mode = 'nearest') {
   return finite(Math.sign(value) * result / factor);
 }
 
-function callFunction(name, nodes, evaluate) {
+function getRange(ctx,sheet,top,left,rows,cols) {
+  if(!validPosition(top,left)||!validPosition(top+rows-1,left+cols-1)||rows<1||cols<1)fail('#REF!');
+  if(rows*cols>MAX_RANGE_CELLS)fail('#NUM!');
+  const values=[];
+  for(let r=top;r<top+rows;r++)for(let c=left;c<left+cols;c++)values.push(readCell(ctx,sheet,address(r,c)));
+  return {kind:'range',sheet,top,left,rows,cols,values};
+}
+function referenceFunction(ctx,name,nodes,evaluate) {
+  const origin={sheet:ctx.sheet,top:ctx.position.r,left:ctx.position.c,rows:1,cols:1};
+  // Metadata functions must not read the referenced cell (ROW(A1) in A1 is not a cycle).
+  const metadata=node=>{
+    if(node.type==='ref')return {sheet:resolveSheet(ctx,node.sheet),top:node.pos.r,left:node.pos.c,rows:1,cols:1};
+    if(node.type==='range')return {sheet:resolveSheet(ctx,node.sheet),top:Math.min(node.start.r,node.end.r),left:Math.min(node.start.c,node.end.c),rows:Math.abs(node.start.r-node.end.r)+1,cols:Math.abs(node.start.c-node.end.c)+1};
+    const value=evaluate(node);if(isRef(value)||isRange(value))return value;return fail('#VALUE!');
+  };
+  if(name==='ROW'||name==='COLUMN'){const ref=nodes.length?metadata(nodes[0]):origin;if(!ref.sheet)fail('#VALUE!');return (name==='ROW'?ref.top:ref.left)+1;}
+  if(name==='ROWS'||name==='COLUMNS'){const ref=metadata(nodes[0]);return name==='ROWS'?ref.rows:ref.cols;}
+  if(name==='FORMULATEXT'||name==='ISFORMULA'){
+    const ref=metadata(nodes[0]);if(!ref.sheet)return name==='ISFORMULA'?false:fail('#N/A');
+    const raw=ref.sheet.cells?.[address(ref.top,ref.left)]?.raw??'',isFormula=raw.startsWith('=');
+    return name==='ISFORMULA'?isFormula:isFormula?raw:fail('#N/A');
+  }
+  if(name==='SHEET'){
+    let sheet=ctx.sheet;
+    if(nodes.length){const v=evaluate(nodes[0]);sheet=v?.sheet||ctx.workbook.sheets.find(s=>s.name.toLowerCase()===textual(v).toLowerCase());if(!sheet)fail('#N/A');}
+    return ctx.workbook.sheets.indexOf(sheet)+1;
+  }
+  if(name==='SHEETS'){if(!nodes.length)return ctx.workbook.sheets.length;const ref=metadata(nodes[0]);return ref.sheet?1:fail('#REF!');}
+  if(name==='ADDRESS'){
+    const args=nodes.map(evaluate),row=Math.trunc(numeric(args[0])),col=Math.trunc(numeric(args[1])),abs=args.length>2?Math.trunc(numeric(args[2])):1,a1=args.length>3?logical(args[3]):true;
+    if(!validPosition(row-1,col-1)||![1,2,3,4].includes(abs))fail('#VALUE!');
+    const rowAbs=abs===1||abs===2,colAbs=abs===1||abs===3;
+    let result=a1?`${colAbs?'$':''}${colName(col-1)}${rowAbs?'$':''}${row}`:`R${rowAbs?row:'['+row+']'}C${colAbs?col:'['+col+']'}`;
+    if(args.length>4){const sheet=textual(args[4]);result=(/^[\p{L}_][\p{L}\p{N}_]*$/u.test(sheet)&&!parseAddress(sheet)?sheet:`'${sheet.replace(/'/g,"''")}'`)+ '!'+result;}
+    return result;
+  }
+  if(name==='INDIRECT'){
+    let text=textual(evaluate(nodes[0]));const a1=nodes.length<2||logical(evaluate(nodes[1]));
+    if(!a1){
+      const convert=ref=>{const m=/^R(\[-?\d+\]|\d*)C(\[-?\d+\]|\d*)$/i.exec(ref);if(!m)fail('#REF!');const pos=(p,base)=>p.startsWith('[')?base+Number(p.slice(1,-1)):p?Number(p)-1:base;return address(pos(m[1],ctx.position.r),pos(m[2],ctx.position.c));};
+      const split=text.lastIndexOf('!');text=text.slice(0,split+1)+text.slice(split+1).split(':').map(convert).join(':');
+    }
+    let node;try{node=new Parser(text).parse();}catch{fail('#REF!');}
+    if(!['ref','range'].includes(node.type))fail('#REF!');return evaluate(node);
+  }
+  if(name==='OFFSET'){
+    const ref=metadata(nodes[0]);if(!ref.sheet)fail('#VALUE!');
+    const args=nodes.slice(1).map(node=>Math.trunc(numeric(evaluate(node))));
+    return getRange(ctx,ref.sheet,ref.top+args[0],ref.left+args[1],args[2]??ref.rows,args[3]??ref.cols);
+  }
+  if(name==='SUBTOTAL'){
+    const code=Math.trunc(numeric(evaluate(nodes[0]))),index=code>100?code-100:code;
+    const target=['','AVERAGE','COUNT','COUNTA','MAX','MIN','PRODUCT','STDEV.S','STDEV.P','SUM','VAR.S','VAR.P'][index];
+    if(!target||code!==index&&code!==index+100)fail('#VALUE!');
+    const values=[];for(const node of nodes.slice(1)){
+      const ref=metadata(node);if(!ref.sheet)fail('#VALUE!');if(ref.rows*ref.cols>MAX_RANGE_CELLS)fail('#NUM!');
+      for(let r=ref.top;r<ref.top+ref.rows;r++)for(let c=ref.left;c<ref.left+ref.cols;c++){
+        const raw=ref.sheet.cells?.[address(r,c)]?.raw??'';
+        if(/^\s*=\s*(?:_xlfn\.)?(?:SUBTOTAL|AGGREGATE)\s*\(/i.test(raw))continue;
+        if(code>100&&ref.sheet.rowHeights?.[r]===0)continue;
+        values.push(readCell(ctx,ref.sheet,address(r,c)));
+      }
+    }
+    return callFunction(target,[{type:'literal',value:{kind:'range',values,rows:values.length,cols:1}}],evaluate,ctx);
+  }
+  fail('#NAME?');
+}
+const extendedFunction=createFunctionRuntime({BLANK,FormulaError,fail,scalar,checked,numeric,textual,logical,finite,isRange,isRef,asRange,flatten,numericItems,criterion,compare,wildcardRegex,dateSerial,serialParts,rounded,colName,parseAddress,address,formatValue});
+
+function callFunction(name, nodes, evaluate, ctx) {
   const arity = (min, max = min) => { if (nodes.length < min || nodes.length > max) fail('#VALUE!'); };
   if (name === 'IF') {
     arity(2, 3);
@@ -416,7 +515,10 @@ function callFunction(name, nodes, evaluate) {
     }
   }
   const known = new Set(['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'AND', 'OR', 'NOT', 'ROUND', 'ROUNDUP', 'ROUNDDOWN', 'ABS', 'SQRT', 'POWER', 'MOD', 'INT', 'LEN', 'LEFT', 'RIGHT', 'MID', 'CONCAT', 'CONCATENATE', 'TRIM', 'UPPER', 'LOWER', 'SUMIF', 'COUNTIF', 'VLOOKUP', 'XLOOKUP', 'TODAY', 'DATE', 'YEAR', 'MONTH', 'DAY']);
-  if (!known.has(name)) fail('#NAME?');
+  if (!known.has(name)) return extendedFunction(name,nodes,evaluate,{
+    referenceFunction:(name,nodes,evaluate)=>referenceFunction(ctx,name,nodes,evaluate),
+    getRange:(sheet,top,left,rows,cols)=>getRange(ctx,sheet,top,left,rows,cols),
+  });
   const args = nodes.map((node, index) => name === 'XLOOKUP' && index === 3 ? BLANK : evaluate(node));
   const num = index => numeric(args[index]);
   const text = index => textual(args[index]);
@@ -573,6 +675,17 @@ export function createEvaluator(workbook, sheetId) {
   let ctx;
   try { ctx = context(workbook, sheetId); } catch { return () => '#REF!'; }
   return ref => guard(() => { ctx.steps = 0; return readCell(ctx, ctx.sheet, ref); });
+}
+
+export function formulaForXlsx(formula) {
+  const offset=formula.startsWith('=')?1:0;
+  let tokens;try{tokens=tokenize(formula.slice(offset));}catch{return formula;}
+  const patches=[];
+  tokens.forEach((token,i)=>{
+    if(token.type==='word'&&tokens[i+1]?.type==='op'&&tokens[i+1].value==='('&&XLSX_FUTURE_FUNCTIONS.has(token.value.toUpperCase()))patches.push({at:token.start+offset});
+  });
+  for(const {at} of patches.reverse())formula=formula.slice(0,at)+'_xlfn.'+formula.slice(at);
+  return formula;
 }
 
 function numberFormatKind(format) {
