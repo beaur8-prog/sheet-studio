@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+.package/
+test-results/
+*.log
+analysis/
+artifacts/
+.verification/
+.cache/
+.env
+.env.*
+!.env.example

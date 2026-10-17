@@ -1,0 +1,69 @@
+'use strict';
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { _electron } = require('playwright');
+const root = path.resolve(__dirname, '..');
+const locations = [root, path.dirname(root), path.join(path.dirname(root), 'word-studio'), path.join(path.dirname(root), 'slide-studio')];
+const runtime = locations.map(folder => path.join(folder, 'node_modules/electron/dist/electron.exe')).find(fs.existsSync);
+const packaged = path.join(root, 'release/win-unpacked/Sheet Studio.exe');
+
+async function smoke() {
+  const environment = { ...process.env, SHEET_STUDIO_DATA: path.join(root, '.package/smoke-data') };
+  delete environment.ELECTRON_RUN_AS_NODE;
+  const usingPackage = process.argv.includes('--packaged');
+  const application = await _electron.launch({
+    executablePath: usingPackage ? packaged : runtime,
+    args: usingPackage ? [] : [root], env: environment,
+  });
+  try {
+    const page = await application.firstWindow();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.waitForSelector('.cell', { timeout: 20_000 });
+    await page.waitForFunction(() => !!window.desktop?.openFile);
+    const state = await page.evaluate(() => ({
+      title: document.title, cells: document.querySelectorAll('.cell').length,
+      nodeIntegration: typeof window.require, bridge: Object.keys(window.desktop).sort(),
+      body: document.body.innerText.slice(0, 350),
+    }));
+    assert.equal(state.nodeIntegration, 'undefined');
+    assert.deepEqual(state.bridge, ['openFile', 'saveFile', 'setTitle']);
+    assert.ok(state.cells > 0, 'Spreadsheet grid rendered');
+    await page.evaluate(() => window.desktop.setTitle('Sheet Studio – smoke test'));
+    assert.match(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()), /smoke test/);
+    const fixtures = path.join(root, '.package/smoke-files');
+    await fsp.mkdir(fixtures, { recursive: true });
+    const source = path.join(fixtures, 'source.csv'), destination = path.join(fixtures, 'saved.csv');
+    await fsp.writeFile(source, '이름,금액\r\n테스트,42', 'utf8');
+    await application.evaluate(({ dialog }, paths) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [paths.source] });
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: paths.destination });
+    }, { source, destination });
+    const opened = await page.evaluate(() => window.desktop.openFile());
+    assert.equal(opened.name, 'source.csv');
+    assert.equal(Buffer.from(opened.data).toString('utf8'), '이름,금액\r\n테스트,42');
+    const saved = await page.evaluate(data => window.desktop.saveFile({ name: 'saved.csv', data }), opened.data);
+    assert.equal(saved, destination);
+    assert.equal(await fsp.readFile(destination, 'utf8'), '이름,금액\r\n테스트,42');
+    const invalid = await page.evaluate(async () => {
+      try { await window.desktop.saveFile({ name: 'invalid.csv', data: [999] }); return false; }
+      catch { return true; }
+    });
+    assert.equal(invalid, true);
+    await application.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
+      dialog.showSaveDialog = async () => ({ canceled: true });
+    });
+    assert.equal(await page.evaluate(() => window.desktop.openFile()), null);
+    assert.equal(await page.evaluate(() => window.desktop.saveFile({ name: 'cancel.csv', data: [] })), null);
+    const output = path.join(root, 'test-results');
+    await fsp.mkdir(output, { recursive: true });
+    await page.screenshot({ path: path.join(output, usingPackage ? 'desktop-packaged.png' : 'desktop.png') });
+    assert.deepEqual(errors, []);
+    console.log(JSON.stringify({ ok: true, packaged: usingPackage, ...state }, null, 2));
+  } finally { await application.close(); }
+}
+
+smoke().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,0 +1,90 @@
+'use strict';
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const { pathToFileURL } = require('node:url');
+
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const filters = [
+  { name: '스프레드시트', extensions: ['xlsx', 'csv', 'tsv', 'json'] },
+  { name: 'Excel 통합 문서', extensions: ['xlsx'] },
+  { name: 'CSV', extensions: ['csv'] },
+  { name: 'Sheet Studio', extensions: ['sheet.json', 'json'] },
+];
+let win;
+const rendererPath = path.join(__dirname, '../dist/index.html');
+const rendererURL = pathToFileURL(rendererPath).href;
+app.setName('Sheet Studio');
+if (process.env.SHEET_STUDIO_DATA) app.setPath('userData', path.resolve(process.env.SHEET_STUDIO_DATA));
+
+function trusted(event) {
+  if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame ||
+      event.senderFrame.url.split('#')[0] !== rendererURL) throw new Error('허용되지 않는 앱 요청입니다.');
+}
+
+ipcMain.handle('sheet:open-file', async event => {
+  trusted(event);
+  const result = await dialog.showOpenDialog(win, { title: '통합 문서 열기', properties: ['openFile'], filters });
+  if (result.canceled || !result.filePaths.length) return null;
+  const file = result.filePaths[0];
+  if ((await fs.stat(file)).size > MAX_FILE_BYTES) throw new Error('100 MB 이하의 통합 문서를 선택하세요.');
+  return { name: path.basename(file), data: Array.from(await fs.readFile(file)) };
+});
+
+ipcMain.handle('sheet:save-file', async (event, payload) => {
+  trusted(event);
+  if (!payload || typeof payload.name !== 'string' || !Array.isArray(payload.data) ||
+      payload.data.length > MAX_FILE_BYTES || payload.data.some(value => !Number.isInteger(value) || value < 0 || value > 255)) {
+    throw new Error('저장할 파일 데이터가 올바르지 않습니다.');
+  }
+  const basename = path.basename(payload.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || '통합 문서.xlsx';
+  const extension = basename.toLowerCase().endsWith('.sheet.json') ? 'json' : path.extname(basename).slice(1);
+  const result = await dialog.showSaveDialog(win, {
+    title: '통합 문서 저장', defaultPath: path.join(app.getPath('documents'), basename),
+    filters: [{ name: extension === 'xlsx' ? 'Excel 통합 문서' : extension.toUpperCase(), extensions: [extension || 'xlsx'] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  const tempPath = path.join(path.dirname(result.filePath), '.' + path.basename(result.filePath) + '.' + randomUUID() + '.tmp');
+  try {
+    await fs.writeFile(tempPath, Buffer.from(payload.data), { flag: 'wx' });
+    await fs.rename(tempPath, result.filePath);
+  } catch (error) {
+    await fs.unlink(tempPath).catch(() => {});
+    throw error;
+  }
+  return result.filePath;
+});
+
+ipcMain.on('sheet:set-title', (event, title) => {
+  trusted(event);
+  if (typeof title === 'string') win.setTitle(title.slice(0, 250).replace(/[\r\n]/g, ' '));
+});
+
+async function createWindow() {
+  win = new BrowserWindow({
+    width: 1540, height: 970, minWidth: 1000, minHeight: 650,
+    title: 'Sheet Studio', backgroundColor: '#202020', show: false, autoHideMenuBar: true,
+    icon: path.join(__dirname, 'app.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true,
+      nodeIntegration: false, sandbox: true, webviewTag: false,
+    },
+  });
+  Menu.setApplicationMenu(null);
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  win.webContents.session.setPermissionCheckHandler(() => false);
+  win.once('ready-to-show', () => win.show());
+  await win.loadFile(rendererPath);
+  win.on('closed', () => { win = null; });
+}
+
+app.whenReady().then(createWindow).catch(error => {
+  console.error(error);
+  dialog.showErrorBox('Sheet Studio를 시작할 수 없습니다', error.message);
+  app.exit(1);
+});
+app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

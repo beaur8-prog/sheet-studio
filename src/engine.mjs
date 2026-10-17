@@ -1,0 +1,833 @@
+/** A small, original spreadsheet evaluator. No JavaScript evaluation is used. */
+const MAX_ROWS = 1048576;
+const MAX_COLS = 16384;
+const MAX_RANGE_CELLS = 100000;
+const MAX_STEPS = 200000;
+const MAX_DEPTH = 160;
+const BLANK = Symbol('blank');
+const DAY_MS = 86400000;
+
+class FormulaError extends Error {
+  constructor(code) { super(code); this.code = code; }
+}
+const fail = code => { throw new FormulaError(code); };
+const validPosition = (r, c) => Number.isInteger(r) && Number.isInteger(c) && r >= 0 && c >= 0 && r < MAX_ROWS && c < MAX_COLS;
+const isRef = value => value && value.kind === 'reference';
+const isRange = value => value && value.kind === 'range';
+const scalar = value => {
+  if (isRef(value)) return value.value;
+  if (isRange(value)) return value.values.length === 1 ? value.values[0] : fail('#VALUE!');
+  return value;
+};
+const checked = value => {
+  value = scalar(value);
+  if (value instanceof FormulaError) throw value;
+  return value;
+};
+const numeric = value => {
+  value = checked(value);
+  if (value === BLANK || value === '') return 0;
+  if (typeof value === 'boolean') return Number(value);
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim() !== '' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) return Number(value);
+  return fail('#VALUE!');
+};
+const finite = value => Number.isFinite(value) ? value : fail('#NUM!');
+const textual = value => {
+  value = checked(value);
+  if (value === BLANK) return '';
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  return String(value);
+};
+const logical = value => {
+  value = checked(value);
+  if (value === BLANK || value === '') return false;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (/^true$/i.test(value)) return true;
+  if (/^false$/i.test(value)) return false;
+  return fail('#VALUE!');
+};
+
+export function colName(index) {
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_COLS) return '';
+  let value = index + 1, name = '';
+  while (value) { name = String.fromCharCode(65 + (value - 1) % 26) + name; value = Math.floor((value - 1) / 26); }
+  return name;
+}
+
+export function colIndex(label) {
+  if (typeof label !== 'string' || !/^[A-Za-z]{1,3}$/.test(label)) return -1;
+  let result = 0;
+  for (const char of label.toUpperCase()) result = result * 26 + char.charCodeAt(0) - 64;
+  return result <= MAX_COLS ? result - 1 : -1;
+}
+
+export function parseAddress(value) {
+  if (typeof value !== 'string') return null;
+  const match = /^\$?([A-Za-z]{1,3})\$?([1-9]\d*)$/.exec(value);
+  if (!match) return null;
+  const r = Number(match[2]) - 1, c = colIndex(match[1]);
+  return validPosition(r, c) ? { r, c } : null;
+}
+
+export function address(r, c) { return validPosition(r, c) ? `${colName(c)}${r + 1}` : '#REF!'; }
+
+export function createWorkbook() {
+  return {
+    name: '통합 문서1', activeSheetId: 'sheet-1',
+    sheets: [{ id: 'sheet-1', name: 'Sheet1', cells: {}, columnWidths: {}, rowHeights: {}, merges: [], charts: [] }],
+  };
+}
+
+function tokenize(input) {
+  if (input.length > 32768) fail('#VALUE!');
+  const tokens = [];
+  let at = 0;
+  const push = (type, value, start, end) => {
+    tokens.push({ type, value, start, end });
+    if (tokens.length > 10000) fail('#VALUE!');
+  };
+  while (at < input.length) {
+    const start = at, ch = input[at];
+    if (/\s/.test(ch)) { at++; continue; }
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      let value = '', closed = false;
+      at++;
+      while (at < input.length) {
+        if (input[at] === quote) {
+          if (input[at + 1] === quote) { value += quote; at += 2; }
+          else { at++; closed = true; break; }
+        } else value += input[at++];
+      }
+      if (!closed) fail('#VALUE!');
+      push(quote === '"' ? 'string' : 'sheet', value, start, at);
+      continue;
+    }
+    const rest = input.slice(at);
+    const error = /^(#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|CYCLE!|SPILL!))/i.exec(rest);
+    if (error) { at += error[0].length; push('error', error[0].toUpperCase(), start, at); continue; }
+    const number = /^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(rest);
+    if (number) { at += number[0].length; push('number', Number(number[0]), start, at); continue; }
+    const word = /^[\p{L}_$\\][\p{L}\p{N}_.$\\]*/u.exec(rest);
+    if (word) { at += word[0].length; push('word', word[0], start, at); continue; }
+    const comparison = /^(<>|<=|>=)/.exec(rest);
+    if (comparison) { at += 2; push('op', comparison[0], start, at); continue; }
+    if ('+-*/^&%=<>():,;!'.includes(ch)) { at++; push('op', ch === ';' ? ',' : ch, start, at); continue; }
+    fail('#VALUE!');
+  }
+  tokens.push({ type: 'end', value: '', start: at, end: at });
+  return tokens;
+}
+
+class Parser {
+  constructor(formula) { this.tokens = tokenize(formula.replace(/^=/, '')); this.at = 0; this.depth = 0; }
+  peek(value) { return this.tokens[this.at].value === value; }
+  accept(value) { if (this.peek(value)) { this.at++; return true; } return false; }
+  expect(value) { if (!this.accept(value)) fail('#VALUE!'); }
+  parse() {
+    const result = this.expression();
+    if (this.tokens[this.at].type !== 'end') fail('#VALUE!');
+    return result;
+  }
+  expression() {
+    if (++this.depth > MAX_DEPTH) fail('#VALUE!');
+    let node = this.concat();
+    while (['=', '<>', '<', '>', '<=', '>='].includes(this.tokens[this.at].value)) {
+      const op = this.tokens[this.at++].value;
+      node = { type: 'binary', op, left: node, right: this.concat() };
+    }
+    this.depth--;
+    return node;
+  }
+  concat() {
+    let node = this.sum();
+    while (this.accept('&')) node = { type: 'binary', op: '&', left: node, right: this.sum() };
+    return node;
+  }
+  sum() {
+    let node = this.product();
+    while (['+', '-'].includes(this.tokens[this.at].value)) {
+      const op = this.tokens[this.at++].value;
+      node = { type: 'binary', op, left: node, right: this.product() };
+    }
+    return node;
+  }
+  product() {
+    let node = this.power();
+    while (['*', '/'].includes(this.tokens[this.at].value)) {
+      const op = this.tokens[this.at++].value;
+      node = { type: 'binary', op, left: node, right: this.power() };
+    }
+    return node;
+  }
+  power() {
+    let node = this.unary();
+    while (this.accept('^')) node = { type: 'binary', op: '^', left: node, right: this.unary() };
+    return node;
+  }
+  unary() {
+    const ops = [];
+    while (this.peek('+') || this.peek('-')) {
+      ops.push(this.tokens[this.at++].value);
+      if (ops.length > MAX_DEPTH) fail('#VALUE!');
+    }
+    let node = this.primary();
+    while (this.accept('%')) node = { type: 'unary', op: '%', node };
+    for (let i = ops.length - 1; i >= 0; i--) node = { type: 'unary', op: ops[i], node };
+    return node;
+  }
+  primary() {
+    if (this.accept('(')) { const value = this.expression(); this.expect(')'); return value; }
+    const token = this.tokens[this.at++];
+    if (token.type === 'number' || token.type === 'string') return { type: 'literal', value: token.value };
+    if (token.type === 'error') return { type: 'error', value: token.value };
+    if (token.type !== 'word' && token.type !== 'sheet') fail('#VALUE!');
+    if (token.type === 'word' && this.accept('(')) {
+      const args = [];
+      if (!this.accept(')')) {
+        do {
+          args.push(this.peek(',') || this.peek(')') ? { type: 'literal', value: BLANK } : this.expression());
+        } while (this.accept(','));
+        this.expect(')');
+      }
+      return { type: 'call', name: token.value.toUpperCase(), args };
+    }
+    let sheet = null, reference = token.value;
+    if (this.accept('!')) {
+      sheet = reference;
+      const ref = this.tokens[this.at++];
+      if (ref.type === 'error') return { type: 'error', value: ref.value };
+      if (ref.type !== 'word') fail('#REF!');
+      reference = ref.value;
+    } else if (token.type === 'sheet') fail('#NAME?');
+    if (!sheet && /^(true|false)$/i.test(reference)) return { type: 'literal', value: /^true$/i.test(reference) };
+    const pos = parseAddress(reference);
+    if (!pos) {
+      if (/^\$?[A-Za-z]+\$?\d+$/.test(reference)) fail('#REF!');
+      return { type: 'error', value: '#NAME?' };
+    }
+    const first = { type: 'ref', sheet, pos };
+    if (this.accept(':')) {
+      const lastToken = this.tokens[this.at++];
+      if (lastToken.type === 'error') return { type: 'error', value: lastToken.value };
+      if (lastToken.type !== 'word' && lastToken.type !== 'sheet') fail('#REF!');
+      let lastSheet = sheet, lastAddress = lastToken.value;
+      if (this.accept('!')) { lastSheet = lastAddress; lastAddress = this.tokens[this.at++].value; }
+      const end = parseAddress(lastAddress);
+      if (!end || (sheet && lastSheet && sheet.toLowerCase() !== lastSheet.toLowerCase())) fail('#REF!');
+      return { type: 'range', sheet: sheet || lastSheet, start: pos, end };
+    }
+    return first;
+  }
+}
+
+function context(workbook, sheetId) {
+  const sheet = workbook?.sheets?.find(item => item.id === sheetId);
+  if (!sheet) fail('#REF!');
+  return { workbook, sheet, active: new Set(), cache: new Map(), steps: 0, depth: 0 };
+}
+function step(ctx) { if (++ctx.steps > MAX_STEPS) fail('#NUM!'); }
+function resolveSheet(ctx, name) {
+  if (!name) return ctx.sheet;
+  return ctx.workbook.sheets.find(sheet => sheet.name.toLowerCase() === name.toLowerCase()) || fail('#REF!');
+}
+function literal(raw) {
+  if (raw === undefined || raw === null || raw === '') return BLANK;
+  if (typeof raw !== 'string') raw = String(raw);
+  if (raw.startsWith("'")) return raw.slice(1);
+  if (/^true$/i.test(raw)) return true;
+  if (/^false$/i.test(raw)) return false;
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw.trim())) return finite(Number(raw));
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(raw.trim())) return finite(Number(raw.trim().slice(0, -1)) / 100);
+  if (/^#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|CYCLE!|SPILL!)$/.test(raw)) return new FormulaError(raw);
+  return raw;
+}
+function readCell(ctx, sheet, ref) {
+  step(ctx);
+  const pos = parseAddress(ref);
+  if (!pos) return new FormulaError('#REF!');
+  ref = address(pos.r, pos.c);
+  const key = `${sheet.id}!${ref}`;
+  if (ctx.cache.has(key)) return ctx.cache.get(key);
+  if (ctx.active.has(key)) return new FormulaError('#CYCLE!');
+  if (ctx.depth >= MAX_DEPTH) return new FormulaError('#NUM!');
+  ctx.active.add(key);
+  ctx.depth++;
+  let value;
+  const original = ctx.sheet;
+  try {
+    ctx.sheet = sheet;
+    const raw = sheet.cells?.[ref]?.raw ?? '';
+    value = typeof raw === 'string' && raw.startsWith('=') ? checked(evaluateNode(new Parser(raw).parse(), ctx, 0)) : literal(raw);
+    if (value === BLANK && raw.startsWith('=')) value = 0;
+  } catch (error) {
+    value = error instanceof FormulaError ? error : new FormulaError('#VALUE!');
+  } finally { ctx.sheet = original; ctx.depth--; ctx.active.delete(key); }
+  ctx.cache.set(key, value);
+  return value;
+}
+function compare(left, right) {
+  left = checked(left); right = checked(right);
+  if (left === BLANK) left = typeof right === 'string' ? '' : typeof right === 'boolean' ? false : 0;
+  if (right === BLANK) right = typeof left === 'string' ? '' : typeof left === 'boolean' ? false : 0;
+  if (typeof left === 'string' && typeof right === 'string') {
+    left = left.toLocaleLowerCase(); right = right.toLocaleLowerCase();
+  }
+  if (typeof left !== typeof right) {
+    const rank = { number: 0, string: 1, boolean: 2 };
+    return rank[typeof left] < rank[typeof right] ? -1 : 1;
+  }
+  return left === right ? 0 : left < right ? -1 : 1;
+}
+function evaluateNode(node, ctx, depth) {
+  step(ctx);
+  if (depth > MAX_DEPTH) fail('#NUM!');
+  const evaluate = child => evaluateNode(child, ctx, depth + 1);
+  if (node.type === 'literal') return node.value;
+  if (node.type === 'error') fail(node.value);
+  if (node.type === 'ref') return { kind: 'reference', value: readCell(ctx, resolveSheet(ctx, node.sheet), address(node.pos.r, node.pos.c)) };
+  if (node.type === 'range') {
+    const sheet = resolveSheet(ctx, node.sheet);
+    const top = Math.min(node.start.r, node.end.r), left = Math.min(node.start.c, node.end.c);
+    const rows = Math.abs(node.start.r - node.end.r) + 1, cols = Math.abs(node.start.c - node.end.c) + 1;
+    if (rows * cols > MAX_RANGE_CELLS) fail('#NUM!');
+    const values = [];
+    for (let r = top; r < top + rows; r++) for (let c = left; c < left + cols; c++) values.push(readCell(ctx, sheet, address(r, c)));
+    return { kind: 'range', values, rows, cols };
+  }
+  if (node.type === 'unary') {
+    const value = numeric(evaluate(node.node));
+    return finite(node.op === '%' ? value / 100 : node.op === '-' ? -value : value);
+  }
+  if (node.type === 'binary') {
+    const left = evaluate(node.left), right = evaluate(node.right);
+    if (node.op === '&') return textual(left) + textual(right);
+    if (['=', '<>', '<', '>', '<=', '>='].includes(node.op)) {
+      const order = compare(left, right);
+      return ({ '=': order === 0, '<>': order !== 0, '<': order < 0, '>': order > 0, '<=': order <= 0, '>=': order >= 0 })[node.op];
+    }
+    const a = numeric(left), b = numeric(right);
+    if (node.op === '/' && b === 0) fail('#DIV/0!');
+    return finite(({ '+': () => a + b, '-': () => a - b, '*': () => a * b, '/': () => a / b, '^': () => a ** b })[node.op]());
+  }
+  if (node.type === 'call') return callFunction(node.name, node.args, evaluate);
+  return fail('#VALUE!');
+}
+
+const flatten = args => args.flatMap(arg => isRange(arg) ? arg.values.map(value => ({ value, reference: true })) : [{ value: scalar(arg), reference: isRef(arg) }]);
+const asRange = arg => isRange(arg) ? arg : { kind: 'range', values: [scalar(arg)], rows: 1, cols: 1 };
+function numericItems(args) {
+  const numbers = [];
+  for (const item of flatten(args)) {
+    const value = checked(item.value);
+    if (value === BLANK) continue;
+    if (typeof value === 'number') numbers.push(value);
+    else if (!item.reference) numbers.push(numeric(value));
+  }
+  return numbers;
+}
+function wildcardRegex(pattern) {
+  let source = '^';
+  for (let i = 0; i < pattern.length; i++) {
+    let ch = pattern[i];
+    if (ch === '~' && i + 1 < pattern.length) ch = pattern[++i];
+    else if (ch === '*') { source += '.*'; continue; }
+    else if (ch === '?') { source += '.'; continue; }
+    source += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(source + '$', 'iu');
+}
+function criterion(test) {
+  test = checked(test);
+  if (test === BLANK) test = 0;
+  let op = '=', target = test;
+  if (typeof test === 'string') {
+    const match = /^(<=|>=|<>|=|<|>)(.*)$/s.exec(test);
+    if (match) { op = match[1]; target = match[2]; }
+    if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(target)) target = Number(target);
+    else if (/^(true|false)$/i.test(target)) target = /^true$/i.test(target);
+  }
+  const wildcard = typeof target === 'string' && /[*?~]/.test(target) ? wildcardRegex(target) : null;
+  return value => {
+    value = scalar(value);
+    if (value instanceof FormulaError) return typeof target === 'string' && op === '=' && value.code === target;
+    if (wildcard && (op === '=' || op === '<>')) {
+      const matches = typeof value === 'string' && wildcard.test(value);
+      return op === '=' ? matches : !matches;
+    }
+    if (typeof target === 'number' && typeof value === 'string') {
+      if (value.trim() && Number.isFinite(Number(value))) value = Number(value);
+      else return op === '<>';
+    }
+    const order = compare(value, target);
+    return ({ '=': order === 0, '<>': order !== 0, '<': order < 0, '>': order > 0, '<=': order <= 0, '>=': order >= 0 })[op];
+  };
+}
+
+function dateSerial(year, month, day) {
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  const difference = Math.round((date.getTime() - Date.UTC(1899, 11, 31)) / DAY_MS);
+  const serial = difference + (difference >= 60 ? 1 : 0);
+  if (!Number.isFinite(serial) || serial < 0 || serial > 2958465) fail('#NUM!');
+  return serial;
+}
+function serialParts(value) {
+  const serial = Math.floor(numeric(value));
+  if (serial < 0 || serial > 2958465) fail('#NUM!');
+  if (serial === 60) return { year: 1900, month: 2, day: 29 };
+  if (serial === 0) return { year: 1900, month: 1, day: 0 };
+  const date = new Date(Date.UTC(1899, 11, 31) + (serial >= 60 ? serial - 1 : serial) * DAY_MS);
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+function rounded(value, digits, mode = 'nearest') {
+  value = numeric(value); digits = Math.trunc(numeric(digits));
+  if (digits > 308) return value;
+  if (digits < -308) return 0;
+  const abs = Math.abs(value), factor = 10 ** digits;
+  const scaled = abs * factor;
+  if (!Number.isFinite(scaled)) return value;
+  let result;
+  const epsilon = Math.min(1e-7, Math.max(1, scaled) * Number.EPSILON * 2);
+  const nearest = Math.round(scaled);
+  const corrected = nearest > 0 && Math.abs(scaled - nearest) < epsilon ? nearest : scaled;
+  if (mode === 'up') result = Math.ceil(corrected);
+  else if (mode === 'down') result = Math.floor(corrected);
+  else result = Math.floor(scaled + 0.5 + epsilon);
+  return finite(Math.sign(value) * result / factor);
+}
+
+function callFunction(name, nodes, evaluate) {
+  const arity = (min, max = min) => { if (nodes.length < min || nodes.length > max) fail('#VALUE!'); };
+  if (name === 'IF') {
+    arity(2, 3);
+    return logical(evaluate(nodes[0])) ? evaluate(nodes[1]) : nodes.length === 3 ? evaluate(nodes[2]) : false;
+  }
+  if (name === 'IFERROR') {
+    arity(2);
+    try { return checked(evaluate(nodes[0])); } catch (error) {
+      if (!(error instanceof FormulaError)) throw error;
+      return evaluate(nodes[1]);
+    }
+  }
+  const known = new Set(['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'AND', 'OR', 'NOT', 'ROUND', 'ROUNDUP', 'ROUNDDOWN', 'ABS', 'SQRT', 'POWER', 'MOD', 'INT', 'LEN', 'LEFT', 'RIGHT', 'MID', 'CONCAT', 'CONCATENATE', 'TRIM', 'UPPER', 'LOWER', 'SUMIF', 'COUNTIF', 'VLOOKUP', 'XLOOKUP', 'TODAY', 'DATE', 'YEAR', 'MONTH', 'DAY']);
+  if (!known.has(name)) fail('#NAME?');
+  const args = nodes.map((node, index) => name === 'XLOOKUP' && index === 3 ? BLANK : evaluate(node));
+  const num = index => numeric(args[index]);
+  const text = index => textual(args[index]);
+  const bool = index => logical(args[index]);
+  if (['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA'].includes(name)) {
+    arity(1, 255);
+    if (name === 'COUNTA') return flatten(args).filter(({ value }) => value !== BLANK).length;
+    if (name === 'COUNT') return flatten(args).filter(({ value, reference }) => {
+      if (typeof value === 'number') return true;
+      if (value === BLANK || value === '' || value instanceof FormulaError || reference) return false;
+      try { numeric(value); return true; } catch { return false; }
+    }).length;
+    const numbers = numericItems(args);
+    if (name === 'AVERAGE' && numbers.length === 0) fail('#DIV/0!');
+    if (!numbers.length) return 0;
+    if (name === 'MIN') return numbers.reduce((a, b) => Math.min(a, b));
+    if (name === 'MAX') return numbers.reduce((a, b) => Math.max(a, b));
+    const total = numbers.reduce((a, b) => a + b, 0);
+    return finite(name === 'AVERAGE' ? total / numbers.length : total);
+  }
+  if (name === 'AND' || name === 'OR') {
+    arity(1, 255);
+    const values = [];
+    for (const { value, reference } of flatten(args)) {
+      checked(value);
+      if (value === BLANK || (reference && typeof value === 'string')) continue;
+      values.push(logical(value));
+    }
+    if (!values.length) fail('#VALUE!');
+    return name === 'AND' ? values.every(Boolean) : values.some(Boolean);
+  }
+  if (name === 'NOT') { arity(1); return !bool(0); }
+  if (['ROUND', 'ROUNDUP', 'ROUNDDOWN'].includes(name)) {
+    arity(2); return rounded(args[0], args[1], name === 'ROUNDUP' ? 'up' : name === 'ROUNDDOWN' ? 'down' : 'nearest');
+  }
+  if (name === 'ABS') { arity(1); return Math.abs(num(0)); }
+  if (name === 'SQRT') { arity(1); return finite(Math.sqrt(num(0))); }
+  if (name === 'POWER') { arity(2); return finite(num(0) ** num(1)); }
+  if (name === 'MOD') { arity(2); const a = num(0), b = num(1); if (!b) fail('#DIV/0!'); return finite(a - b * Math.floor(a / b)); }
+  if (name === 'INT') { arity(1); return Math.floor(num(0)); }
+  if (name === 'LEN') { arity(1); return text(0).length; }
+  if (name === 'LEFT' || name === 'RIGHT') {
+    arity(1, 2);
+    const value = text(0), count = nodes.length === 1 ? 1 : Math.trunc(num(1));
+    if (count < 0) fail('#VALUE!');
+    return name === 'LEFT' ? value.slice(0, count) : count === 0 ? '' : value.slice(-count);
+  }
+  if (name === 'MID') {
+    arity(3); const start = Math.trunc(num(1)), count = Math.trunc(num(2));
+    if (start < 1 || count < 0) fail('#VALUE!');
+    return text(0).slice(start - 1, start - 1 + count);
+  }
+  if (name === 'CONCAT' || name === 'CONCATENATE') {
+    arity(1, 255); return flatten(args).map(({ value }) => textual(value)).join('');
+  }
+  if (name === 'TRIM') { arity(1); return text(0).replace(/^ +| +$/g, '').replace(/ +/g, ' '); }
+  if (name === 'UPPER') { arity(1); return text(0).toUpperCase(); }
+  if (name === 'LOWER') { arity(1); return text(0).toLowerCase(); }
+  if (name === 'COUNTIF' || name === 'SUMIF') {
+    arity(2, name === 'SUMIF' ? 3 : 2);
+    const range = asRange(args[0]), matches = criterion(args[1]);
+    if (name === 'COUNTIF') return range.values.filter(matches).length;
+    const sumRange = args.length > 2 ? asRange(args[2]) : range;
+    if (sumRange.rows !== range.rows || sumRange.cols !== range.cols) fail('#VALUE!');
+    let total = 0;
+    range.values.forEach((value, i) => {
+      if (!matches(value)) return;
+      const item = checked(sumRange.values[i]);
+      if (typeof item === 'number') total += item;
+    });
+    return finite(total);
+  }
+  if (name === 'VLOOKUP') {
+    arity(3, 4);
+    const lookup = checked(args[0]), range = asRange(args[1]), column = Math.trunc(num(2));
+    if (column < 1) fail('#VALUE!');
+    if (column > range.cols) fail('#REF!');
+    const approximate = args.length < 4 ? true : bool(3);
+    const pattern = typeof lookup === 'string' ? wildcardRegex(lookup) : null;
+    const exactMatch = value => pattern ? typeof value === 'string' && pattern.test(value) : compare(value, lookup) === 0;
+    let selected = -1;
+    for (let r = 0; r < range.rows; r++) {
+      const value = range.values[r * range.cols];
+      if (value instanceof FormulaError) continue;
+      if (!approximate && exactMatch(value)) { selected = r; break; }
+      if (approximate && compare(value, lookup) <= 0) selected = r;
+    }
+    if (selected < 0) fail('#N/A');
+    const result = checked(range.values[selected * range.cols + column - 1]);
+    return result === BLANK ? 0 : result;
+  }
+  if (name === 'XLOOKUP') {
+    arity(3, 6);
+    const lookup = checked(args[0]), range = asRange(args[1]), result = asRange(args[2]);
+    if ((range.rows > 1 && range.cols > 1) || result.values.length !== range.values.length) fail('#VALUE!');
+    const mode = args.length > 4 ? Math.trunc(num(4)) : 0;
+    const search = args.length > 5 ? Math.trunc(num(5)) : 1;
+    if (![0, -1, 1, 2].includes(mode) || ![1, -1, 2, -2].includes(search)) fail('#VALUE!');
+    let selected = -1, best;
+    const indexes = Array.from({ length: range.values.length }, (_, index) => index);
+    if (search < 0) indexes.reverse();
+    for (const i of indexes) {
+      const value = range.values[i];
+      if (value instanceof FormulaError) continue;
+      const order = compare(value, lookup);
+      if (mode === 2 ? typeof lookup === 'string' && typeof value === 'string' && wildcardRegex(lookup).test(value) : order === 0) { selected = i; break; }
+      if ((mode === -1 && order < 0) || (mode === 1 && order > 0)) {
+        if (best === undefined || (mode === -1 ? compare(value, best) > 0 : compare(value, best) < 0)) { selected = i; best = value; }
+      }
+    }
+    if (selected < 0) return args.length > 3 ? checked(evaluate(nodes[3])) : fail('#N/A');
+    const value = checked(result.values[selected]);
+    return value === BLANK ? 0 : value;
+  }
+  if (name === 'TODAY') {
+    arity(0); const now = new Date(); return dateSerial(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  }
+  if (name === 'DATE') {
+    arity(3); let year = Math.trunc(num(0));
+    if (year >= 0 && year < 1900) year += 1900;
+    if (year < 0 || year > 9999) fail('#NUM!');
+    const month = Math.trunc(num(1)), day = Math.trunc(num(2));
+    if (year === 1900 && month === 2 && day === 29) return 60;
+    return dateSerial(year, month, day);
+  }
+  if (['YEAR', 'MONTH', 'DAY'].includes(name)) {
+    arity(1); return serialParts(args[0])[name.toLowerCase()];
+  }
+  return fail('#NAME?');
+}
+
+function publicValue(value) {
+  value = checked(value);
+  return value === BLANK ? '' : typeof value === 'number' ? finite(value) : value;
+}
+function guard(callback) {
+  try { return publicValue(callback()); } catch (error) { return error instanceof FormulaError ? error.code : '#VALUE!'; }
+}
+
+export function evaluateCell(workbook, sheetId, ref) {
+  return guard(() => { const ctx = context(workbook, sheetId); return readCell(ctx, ctx.sheet, ref); });
+}
+
+export function evaluateFormula(workbook, sheetId, formula) {
+  return guard(() => {
+    const ctx = context(workbook, sheetId);
+    const result = checked(evaluateNode(new Parser(String(formula)).parse(), ctx, 0));
+    return result === BLANK ? 0 : result;
+  });
+}
+
+/** Returns a recalculation session for rendering many cells with a shared cache. */
+export function createEvaluator(workbook, sheetId) {
+  let ctx;
+  try { ctx = context(workbook, sheetId); } catch { return () => '#REF!'; }
+  return ref => guard(() => { ctx.steps = 0; return readCell(ctx, ctx.sheet, ref); });
+}
+
+function numberFormatKind(format) {
+  if (!format || /^general$/i.test(format)) return 'general';
+  const cleaned = format.replace(/"[^"]*"|\\./g, '');
+  if (/[ymdhs]/i.test(cleaned.replace(/\[[^\]]*\]/g, '')) || /\[(?:h{1,2}|m{1,2}|s{1,2})\]/i.test(cleaned)) return 'date';
+  if (cleaned.includes('%')) return 'percent';
+  if (cleaned.includes('*')) return 'accounting';
+  if (/[$₩€£¥]|\[\$/.test(cleaned)) return 'currency';
+  return 'number';
+}
+
+function formatDateValue(value, pattern) {
+  const { year, month, day } = serialParts(value);
+  const fraction = ((value % 1) + 1) % 1;
+  const seconds = Math.round(fraction * 86400) % 86400;
+  const hour = Math.floor(seconds / 3600), minute = Math.floor(seconds / 60) % 60, second = seconds % 60;
+  const pad = number => String(number).padStart(2, '0');
+  const date = new Date(Date.UTC(year, month - 1, Math.max(1, day)));
+  const hasAmPm = /AM\/PM|A\/P/i.test(pattern);
+  const tokens = [...pattern.matchAll(/"[^"]*"|\\.|\[[^\]]*\]|AM\/PM|A\/P|yyyy|yy|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s|./gi)];
+  let previousTimeUnit = '';
+  return tokens.map((match, index) => {
+    const token = match[0], lower = token.toLowerCase();
+    if (token.startsWith('"')) return token.slice(1, -1);
+    if (token.startsWith('\\')) return token.slice(1);
+    if (lower === '[h]' || lower === '[hh]') { previousTimeUnit = 'h'; return String(Math.floor(value * 24)).padStart(lower === '[hh]' ? 2 : 1, '0'); }
+    if (lower === '[m]' || lower === '[mm]') return String(Math.floor(value * 1440)).padStart(lower === '[mm]' ? 2 : 1, '0');
+    if (lower === '[s]' || lower === '[ss]') return String(Math.round(value * 86400)).padStart(lower === '[ss]' ? 2 : 1, '0');
+    if (token.startsWith('[')) return '';
+    if (lower === 'am/pm') return hour >= 12 ? 'PM' : 'AM';
+    if (lower === 'a/p') return hour >= 12 ? 'P' : 'A';
+    if (lower === 'yyyy') return String(year);
+    if (lower === 'yy') return String(year).slice(-2);
+    if (lower === 'mmmm') return date.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+    if (lower === 'mmm') return date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+    if (lower === 'mm' || lower === 'm') {
+      const nextUnit = tokens.slice(index + 1).map(item => item[0].toLowerCase()).find(item => /^(?:h{1,2}|m{1,4}|s{1,2}|d{1,4}|y{2,4})$/.test(item));
+      const isMinute = previousTimeUnit === 'h' || nextUnit === 's' || nextUnit === 'ss';
+      previousTimeUnit = isMinute ? 'minute' : 'month';
+      return lower === 'mm' ? pad(isMinute ? minute : month) : String(isMinute ? minute : month);
+    }
+    if (lower === 'dddd' || lower === 'ddd') return date.toLocaleString('en-US', { weekday: lower === 'dddd' ? 'long' : 'short', timeZone: 'UTC' });
+    if (lower === 'dd' || lower === 'd') { previousTimeUnit = 'd'; return lower === 'dd' ? pad(day) : String(day); }
+    if (lower === 'hh' || lower === 'h') { previousTimeUnit = 'h'; const displayHour = hasAmPm ? hour % 12 || 12 : hour; return lower === 'hh' ? pad(displayHour) : String(displayHour); }
+    if (lower === 'ss' || lower === 's') { previousTimeUnit = 's'; return lower === 'ss' ? pad(second) : String(second); }
+    return token;
+  }).join('');
+}
+
+export function formatValue(value, style = {}) {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+  let format = typeof style === 'string' ? style : style.format || 'general';
+  if (typeof style === 'object' && typeof style.numberFormat === 'string' && (!style.format || numberFormatKind(style.numberFormat) === style.format)) format = style.numberFormat;
+  const decimals = typeof style === 'object' && Number.isInteger(style.decimals) ? Math.max(0, Math.min(12, style.decimals)) : null;
+  if (format === 'general' || format === 'General' || format === '@') return String(Number(value.toPrecision(12)));
+  const standardFormats = ['general', 'number', 'currency', 'accounting', 'percent', 'text'];
+  if (format === 'date' || (!standardFormats.includes(format) && numberFormatKind(format) === 'date')) {
+    try {
+      return formatDateValue(value, format === 'date' ? 'yyyy-mm-dd' : format);
+    } catch { return '########'; }
+  }
+  const customDecimals = (format.split(';')[0].match(/\.([0#]+)/) || [])[1];
+  const precision = decimals ?? (customDecimals ? Math.min(12, customDecimals.length) : ['number', 'currency', 'accounting', 'percent'].includes(format) ? 2 : 0);
+  const minPrecision = decimals ?? (customDecimals ? Math.min(12, customDecimals.replace(/#/g, '').length) : precision);
+  if (format === 'percent' || format.includes('%')) return `${(value * 100).toLocaleString('ko-KR', { minimumFractionDigits: minPrecision, maximumFractionDigits: precision })}%`;
+  const currency = format === 'currency' || format === 'accounting' || /[$₩€£¥]/.test(format);
+  const symbol = format.match(/[$₩€£¥]/)?.[0] || '₩';
+  const number = value.toLocaleString('ko-KR', { useGrouping: currency || format === 'number' || format.includes(','), minimumFractionDigits: minPrecision, maximumFractionDigits: precision });
+  return currency ? `${symbol}${number}` : number;
+}
+
+/** Rewrite references after one structural row/column insertion or deletion.
+ * Absolute locks affect copying, not structural edits. Sheet qualifiers and
+ * original formula whitespace are retained. Deleted ranges contract in place.
+ */
+export function transformFormulaReferences(formula, { axis, index, delta, targetSheet, ownerSheet }) {
+  if (typeof formula !== 'string' || !['r', 'c'].includes(axis) || !Number.isInteger(index) || index < 0 || ![-1, 1].includes(delta)) return formula;
+  const offset = formula.startsWith('=') ? 1 : 0;
+  let tokens;
+  try { tokens = tokenize(formula.slice(offset)); } catch { return formula; }
+  const patches = [];
+  const target = String(targetSheet).toLowerCase();
+  const readReference = (start, inheritedSheet) => {
+    let at = start, token = tokens[at], explicitSheet = null;
+    if (!token) return null;
+    if ((token.type === 'word' || token.type === 'sheet') && tokens[at + 1]?.value === '!') {
+      explicitSheet = token.value; at += 2; token = tokens[at];
+    }
+    if (token?.type !== 'word' || tokens[at + 1]?.value === '(' || tokens[at + 1]?.value === '!') return null;
+    const position = parseAddress(token.value);
+    if (!position) return null;
+    const locks = /^(\$?)[A-Za-z]+(\$?)/.exec(token.value);
+    return { position, token, start: tokens[start].start, end: token.end, next: at + 1, sheet: explicitSheet ?? inheritedSheet ?? ownerSheet, colLock: locks[1], rowLock: locks[2] };
+  };
+  const patchCoordinate = (ref, n) => {
+    const r = axis === 'r' ? n : ref.position.r, c = axis === 'c' ? n : ref.position.c;
+    const replacement = validPosition(r, c) ? `${ref.colLock}${colName(c)}${ref.rowLock}${r + 1}` : '#REF!';
+    if (replacement !== ref.token.value) patches.push({ start: ref.token.start, end: ref.token.end, replacement });
+  };
+  const patchSingle = ref => {
+    if (String(ref.sheet).toLowerCase() !== target) return;
+    const n = ref.position[axis];
+    if (n < index) return;
+    patchCoordinate(ref, delta === -1 && n === index ? -1 : n + delta);
+  };
+  for (let at = 0; at < tokens.length;) {
+    const first = readReference(at);
+    if (!first) { at++; continue; }
+    const last = tokens[first.next]?.value === ':' ? readReference(first.next + 1, first.sheet) : null;
+    if (last && String(first.sheet).toLowerCase() === target && String(last.sheet).toLowerCase() === target) {
+      const n1 = first.position[axis], n2 = last.position[axis];
+      if (delta === 1) { patchSingle(first); patchSingle(last); }
+      else {
+        const lo = Math.min(n1, n2), hi = Math.max(n1, n2);
+        if (lo === index && hi === index) patches.push({ start: first.start, end: last.end, replacement: '#REF!' });
+        else {
+          const nextLo = lo > index ? lo - 1 : lo, nextHi = hi >= index ? hi - 1 : hi;
+          patchCoordinate(first, n1 <= n2 ? nextLo : nextHi);
+          patchCoordinate(last, n1 <= n2 ? nextHi : nextLo);
+        }
+      }
+    } else {
+      patchSingle(first);
+      if (last) patchSingle(last);
+    }
+    at = last ? last.next : first.next;
+  }
+  let result = formula;
+  for (const patch of patches.sort((a, b) => b.start - a.start)) result = result.slice(0, patch.start + offset) + patch.replacement + result.slice(patch.end + offset);
+  return result;
+}
+
+export function shiftFormula(formula, dr, dc) {
+  if (typeof formula !== 'string' || !formula.startsWith('=') || (!dr && !dc)) return formula;
+  if (!Number.isInteger(dr) || !Number.isInteger(dc)) return formula;
+  let tokens;
+  try { tokens = tokenize(formula.slice(1)); } catch { return formula; }
+  const patches = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.type !== 'word' || tokens[index + 1]?.value === '!' || tokens[index + 1]?.value === '(') continue;
+    const match = /^(\$?)([A-Za-z]{1,3})(\$?)([1-9]\d*)$/.exec(token.value);
+    if (!match) continue;
+    const pos = parseAddress(token.value);
+    if (!pos) continue;
+    const r = pos.r + (match[3] ? 0 : dr), c = pos.c + (match[1] ? 0 : dc);
+    const replacement = validPosition(r, c) ? `${match[1]}${colName(c)}${match[3]}${r + 1}` : '#REF!';
+    patches.push({ start: token.start + 1, end: token.end + 1, replacement });
+  }
+  let result = formula;
+  for (const patch of patches.reverse()) result = result.slice(0, patch.start) + patch.replacement + result.slice(patch.end);
+  return result;
+}
+
+export function parseCSV(text) {
+  if (typeof text !== 'string') throw new TypeError('CSV 텍스트가 필요합니다.');
+  text = text.replace(/^\uFEFF/, '');
+  if (text.length === 0) return [];
+  const rows = [];
+  let row = [], field = '', quoted = false, afterQuote = false, atFieldStart = true;
+  const pushField = () => { row.push(field); field = ''; atFieldStart = true; afterQuote = false; };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { quoted = false; afterQuote = true; }
+      } else field += ch;
+    } else if (ch === '"' && atFieldStart) { quoted = true; atFieldStart = false; }
+    else if (ch === ',') pushField();
+    else if (ch === '\r' || ch === '\n') {
+      pushField(); rows.push(row); row = [];
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+    } else {
+      if (afterQuote && !/\s/.test(ch)) throw new Error('CSV 따옴표 뒤에 잘못된 문자가 있습니다.');
+      if (!afterQuote) field += ch;
+      atFieldStart = false;
+    }
+  }
+  if (quoted) throw new Error('CSV 따옴표가 닫히지 않았습니다.');
+  if (field !== '' || row.length > 0 || !/[\r\n]$/.test(text)) { pushField(); rows.push(row); }
+  return rows;
+}
+
+export function toCSV(rows) {
+  if (!Array.isArray(rows)) throw new TypeError('CSV 행 배열이 필요합니다.');
+  return rows.map(row => row.map(value => {
+    const text = value === null || value === undefined ? '' : String(value);
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  }).join(',')).join('\r\n');
+}
+
+function validateWorkbook(data) {
+  const object = value => value && typeof value === 'object' && !Array.isArray(value);
+  const validRange = value => {
+    if (typeof value !== 'string') return false;
+    const parts = value.split(':');
+    if (parts.length !== 2) return false;
+    const [first, last] = parts.map(parseAddress);
+    return first && last && first.r <= last.r && first.c <= last.c;
+  };
+  if (!object(data) || !Array.isArray(data.sheets) || data.sheets.length < 1 || data.sheets.length > 100) throw new Error('유효한 통합 문서가 아닙니다.');
+  if (typeof data.name !== 'string' || data.name.length > 255) throw new Error('통합 문서 이름이 올바르지 않습니다.');
+  const ids = new Set(), names = new Set();
+  let cellCount = 0;
+  for (const sheet of data.sheets) {
+    if (!object(sheet) || typeof sheet.id !== 'string' || !sheet.id || ids.has(sheet.id)) throw new Error('시트 ID가 올바르지 않습니다.');
+    if (typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 31 || /[:\\/?*\[\]]/.test(sheet.name) || names.has(sheet.name.toLowerCase())) throw new Error('시트 이름이 올바르지 않습니다.');
+    ids.add(sheet.id); names.add(sheet.name.toLowerCase());
+    if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
+    for (const [ref, cell] of Object.entries(sheet.cells)) {
+      if (++cellCount > 200000) throw new Error('통합 문서의 셀 수가 제한을 초과했습니다.');
+      if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
+      if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+      if (cell.style) {
+        for (const field of ['bold', 'italic', 'underline', 'wrap', 'border']) if (cell.style[field] !== undefined && typeof cell.style[field] !== 'boolean') throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+        for (const field of ['fontFamily', 'color', 'background', 'align', 'format', 'numberFormat']) if (cell.style[field] !== undefined && (typeof cell.style[field] !== 'string' || cell.style[field].length > 512)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+        if (cell.style.fontSize !== undefined && (typeof cell.style.fontSize !== 'number' || !Number.isFinite(cell.style.fontSize) || cell.style.fontSize <= 0 || cell.style.fontSize > 4096)) throw new Error(`글꼴 크기가 올바르지 않습니다: ${ref}`);
+        if (cell.style.decimals !== undefined && (!Number.isInteger(cell.style.decimals) || cell.style.decimals < 0 || cell.style.decimals > 12)) throw new Error(`소수점 자릿수가 올바르지 않습니다: ${ref}`);
+        for (const field of ['color', 'background']) if (cell.style[field] && !/^(?:#[\da-f]{3,8}|[a-z]+|(?:rgb|hsl)a?\([\d.%+,\s/-]+\))$/i.test(cell.style[field])) throw new Error(`셀 색상이 올바르지 않습니다: ${ref}`);
+        if (cell.style.fontFamily && /[;{}<>]/.test(cell.style.fontFamily)) throw new Error(`글꼴 이름이 올바르지 않습니다: ${ref}`);
+      }
+    }
+    for (const field of ['columnWidths', 'rowHeights']) {
+      if (sheet[field] === undefined) sheet[field] = {};
+      if (!object(sheet[field])) throw new Error('행 또는 열 크기가 올바르지 않습니다.');
+      for (const size of Object.values(sheet[field])) if (typeof size !== 'number' || !Number.isFinite(size) || size < 0 || size > 10000) throw new Error('행 또는 열 크기가 올바르지 않습니다.');
+    }
+    for (const field of ['merges', 'charts']) {
+      if (sheet[field] === undefined) sheet[field] = [];
+      if (!Array.isArray(sheet[field]) || sheet[field].length > 10000) throw new Error('시트 개체가 올바르지 않습니다.');
+    }
+    if (sheet.merges.some(range => !validRange(range))) throw new Error('병합 범위가 올바르지 않습니다.');
+    for (const chart of sheet.charts) {
+      if (!object(chart) || !validRange(chart.range)) throw new Error('차트 데이터 범위가 올바르지 않습니다.');
+      for (const field of ['id', 'title', 'type']) if (chart[field] !== undefined && typeof chart[field] !== 'string') throw new Error('차트 속성이 올바르지 않습니다.');
+      for (const field of ['x', 'y']) if (chart[field] !== undefined && (typeof chart[field] !== 'number' || !Number.isFinite(chart[field]) || chart[field] < 0)) throw new Error('차트 위치가 올바르지 않습니다.');
+    }
+  }
+  if (typeof data.activeSheetId !== 'string' || !ids.has(data.activeSheetId)) throw new Error('활성 시트가 없습니다.');
+  return data;
+}
+
+export function parseWorkbook(text) {
+  if (typeof text !== 'string' || text.length > 25000000) throw new Error('통합 문서 크기가 제한을 초과했습니다.');
+  const data = JSON.parse(text, (key, value) => {
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') throw new Error('안전하지 않은 통합 문서 키입니다.');
+    return value;
+  });
+  return validateWorkbook(data);
+}
+
+export function serializeWorkbook(workbook) {
+  const text = JSON.stringify(workbook);
+  parseWorkbook(text);
+  return text;
+}
