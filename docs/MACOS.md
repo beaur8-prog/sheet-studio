@@ -22,8 +22,8 @@ SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=x64
 
 결과:
 
-- Apple Silicon: `release/0.7.0/mac-arm64/Sheet-Studio-0.7.0-macOS-arm64.dmg` 및 `.zip`
-- Intel: `release/0.7.0/mac-x64/Sheet-Studio-0.7.0-macOS-x64.dmg` 및 `.zip`
+- Apple Silicon: `release/0.7.1/mac-arm64/Sheet-Studio-0.7.1-macOS-arm64.dmg` 및 `.zip`
+- Intel: `release/0.7.1/mac-x64/Sheet-Studio-0.7.1-macOS-x64.dmg` 및 `.zip`
 - 각 폴더의 `artifact-manifest.json`: 결과 파일의 크기 및 SHA-256
 
 배포 앱을 실행해서 확인하려면 빌드한 아키텍처와 같은 Mac에서 다음을 실행합니다.

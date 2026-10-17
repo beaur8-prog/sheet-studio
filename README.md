@@ -13,7 +13,7 @@ npm ci
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.0/win-x64/Sheet-Studio-0.7.0-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.1/win-x64/Sheet-Studio-0.7.1-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
 **Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon) 또는 `--arch=x64`(Intel)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS 실제 실행 검증은 아직 하지 않았습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 
