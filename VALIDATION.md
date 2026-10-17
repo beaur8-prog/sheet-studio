@@ -2,6 +2,17 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.4.1 — 자동 합계 범위 표시와 수식 편집
+
+- `npm test`: **54/54 통과**. 작성 중인 수식의 A1 참조 스캔, 문자열/함수 이름 제외, 시트 이름의 작은따옴표, F4의 네 가지 참조 형식, 괄호 보완, 위/왼쪽 자동 합계, 여러 열/행 합계, 빈 결과 셀 및 덮어쓰기 방지를 추가 검사했습니다.
+- `node tests/ui-formulas.mjs` 및 `--packaged`: 실제 Windows Electron에서 자동 합계 점선의 위치·크기, 확정 전 셀 불변, 마우스 범위 교체, Enter/Tab 확정, Esc 취소, 실행 취소/복원, 가로 합계, 여러 열 합계, 기존 결과 보호, 참조별 색상, F4, 방향키와 Shift 범위, 다른 시트 참조, 필터 상태 복원, 150% 배율·스크롤, 잘못된 주소 거부 및 재시작을 검증했습니다. IME 조합 중 Enter를 무시하는 이벤트 검사도 통과했으며, OS 입력기 전체의 실기 검사는 아닙니다.
+- `node scripts/electron-smoke.cjs --packaged`, `node tests/ui-charts.mjs --packaged`, `node tests/ui-excel-charts.mjs --packaged`, `node tests/ui-pivot.mjs --packaged`: 파일 IPC, 메뉴, 8방향 차트 크기 조절, 차트 10종, 피벗의 편집/저장/복원 회귀 검사 통과. 마지막 필터 복원 수정 후 수식 UI를 다시 검사했습니다.
+- `node scripts/vba-ui-smoke.cjs --packaged`: 테스트 앱 시작 중 Chromium 네트워크 서비스 오류와 180초 시작 시간 초과가 한 차례 발생했습니다. 다른 UI 검사를 종료한 뒤 단독 재실행하여 Excel 연결·결과 가져오기·VBA를 유지한 XLSM 저장이 통과했습니다. 렌더러 예외 0개입니다.
+- 브라우저 `ui-smoke.mjs`의 동일 검사항목을 진행 로그와 15초 제한을 추가한 로컬 사본으로 재실행해 통과했습니다. 첫 실행은 대기 상태가 계속되어 중단했습니다. 별도로 개발 서버가 패키징 산출물 변경에도 페이지를 다시 불러오는 현상을 관찰했습니다. 이후 개발 서버를 종료하고 최종 패키지의 수식/XLSM 검사를 수행했습니다. `node tests/ui-features.mjs`도 통과하여 상대 수식 붙여넣기, 병합, 입력 중 시트 변경, 정렬·필터, 찾기, JSON 저장/복원을 확인했습니다.
+- `test-results/formula-autosum.png`에서 실제 점선 테두리와 선택된 수식 인수를 시각적으로 확인했습니다. 추가 점검의 범위 및 남은 기능은 [기능 점검 기록](docs/FEATURE-REVIEW.md)에 정리했습니다. 전체 Excel 기능의 전수 검사나 macOS 실제 실행 검증은 아닙니다.
+
+0.4.1 휴대용 실행 파일: `release/0.4.1/win-x64/Sheet-Studio-0.4.1-Windows-x64.exe` (92,028,845 bytes). SHA-256: `11f90df270fe0a45b4644c20f8b0b855151a04bf7bd4e2867a974a2788883351`. Windows 실행 파일은 코드 서명하지 않았습니다.
+
 ## 0.4.0 — Excel 차트 호환성 확대
 
 - `npm test`: **50/50 통과**. 18개 차트 조합의 네이티브 XLSX/JSON 왕복, 여러 계열, 참조·캐시·시트 이름 변경, 제목·범례·레이블·축 제목, 반복 저장, 정의된 이름, 알 수 없는 차트/연결 이미지/ChartEx 보존 및 제한된 네이티브 변경 계획을 검증했습니다.

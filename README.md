@@ -13,7 +13,7 @@ npm ci
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.4.0/win-x64/Sheet-Studio-0.4.0-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.4.1/win-x64/Sheet-Studio-0.4.1-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
 **Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon) 또는 `--arch=x64`(Intel)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS 실제 실행 검증은 아직 하지 않았습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 
@@ -27,6 +27,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 - 한국어 리본, 이름 상자, 수식 입력줄, 시트 탭, 상태 표시줄, 어두운/밝은 도구 모음
 - 셀 편집, 키보드 이동, 범위 선택, 복사·잘라내기·붙여넣기, 아래로 채우기, 실행 취소·다시 실행
+- 자동 합계 범위 점선·확정/취소, 수식 참조 색상, 마우스·방향키 참조 선택, 다른 시트 참조 지정, F4 상대/절대 참조 전환 ([사용법과 점검 결과](docs/FEATURE-REVIEW.md))
 - 가상화 격자: A1부터 XFD1048576까지 이동, 열 너비·행 높이 조절
 - 여러 시트, 이름 변경, 복제, 삭제, 다른 시트의 셀 참조
 - 행·열 삽입과 삭제, 연결된 수식과 범위 참조 조정

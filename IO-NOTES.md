@@ -75,7 +75,7 @@ npm run package
 
 The resolved Windows runtime is **Electron 42.11.15**, verified against the cached official release archive. Archive SHA-256: `f85fb7fb361508161bf0c3431e96518e34a9c10997048df21400a7da96658737`. The installed executable matches the archive's `electron.exe` at SHA-256 `8997a726173fb70b53bfb63b4f19865db759f9b247a66cd3b79b0b45c4eb626e`. Packaging writes `release/<version>/<platform>-<arch>/runtime-provenance.json` and changes only native product metadata/icon resources, checking that executable code-section hashes remain identical.
 
-Windows artifacts appear under `release/0.4.0/win-x64/`: the portable `Sheet-Studio-0.4.0-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
+Windows artifacts appear under `release/0.4.1/win-x64/`: the portable `Sheet-Studio-0.4.1-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
 
 ## Dependency provenance and verification
 
