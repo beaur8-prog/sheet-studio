@@ -1,3 +1,4 @@
+import {validateFreeze,validateConditionalRules} from './worksheet-schema.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
 import {validateChart} from './chart-schema.mjs';
 import {validatePivot} from './pivot-schema.mjs';
@@ -902,6 +903,10 @@ function validateWorkbook(data) {
     if (typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 31 || /[:\\/?*\[\]]/.test(sheet.name) || names.has(sheet.name.toLowerCase())) throw new Error('시트 이름이 올바르지 않습니다.');
     ids.add(sheet.id); names.add(sheet.name.toLowerCase());
     for(const key of ['defaultColumnWidth','defaultRowHeight'])if(sheet[key]!==undefined&&(!Number.isFinite(sheet[key])||sheet[key]<1||sheet[key]>10000))throw new Error('시트 기본 크기가 올바르지 않습니다.');
+    if(sheet.hiddenSizes!==undefined){if(!object(sheet.hiddenSizes))throw Error('숨김 크기가 올바르지 않습니다.');for(const k of ['rows','cols']){if(!object(sheet.hiddenSizes[k]))throw Error('숨김 크기가 올바르지 않습니다.');for(const [i,v] of Object.entries(sheet.hiddenSizes[k]))if(!/^\d+$/.test(i)||+i>=(k==='rows'?1048576:16384)||!Number.isFinite(v)||v<0||v>10000)throw Error('숨김 크기가 올바르지 않습니다.');}}
+    if(sheet.freeze!==undefined)validateFreeze(sheet.freeze);
+    if(sheet.conditionalRules!==undefined)validateConditionalRules(sheet.conditionalRules);
+    if(sheet.unsupportedConditionalCount!==undefined&&(!Number.isInteger(sheet.unsupportedConditionalCount)||sheet.unsupportedConditionalCount<0||sheet.unsupportedConditionalCount>10000))throw Error('조건부 서식 개수가 올바르지 않습니다.');
     if (sheet.autoFilter !== undefined) validateAutoFilter(sheet.autoFilter);
     if (sheet.pivot !== undefined) { validatePivot(sheet.pivot); if (sheet.pivot.sourceSheetId === sheet.id) throw new Error('피벗 원본은 다른 시트여야 합니다.'); }
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');

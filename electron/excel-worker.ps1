@@ -111,6 +111,24 @@ function Set-AutoFilter($sheet,$filter) {
     foreach($row in $filter.hiddenRows){$r=$sheet.Rows.Item([int]$row+1);try{$r.Hidden=$true}finally{Release-Com $r}}
   }finally{Release-Com $range}
 }
+function Set-ConditionalFormats($sheet,$rules) {
+  [void]$sheet.Cells.FormatConditions.Delete()
+  $priority=1
+  foreach($entry in $rules){
+    $range=$sheet.Range([string]$entry.range);$rule=$null
+    try {
+      $op=[Type]::Missing;if($entry.type -eq 1){$op=[int]$entry.operator}
+      $f2=[Type]::Missing;if($entry.formula2){$f2=[string]$entry.formula2}
+      $f1=[string]$entry.formula1;if($entry.type -eq 2 -and !$f1.StartsWith('=')){$f1='='+$f1}
+      $rule=$range.FormatConditions.Add([int]$entry.type,$op,$f1,$f2)
+      $rule.Priority=$priority;$priority++;$rule.StopIfTrue=[bool]$entry.stopIfTrue
+      if($entry.style.background){$rule.Interior.Color=Color-Number $entry.style.background}
+      if($entry.style.color){$rule.Font.Color=Color-Number $entry.style.color}
+      if(Has-Field $entry.style 'bold'){$rule.Font.Bold=[bool]$entry.style.bold}
+      if(Has-Field $entry.style 'italic'){$rule.Font.Italic=[bool]$entry.style.italic}
+    }finally{Release-Com $rule;Release-Com $range}
+  }
+}
 function Apply-Plan($book,$plan) {
   $map=@{}
   foreach($entry in $plan.sheets) {
@@ -126,12 +144,16 @@ function Apply-Plan($book,$plan) {
       $sheet=$map[[string]$entry.id]
       foreach($range in $entry.unmerge){$r=$sheet.Range([string]$range);try{[void]$r.UnMerge()}finally{Release-Com $r}}
       foreach($patch in $entry.cells){Set-Cell $sheet $patch}
-      foreach($p in $entry.columnWidths.PSObject.Properties){$r=$sheet.Columns.Item([int]$p.Name+1);try{if($null -eq $p.Value){$r.ColumnWidth=$sheet.StandardWidth}else{$r.ColumnWidth=[Math]::Max(1,([double]$p.Value-5)/7)}}finally{Release-Com $r}}
-      foreach($p in $entry.rowHeights.PSObject.Properties){$r=$sheet.Rows.Item([int]$p.Name+1);try{if($null -eq $p.Value){$r.RowHeight=$sheet.StandardHeight}else{$r.RowHeight=[Math]::Max(1,[double]$p.Value*3/4)}}finally{Release-Com $r}}
+      foreach($p in $entry.columnWidths.PSObject.Properties){$r=$sheet.Columns.Item([int]$p.Name+1);try{$r.Hidden=($null -ne $p.Value -and $p.Value -eq 0);if($null -eq $p.Value){$r.ColumnWidth=$sheet.StandardWidth}elseif($p.Value -gt 0){$r.ColumnWidth=[Math]::Max(1,([double]$p.Value-5)/7)}}finally{Release-Com $r}}
+      foreach($p in $entry.rowHeights.PSObject.Properties){$r=$sheet.Rows.Item([int]$p.Name+1);try{$r.Hidden=($null -ne $p.Value -and $p.Value -eq 0);if($null -eq $p.Value){$r.RowHeight=$sheet.StandardHeight}elseif($p.Value -gt 0){$r.RowHeight=[Math]::Max(1,[double]$p.Value*3/4)}}finally{Release-Com $r}}
       foreach($range in $entry.merge){$r=$sheet.Range([string]$range);try{[void]$r.Merge()}finally{Release-Com $r}}
       foreach($name in $entry.deletedCharts){$object=$sheet.ChartObjects().Item([string]$name);try{[void]$object.Delete()}finally{Release-Com $object}}
       foreach($patch in $entry.charts){Set-Chart $sheet $patch}
       if($entry.PSObject.Properties.Name -contains 'autoFilter'){Set-AutoFilter $sheet $entry.autoFilter}
+      foreach($index in $entry.manualHiddenRows){$sheet.Rows.Item([int]$index+1).Hidden=$true}
+      foreach($p in $entry.rowHeights.PSObject.Properties){if($null -ne $p.Value -and $p.Value -eq 0){$sheet.Rows.Item([int]$p.Name+1).Hidden=$true}}
+      if(Has-Field $entry 'conditionalFormats'){Set-ConditionalFormats $sheet $entry.conditionalFormats}
+      if((Has-Field $entry 'freeze') -and $sheet.Visible -eq -1){[void]$sheet.Activate();$window=$book.Windows.Item(1);try{$window.FreezePanes=$false;$window.SplitRow=[int]$entry.freeze.rows;$window.SplitColumn=[int]$entry.freeze.cols;$window.FreezePanes=($entry.freeze.rows -gt 0 -or $entry.freeze.cols -gt 0)}finally{Release-Com $window}}
     }
     if($map.ContainsKey([string]$plan.activeSheetId) -and $map[[string]$plan.activeSheetId].Visible -eq -1){[void]$map[[string]$plan.activeSheetId].Activate()}
   }finally{foreach($s in $map.Values){Release-Com $s}}

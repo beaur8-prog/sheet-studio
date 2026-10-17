@@ -2,6 +2,22 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.7.0 — 워크시트 편집·보기 보완
+
+- `npm test`: **96/96 통과**. 틀 고정의 좌표·숨김·선택 분할, 값/수식/서식·전치·반복·연산 붙여넣기, 조건부 규칙의 재계산·우선순위·중지·중복/상위/평균/와일드카드, JSON/XLSX 왕복과 네이티브 계획 검증을 포함합니다.
+- `node scripts/worksheet-native-smoke.mjs`: 설치된 **Windows Excel 16.0 build 19127**과 XLSX 고정/숨김, 조건부 채우기·글자색 및 값 변경 후 재계산, 전치 붙여넣기, 상대 수식 범위 입력을 대조해 통과했습니다. 별도 합성 XLSM에 고정·숨김·규칙 적용 및 제거 후 다시 열기도 통과했습니다. 사용자 매크로는 실행하지 않았고 원본 파일이 바뀌지 않음을 확인했습니다.
+- 실제 Excel 대조 중 dxf 채우기 색의 bgColor, ExcelJS에서 누락되는 stopIfTrue/빈 숨김 행, 네이티브 표현식 규칙의 `=` 접두사를 보완했습니다. 초기 oracle의 CutCopyMode enum 대입 오류는 불필요한 대입을 제거해 수정했습니다.
+- `node scripts/filters-xlsm-smoke.mjs`: 기존 XLSM 필터 적용/해제, 날짜 필터, 원본 파일 불변 및 VBA 파트 유지 회귀 검사 통과.
+- `npm run package:win`: 통과. 최종 **0.7.0 ASAR**의 dist와 Electron 브리지/작업 스크립트 **10개 파일**이 현재 파일과 바이트 단위로 일치하고 패키지 버전이 0.7.0임을 확인했습니다.
+- 아래 검사는 최종 **0.7.0 패키지**에서 모두 통과했습니다.
+  - `tests/ui-worksheet.mjs`: 고정/스크롤/셀 클릭/해제, Ctrl+Enter 상대 참조와 실행 취소/다시 실행, 값 전치 붙여넣기, 점선/Esc, 행·열 숨기기/취소와 키보드 이동, 조건부 규칙 생성·값 수정·재시작. 클립보드는 OS 권한과 구별하기 위해 메모리 텍스트 대역을 사용합니다. 실제 격자 및 새 규칙 창 스크린샷을 검토했습니다.
+  - `tests/ui-formulas.mjs`, `tests/ui-functions.mjs`, `tests/ui-filters.mjs`: 자동 합계/참조 편집, 함수 검색/완성, 필터 회귀 검사.
+  - `tests/ui-charts.mjs`, `tests/ui-excel-charts.mjs`, `tests/ui-pivot.mjs`: 차트 조절/이동/확대/스크롤, 차트 10종과 XLSX 왕복, 피벗 편집/저장 검사. 첫 차트 검사에서 스크롤 직후 DOM 교체와 좌표 측정이 겹쳤습니다. 검사 코드가 애니메이션 프레임 완료를 기다리게 고친 뒤 통과했습니다.
+  - `scripts/electron-smoke.cjs`, `scripts/vba-ui-smoke.cjs`: 파일 IPC와 격리, XLSM 열기/Excel 연결/결과 가져오기/VBA 보존 저장. 렌더러 예외 0개.
+- 정적 Vite preview의 `tests/ui-features.mjs`도 통과했습니다. Mac CI에 새 워크시트 UI 검사를 추가했으며 **실제 Mac 빌드/실행은 미검증**입니다. 전체 Excel 기능 전수 검사나 완전 호환성 확인은 아닙니다.
+
+0.7.0 휴대용 실행 파일: `release/0.7.0/win-x64/Sheet-Studio-0.7.0-Windows-x64.exe` (92,103,505 bytes). SHA-256: `a9b709f858707c2e92a369c8aa64f3235bec1077bdd41e02d44bb04c7425c087`. Windows 실행 파일은 코드 서명하지 않았습니다.
+
 ## 0.6.0 — Excel 방식 자동 필터
 
 - `npm test`: **89/89 통과**. 범위 추정(중간 위치/머리글 한 행/빈 구간), 값·빈 셀·와일드카드·숫자/날짜 두 조건, 여러 열 AND, 상·하위/평균, SUBTOTAL, 정렬의 레코드/수식/서식 이동, JSON·XLSX 왕복 및 네이티브 필터 계획 검증을 포함합니다.

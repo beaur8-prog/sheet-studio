@@ -1,3 +1,5 @@
+import {restoreWorksheetParts,addWorksheetParts} from './worksheet-xlsx.mjs';
+import {importConditional,exportConditional,shiftWorksheetFeatures} from './conditional.mjs';
 import {addFilterParts,restoreFilterParts} from './filter-xlsx.mjs';
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
 import { createEvaluator,transformFormulaReferences,formulaForXlsx } from './engine.mjs';
@@ -170,12 +172,16 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
     // Rows with only a custom height can be omitted by eachRow(includeEmpty:false).
     for (const row of source.model.rows || []) {if (row.height) sheet.rowHeights[row.number - 1] = row.height * 4 / 3;if(row.hidden)sheet.rowHeights[row.number-1]=0;}
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
+    for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
+    const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
+    importConditional(source,sheet);
     sheet.merges = [...(source.model.merges || [])];
     return sheet;
   });
   if (!sheets.length) sheets.push(newSheet());
   const activeIndex = book.views?.[0]?.activeTab || 0;
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
+  await restoreWorksheetParts(data,result);
   await restoreFilterParts(data,result);
   await restoreChartParts(data,result);
   await restorePivotParts(data,result,{refresh:!/\.xlsm$/i.test(filename)});
@@ -288,8 +294,10 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
     if(sheet.defaultColumnWidth)target.properties.defaultColWidth=(sheet.defaultColumnWidth-5)/7;
     if(sheet.defaultRowHeight)target.properties.defaultRowHeight=sheet.defaultRowHeight*3/4;
+    if(sheet.freeze?.rows||sheet.freeze?.cols)target.views=[{state:'frozen',xSplit:sheet.freeze.cols,ySplit:sheet.freeze.rows,topLeftCell:address(sheet.freeze.cols,sheet.freeze.rows),activeCell:'A1'}];
     exportNames.set(sheet.id,target.name);
     const pageFilters=sheet.pivot?.filters.filter(f=>!sheet.pivot.rows.includes(f.field)&&!sheet.pivot.columns.includes(f.field))||[];
+    const conditionalSheet=pageFilters.length?structuredClone(sheet):sheet;if(pageFilters.length)for(let i=0;i<pageFilters.length+1;i++)shiftWorksheetFeatures(conditionalSheet,'r',0,1);exportConditional(target,conditionalSheet);
     pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
     for (const [addr, cell] of Object.entries(sheet.cells || {})) {
       if (!coordinates(addr)) continue;
@@ -306,11 +314,12 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if (typeof cell.note === 'string') targetCell.note = cell.note;
     }
     for (const [index, width] of Object.entries(sheet.columnWidths || {})) {
-      if (/^\d+$/.test(index) && Number(index) < 16384 && Number.isFinite(Number(width))) target.getColumn(Number(index) + 1).width = Math.max(1, (Number(width) - 5) / 7);
+      if (/^\d+$/.test(index) && Number(index) < 16384 && Number.isFinite(Number(width))) target.getColumn(Number(index) + 1).width = Math.max(1, ((width===0?sheet.hiddenSizes?.cols?.[index]||90:Number(width)) - 5) / 7);
     }
     for (const [index, height] of Object.entries(sheet.rowHeights || {})) {
-      if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, Number(height) * 3 / 4);
+      if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, (height===0?sheet.hiddenSizes?.rows?.[index]||25:Number(height)) * 3 / 4);
     }
+    for(const [c,width] of Object.entries(sheet.columnWidths||{}))if(width===0)target.getColumn(+c+1).hidden=true;
     for(const r of sheet.autoFilter?.hiddenRows||[])target.getRow(r+1).hidden=true;
     for(const [r,height] of Object.entries(sheet.rowHeights||{}))if(height===0)target.getRow(+r+1).hidden=true;
     for (const merge of sheet.merges || []) {
@@ -319,6 +328,6 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     }
   }
   const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
-  const data = await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames);
+  const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
   return { data, mime: XLSX_MIME, extension: 'xlsx' };
 }

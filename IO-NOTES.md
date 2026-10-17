@@ -40,7 +40,7 @@ Formula export calls `evaluateCell(workbook, sheet.id, address)` from `src/engin
 
 CSV parsing supports UTF-8 BOM, UTF-16 BOM, RFC-style quoted fields, escaped quotes, CR/LF and embedded line breaks. CSV export uses UTF-8 BOM for Korean text. Leading-zero CSV identifiers are read as text. Plain-text values beginning with a formula marker are escaped on CSV export.
 
-Limits: 100 MB input, 200,000 imported nonempty XLSX cells or CSV fields, and a 2 million-position CSV export rectangle. Embedded worksheet charts are imported and exported as native DrawingML. Supported chart types render in the app; advanced types retain their original chart parts with limited previews. Chart themes and direct chart dependencies are retained, but this is not full package preservation. Third-party pivot tables, standalone images, conditional formatting, validation, protection and other unsupported workbook objects may be lost. Cell theme colors may be approximated. See [chart support](docs/CHARTS.md). Password-encrypted files and legacy `.xls` are unsupported.
+Limits: 100 MB input, 200,000 imported nonempty XLSX cells or CSV fields, and a 2 million-position CSV export rectangle. Embedded worksheet charts are imported and exported as native DrawingML. Supported chart types render in the app; advanced types retain their original chart parts with limited previews. Chart themes and direct chart dependencies are retained, but this is not full package preservation. Third-party pivot tables, standalone images, advanced conditional formatting, validation, protection and other unsupported workbook objects may be lost. Cell theme colors may be approximated. See [chart support](docs/CHARTS.md). Password-encrypted files and legacy `.xls` are unsupported.
 
 XLSM has a separate preservation path: the original package is retained and edited through installed Excel. `writeSpreadsheet` refuses native-source workbooks unless `allowMacroLoss: true` is explicitly supplied. See [VBA support](docs/VBA.md).
 
@@ -75,7 +75,7 @@ npm run package
 
 The resolved Windows runtime is **Electron 42.11.15**, verified against the cached official release archive. Archive SHA-256: `f85fb7fb361508161bf0c3431e96518e34a9c10997048df21400a7da96658737`. The installed executable matches the archive's `electron.exe` at SHA-256 `8997a726173fb70b53bfb63b4f19865db759f9b247a66cd3b79b0b45c4eb626e`. Packaging writes `release/<version>/<platform>-<arch>/runtime-provenance.json` and changes only native product metadata/icon resources, checking that executable code-section hashes remain identical.
 
-Windows artifacts appear under `release/0.6.0/win-x64/`: the portable `Sheet-Studio-0.6.0-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
+Windows artifacts appear under `release/0.7.0/win-x64/`: the portable `Sheet-Studio-0.7.0-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
 
 ## Dependency provenance and verification
 
@@ -91,6 +91,10 @@ XLSX support uses [ExcelJS](https://github.com/exceljs/exceljs), pinned at versi
 
 Sheet Studio pivots include editable definitions in JSON and Custom XML. Nonempty XLSX reports also include native PivotTable/cache parts. Excel can refresh these; empty reports preserve cells and app settings only. Report-filter rows are reserved on export and cross-sheet formulas are adjusted on export/import. XLSM preservation writes app settings and result cells, without creating new native pivot objects. Native pivots created elsewhere are not imported into the app field editor. See [pivot support](docs/PIVOT.md).
 
-## AutoFilter (0.6.0)
+## AutoFilter (0.7.0)
 
 Native worksheet AutoFilter ranges, value/custom/top/average conditions, date groups, sort indicators and hidden row snapshots round-trip through XLSX. SUBTOTAL caches exclude filtered rows. JSON persists filters per sheet. Windows XLSM edits include filter plans through the existing Excel bridge. See [filter behavior and limitations](docs/FILTERS.md), including unsupported color/icon/dynamic date filters and Excel table filters.
+
+## Worksheet features (0.7.0)
+
+`sheet.freeze = {rows, cols}` stores frozen pane counts. Zero dimensions hide rows/columns; `hiddenSizes = {rows, cols}` retains pre-hide sizes. XLSX uses real frozen views, hidden dimensions and differential conditional formats. `conditionalRules` is an ordered list of bounded A1 ranges, conditions, formula operands and style overrides; `stopIfTrue` is read/written directly in OOXML because ExcelJS omits it. Empty hidden rows are also restored from OOXML. JSON retains the full model. The native XLSM plan changes these properties only when edited, preserving untouched original objects. See [worksheet support](docs/WORKSHEET.md) for behavior and limitations.

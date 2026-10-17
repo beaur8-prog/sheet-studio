@@ -31,6 +31,7 @@ jobs:
       - run: node tests/ui-excel-charts.mjs --packaged
       - run: node tests/ui-formulas.mjs --packaged
       - run: node tests/ui-functions.mjs --packaged
+      - run: node tests/ui-worksheet.mjs --packaged
       - run: node tests/ui-filters.mjs --packaged
       - run: node tests/ui-pivot.mjs --packaged
       - uses: actions/upload-artifact@v4

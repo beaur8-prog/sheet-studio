@@ -22,3 +22,9 @@ Sheet Studio는 기존 Excel의 화면 구조와 핵심 작업 흐름을 참고�
 ## 검증 해석
 
 앱의 계산 엔진·파일 왕복·UI 테스트는 구현한 동작의 검증입니다. 원본 Excel과 모든 함수·부동소수점 경계 조건·저장 형식을 전수 비교한 결과는 아닙니다. 구현 범위와 미지원 기능은 README와 IO-NOTES.md에 설명합니다.
+
+## 0.7.0 추가 비교
+
+REA MCP `inspect_pe_resources`로 동일 Excel 실행 파일(위 SHA-256)의 2,473개 엔트리와 1,228개 리소스를 재확인했습니다. 증거 ID: `ev_45c7f5230e6fc8d5902bbe169ddb6e7da029f5361da6a0274b5243887cc843fa`. 기존 네이티브 TYPELIB 분석 자료도 참조했습니다. 이번 리소스 검사는 정적 식별이며 기능 알고리즘 분석은 아닙니다.
+
+Windows 접근성 트리에서 `ConditionalFormattingMenu`, `FormatCellsMenu`, `PasteMenu_Dropdown`, `ViewFreezePanesGallery`와 틀 고정·첫 행 고정·첫 열 고정 메뉴를 확인했습니다. 사용자 문서의 값을 수정하지 않고 메뉴만 관찰한 뒤 홈 탭으로 복귀했습니다. 기능 동작은 별도 합성 데이터와 새 Excel COM 인스턴스에서 비교했습니다. 실제 파일 비교를 통해 조건부 채우기 색, 중지 우선순위, 빈 숨김 행, 네이티브 수식 규칙 기록을 보완했습니다. 상세 항목은 [워크시트 안내](WORKSHEET.md)를 참조하세요.

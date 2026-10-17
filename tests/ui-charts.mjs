@@ -21,7 +21,10 @@ const undo=async()=>{await page.locator('#grid').focus();await page.keyboard.pre
 const redo=async()=>{await page.locator('#grid').focus();await page.keyboard.press(key+'+Shift+z');};
 const zoom=async value=>{await page.locator('#zoom').evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},value);};
 async function drag(edge,dx,dy,{cancel=false}={}){
+  // Scrolling/zoom rebuilds chart DOM on animation frames. Measure after that render.
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   const handle=page.locator('[data-chart-resize="'+edge+'"]').first(),rect=await handle.boundingBox();
+  assert.ok(rect,'Chart resize handle is visible after rendering');
   await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.down();
   await page.mouse.move(rect.x+rect.width/2+dx,rect.y+rect.height/2+dy,{steps:8});
   if(cancel)await page.keyboard.press('Escape');

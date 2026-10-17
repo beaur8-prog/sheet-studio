@@ -28,6 +28,15 @@ function validatePayload(payload){
   for(const s of p.sheets){
     if(typeof s.id!=='string'||s.id.length>150||ids.has(s.id)||!nameOK(s.name)||names.has(s.name.toLowerCase())||(s.sourceName!==null&&!nameOK(s.sourceName))||!Array.isArray(s.cells))throw Error('시트 변경 계획이 올바르지 않습니다.');ids.add(s.id);names.add(s.name.toLowerCase());
     for(const c of s.cells){if(++cells>200000||!addrOK(c.address)||(c.raw!==undefined&&(typeof c.raw!=='string'||c.raw.length>32768))||(c.note!==undefined&&(typeof c.note!=='string'||c.note.length>32768)))throw Error('셀 변경 계획이 올바르지 않습니다.');if(c.style!==undefined){if(!c.style||typeof c.style!=='object'||Array.isArray(c.style))throw Error('서식이 올바르지 않습니다.');for(const [key,value] of Object.entries(c.style)){if(!['bold','italic','underline','wrap','border','fontFamily','fontSize','color','background','align','verticalAlign','format','numberFormat','decimals'].includes(key)||!['string','number','boolean'].includes(typeof value)&&value!==null||typeof value==='string'&&value.length>512||typeof value==='number'&&!Number.isFinite(value))throw Error('서식 속성이 올바르지 않습니다.');}}}
+    if(s.manualHiddenRows!==undefined&&(!Array.isArray(s.manualHiddenRows)||s.manualHiddenRows.length>200000||s.manualHiddenRows.some(r=>!Number.isInteger(r)||r<0||r>=1048576)))throw Error('숨긴 행 목록이 올바르지 않습니다.');
+    if(s.freeze!==undefined&&(!s.freeze||!Number.isInteger(s.freeze.rows)||!Number.isInteger(s.freeze.cols)||s.freeze.rows<0||s.freeze.rows>=1048576||s.freeze.cols<0||s.freeze.cols>=16384))throw Error('틀 고정 계획이 올바르지 않습니다.');
+    if(s.conditionalFormats!==undefined){
+      if(!Array.isArray(s.conditionalFormats)||s.conditionalFormats.length>200)throw Error('조건부 서식 계획이 올바르지 않습니다.');
+      for(const r of s.conditionalFormats){
+        if(!r||!rangeOK(r.range)||![1,2].includes(r.type)||r.type===1&&![1,2,3,4,5,6,7,8].includes(r.operator)||typeof r.formula1!=='string'||r.formula1.length>8192||r.formula2!==null&&(typeof r.formula2!=='string'||r.formula2.length>8192)||typeof r.stopIfTrue!=='boolean'||!r.style||typeof r.style!=='object'||Array.isArray(r.style))throw Error('조건부 서식 조건이 올바르지 않습니다.');
+        for(const [key,value] of Object.entries(r.style))if(!(['background','color'].includes(key)&&typeof value==='string'&&/^#[\da-f]{6}$/i.test(value)||['bold','italic'].includes(key)&&typeof value==='boolean'))throw Error('조건부 서식 색상이 올바르지 않습니다.');
+      }
+    }
     if(s.autoFilter!==undefined&&s.autoFilter!==null){
       const f=s.autoFilter;if(!f||!rangeOK(f.range)||!Array.isArray(f.filters)||f.filters.length>16384||!Array.isArray(f.hiddenRows)||f.hiddenRows.length>200000)throw Error('자동 필터 계획이 올바르지 않습니다.');
       const [start,end]=f.range.split(':'),r1=Number(start.match(/\d+/)[0])-1,r2=Number(end.match(/\d+/)[0])-1;
