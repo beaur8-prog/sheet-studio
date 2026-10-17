@@ -87,3 +87,13 @@ test('native chart plan preserves untouched charts and validates size, type, del
   for(const patch of [{name:'Chart 1',Formula:'=UNSAFE()'},{name:'Chart 1',width:-1},{name:null,range:'A1:B2',chartType:999}]){const bad=structuredClone(p);bad.sheets[0].charts=[patch];assert.throws(()=>validatePayload({mode:'save',source:book.nativeSource,plan:bad}));}
   s.charts=[];assert.deepEqual(buildNativePlan(book).sheets[0].deletedCharts,['Chart 1']);
 });
+
+test('native filter plan validates criteria, preserves untouched filters and sends explicit removal',async()=>{
+  const {book}=await fixture(),s=book.sheets[0];
+  s.autoFilter={range:{r1:0,r2:3,c1:0,c2:2},columns:{0:{type:'custom',kind:'number',join:'and',conditions:[{operator:'greaterThan',value:'10'}]}},hiddenRows:[1]};
+  let plan=buildNativePlan(book);assert.equal(plan.sheets[0].autoFilter.filters[0].criteria1,'>10');assert.equal(nativeSourceChanged(book),true);
+  validatePayload({mode:'save',source:book.nativeSource,plan});
+  const invalid=structuredClone(plan);invalid.sheets[0].autoFilter.hiddenRows=[99];assert.throws(()=>validatePayload({mode:'save',source:book.nativeSource,plan:invalid}),/필터/);
+  book.nativeSource.baseline=structuredClone(book.sheets);assert.equal(buildNativePlan(book).sheets[0].autoFilter,undefined);
+  delete s.autoFilter;plan=buildNativePlan(book);assert.equal(plan.sheets[0].autoFilter,null);validatePayload({mode:'save',source:book.nativeSource,plan});
+});

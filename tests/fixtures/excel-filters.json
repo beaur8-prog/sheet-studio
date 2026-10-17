@@ -1,0 +1,198 @@
+﻿{
+    "excelBuild":  19127,
+    "cases":  [
+                  {
+                      "subtotal":  380,
+                      "filterMode":  false,
+                      "name":  "arrows only",
+                      "visible":  [
+                                      3,
+                                      4,
+                                      5,
+                                      6,
+                                      7,
+                                      8,
+                                      9,
+                                      10,
+                                      11
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  100,
+                      "filterMode":  true,
+                      "name":  "one value",
+                      "visible":  [
+                                      3,
+                                      5,
+                                      8,
+                                      9
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  250,
+                      "filterMode":  true,
+                      "name":  "multiple values",
+                      "visible":  [
+                                      3,
+                                      4,
+                                      5,
+                                      7,
+                                      8,
+                                      9,
+                                      10
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  90,
+                      "filterMode":  true,
+                      "name":  "blank",
+                      "visible":  [
+                                      11
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  290,
+                      "filterMode":  true,
+                      "name":  "not blank",
+                      "visible":  [
+                                      3,
+                                      4,
+                                      5,
+                                      6,
+                                      7,
+                                      8,
+                                      9,
+                                      10
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  320,
+                      "filterMode":  true,
+                      "name":  "number greater",
+                      "visible":  [
+                                      6,
+                                      7,
+                                      8,
+                                      10,
+                                      11
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  200,
+                      "filterMode":  true,
+                      "name":  "between inclusive",
+                      "visible":  [
+                                      4,
+                                      5,
+                                      6,
+                                      7,
+                                      8
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  180,
+                      "filterMode":  true,
+                      "name":  "or conditions",
+                      "visible":  [
+                                      3,
+                                      10,
+                                      11
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  90,
+                      "filterMode":  true,
+                      "name":  "combined columns",
+                      "visible":  [
+                                      5,
+                                      8
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  50,
+                      "filterMode":  true,
+                      "name":  "contains",
+                      "visible":  [
+                                      3,
+                                      6
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  330,
+                      "filterMode":  true,
+                      "name":  "not contains",
+                      "visible":  [
+                                      4,
+                                      5,
+                                      7,
+                                      8,
+                                      9,
+                                      10,
+                                      11
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  60,
+                      "filterMode":  true,
+                      "name":  "wildcard escaped",
+                      "visible":  [
+                                      8
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  230,
+                      "filterMode":  true,
+                      "name":  "top items",
+                      "visible":  [
+                                      8,
+                                      10,
+                                      11
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  30,
+                      "filterMode":  true,
+                      "name":  "bottom percent",
+                      "visible":  [
+                                      3,
+                                      4
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  280,
+                      "filterMode":  true,
+                      "name":  "above average",
+                      "visible":  [
+                                      7,
+                                      8,
+                                      10,
+                                      11
+                                  ],
+                      "arrows":  true
+                  },
+                  {
+                      "subtotal":  0,
+                      "filterMode":  true,
+                      "name":  "no matches",
+                      "visible":  [
+
+                                  ],
+                      "arrows":  true
+                  }
+              ],
+    "excelVersion":  "16.0"
+}

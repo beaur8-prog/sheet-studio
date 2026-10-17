@@ -1,3 +1,4 @@
+import {addFilterParts,restoreFilterParts} from './filter-xlsx.mjs';
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
 import { createEvaluator,transformFormulaReferences,formulaForXlsx } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
@@ -167,7 +168,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       });
     });
     // Rows with only a custom height can be omitted by eachRow(includeEmpty:false).
-    for (const row of source.model.rows || []) if (row.height) sheet.rowHeights[row.number - 1] = row.height * 4 / 3;
+    for (const row of source.model.rows || []) {if (row.height) sheet.rowHeights[row.number - 1] = row.height * 4 / 3;if(row.hidden)sheet.rowHeights[row.number-1]=0;}
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
     sheet.merges = [...(source.model.merges || [])];
     return sheet;
@@ -175,6 +176,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if (!sheets.length) sheets.push(newSheet());
   const activeIndex = book.views?.[0]?.activeTab || 0;
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
+  await restoreFilterParts(data,result);
   await restoreChartParts(data,result);
   await restorePivotParts(data,result,{refresh:!/\.xlsm$/i.test(filename)});
   return /\.xlsm$/i.test(filename) ? attachNativeSource(result, data, filename) : result;
@@ -309,12 +311,14 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     for (const [index, height] of Object.entries(sheet.rowHeights || {})) {
       if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, Number(height) * 3 / 4);
     }
+    for(const r of sheet.autoFilter?.hiddenRows||[])target.getRow(r+1).hidden=true;
+    for(const [r,height] of Object.entries(sheet.rowHeights||{}))if(height===0)target.getRow(+r+1).hidden=true;
     for (const merge of sheet.merges || []) {
       if (typeof merge !== 'string' || !/^[A-Z]+\d+:[A-Z]+\d+$/i.test(merge)) continue;
       target.mergeCells(merge);
     }
   }
   const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
-  const data = await addChartParts(pivotBytes,workbook,exportNames);
+  const data = await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames);
   return { data, mime: XLSX_MIME, extension: 'xlsx' };
 }

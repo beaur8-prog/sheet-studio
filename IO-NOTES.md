@@ -75,7 +75,7 @@ npm run package
 
 The resolved Windows runtime is **Electron 42.11.15**, verified against the cached official release archive. Archive SHA-256: `f85fb7fb361508161bf0c3431e96518e34a9c10997048df21400a7da96658737`. The installed executable matches the archive's `electron.exe` at SHA-256 `8997a726173fb70b53bfb63b4f19865db759f9b247a66cd3b79b0b45c4eb626e`. Packaging writes `release/<version>/<platform>-<arch>/runtime-provenance.json` and changes only native product metadata/icon resources, checking that executable code-section hashes remain identical.
 
-Windows artifacts appear under `release/0.5.0/win-x64/`: the portable `Sheet-Studio-0.5.0-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
+Windows artifacts appear under `release/0.6.0/win-x64/`: the portable `Sheet-Studio-0.6.0-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
 
 ## Dependency provenance and verification
 
@@ -90,3 +90,7 @@ XLSX support uses [ExcelJS](https://github.com/exceljs/exceljs), pinned at versi
 ## Pivot tables
 
 Sheet Studio pivots include editable definitions in JSON and Custom XML. Nonempty XLSX reports also include native PivotTable/cache parts. Excel can refresh these; empty reports preserve cells and app settings only. Report-filter rows are reserved on export and cross-sheet formulas are adjusted on export/import. XLSM preservation writes app settings and result cells, without creating new native pivot objects. Native pivots created elsewhere are not imported into the app field editor. See [pivot support](docs/PIVOT.md).
+
+## AutoFilter (0.6.0)
+
+Native worksheet AutoFilter ranges, value/custom/top/average conditions, date groups, sort indicators and hidden row snapshots round-trip through XLSX. SUBTOTAL caches exclude filtered rows. JSON persists filters per sheet. Windows XLSM edits include filter plans through the existing Excel bridge. See [filter behavior and limitations](docs/FILTERS.md), including unsupported color/icon/dynamic date filters and Excel table filters.

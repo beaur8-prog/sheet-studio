@@ -1,3 +1,4 @@
+import {validateAutoFilter} from './filter-schema.mjs';
 import {validateChart} from './chart-schema.mjs';
 import {validatePivot} from './pivot-schema.mjs';
 import {createFunctionRuntime} from './function-runtime.mjs';
@@ -488,9 +489,11 @@ function referenceFunction(ctx,name,nodes,evaluate) {
     if(!target||code!==index&&code!==index+100)fail('#VALUE!');
     const values=[];for(const node of nodes.slice(1)){
       const ref=metadata(node);if(!ref.sheet)fail('#VALUE!');if(ref.rows*ref.cols>MAX_RANGE_CELLS)fail('#NUM!');
+      const hidden=new Set(ref.sheet.autoFilter?.hiddenRows||[]);
       for(let r=ref.top;r<ref.top+ref.rows;r++)for(let c=ref.left;c<ref.left+ref.cols;c++){
         const raw=ref.sheet.cells?.[address(r,c)]?.raw??'';
         if(/^\s*=\s*(?:_xlfn\.)?(?:SUBTOTAL|AGGREGATE)\s*\(/i.test(raw))continue;
+        if(hidden.has(r))continue;
         if(code>100&&ref.sheet.rowHeights?.[r]===0)continue;
         values.push(readCell(ctx,ref.sheet,address(r,c)));
       }
@@ -899,6 +902,7 @@ function validateWorkbook(data) {
     if (typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 31 || /[:\\/?*\[\]]/.test(sheet.name) || names.has(sheet.name.toLowerCase())) throw new Error('시트 이름이 올바르지 않습니다.');
     ids.add(sheet.id); names.add(sheet.name.toLowerCase());
     for(const key of ['defaultColumnWidth','defaultRowHeight'])if(sheet[key]!==undefined&&(!Number.isFinite(sheet[key])||sheet[key]<1||sheet[key]>10000))throw new Error('시트 기본 크기가 올바르지 않습니다.');
+    if (sheet.autoFilter !== undefined) validateAutoFilter(sheet.autoFilter);
     if (sheet.pivot !== undefined) { validatePivot(sheet.pivot); if (sheet.pivot.sourceSheetId === sheet.id) throw new Error('피벗 원본은 다른 시트여야 합니다.'); }
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
     for (const [ref, cell] of Object.entries(sheet.cells)) {

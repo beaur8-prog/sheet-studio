@@ -1,3 +1,5 @@
+import {nativeFilterPlan} from './filter-native.mjs';
+import {shiftAutoFilter} from './filters.mjs';
 import {address, parseAddress, transformFormulaReferences} from './engine.mjs';
 
 const clone=value=>structuredClone(value);
@@ -42,7 +44,7 @@ export function recordNativeStructure(workbook,sheetId,axis,index,delta){
   }target.cells=cells;
   for(const owner of source.baseline)for(const cell of Object.values(owner.cells))if(cell.raw.startsWith('='))cell.raw=transformFormulaReferences(cell.raw,{axis,index,delta,targetSheet:target.name,ownerSheet:owner.name});
   target.merges=(target.merges||[]).map(value=>transformFormulaReferences(value,{axis,index,delta,targetSheet:target.name,ownerSheet:target.name})).filter(value=>!value.includes('#REF!'));
-  const prop=axis==='r'?'rowHeights':'columnWidths',sizes={};for(const [key,value] of Object.entries(target[prop]||{})){let n=+key;if(delta<0&&n===index)continue;if(n>=index)n+=delta;sizes[n]=value;}target[prop]=sizes;
+  const prop=axis==='r'?'rowHeights':'columnWidths',sizes={};for(const [key,value] of Object.entries(target[prop]||{})){let n=+key;if(delta<0&&n===index)continue;if(n>=index)n+=delta;sizes[n]=value;}target[prop]=sizes;shiftAutoFilter(target,axis,index,delta);
 }
 
 export function buildNativePlan(workbook){
@@ -59,12 +61,12 @@ export function buildNativePlan(workbook){
       if(Object.keys(patch).length>1)cells.push(patch);
     }
     const dimensions=prop=>Object.fromEntries([...new Set([...Object.keys(before?.[prop]||{}),...Object.keys(sheet[prop]||{})])].filter(key=>!equal(before?.[prop]?.[key],sheet[prop]?.[key])).map(key=>[key,sheet[prop]?.[key]??null]));
-    return {id:sheet.id,sourceName:before?.name??null,name:sheet.name,cells,columnWidths:dimensions('columnWidths'),rowHeights:dimensions('rowHeights'),unmerge:(before?.merges||[]).filter(v=>!(sheet.merges||[]).includes(v)),merge:(sheet.merges||[]).filter(v=>!(before?.merges||[]).includes(v)),...chartPlan(sheet,before)};
+    return {...(!equal(sheet.autoFilter,before?.autoFilter)?{autoFilter:nativeFilterPlan(sheet.autoFilter)}:{}),id:sheet.id,sourceName:before?.name??null,name:sheet.name,cells,columnWidths:dimensions('columnWidths'),rowHeights:dimensions('rowHeights'),unmerge:(before?.merges||[]).filter(v=>!(sheet.merges||[]).includes(v)),merge:(sheet.merges||[]).filter(v=>!(before?.merges||[]).includes(v)),...chartPlan(sheet,before)};
   });
   return {pivots:workbook.sheets.filter(s=>s.pivot).map(s=>({sheet:s.name,source:workbook.sheets.find(source=>source.id===s.pivot.sourceSheetId)?.name||null,spec:clone(s.pivot)})),sheets,deleted:source.baseline.filter(s=>!workbook.sheets.some(v=>v.id===s.id)).map(s=>s.name),operations:clone(source.operations||[]),activeSheetId:workbook.activeSheetId};
 }
 
-export function nativeSourceChanged(workbook){const p=buildNativePlan(workbook);return !!(p.deleted.length||p.operations.length||p.sheets.some(s=>!s.sourceName||s.name!==s.sourceName||s.cells.length||s.merge.length||s.unmerge.length||s.charts.length||s.deletedCharts.length||Object.keys(s.columnWidths).length||Object.keys(s.rowHeights).length));}
+export function nativeSourceChanged(workbook){const p=buildNativePlan(workbook);return !!(p.deleted.length||p.operations.length||p.sheets.some(s=>!s.sourceName||s.name!==s.sourceName||s.cells.length||s.autoFilter!==undefined||s.merge.length||s.unmerge.length||s.charts.length||s.deletedCharts.length||Object.keys(s.columnWidths).length||Object.keys(s.rowHeights).length));}
 
 // This is a labelled display fallback, never a replacement for VBA evaluation.
 export function nativeCachedValue(workbook,sheetId,key,computed){

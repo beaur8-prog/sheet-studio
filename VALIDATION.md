@@ -2,6 +2,23 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.6.0 — Excel 방식 자동 필터
+
+- `npm test`: **89/89 통과**. 범위 추정(중간 위치/머리글 한 행/빈 구간), 값·빈 셀·와일드카드·숫자/날짜 두 조건, 여러 열 AND, 상·하위/평균, SUBTOTAL, 정렬의 레코드/수식/서식 이동, JSON·XLSX 왕복 및 네이티브 필터 계획 검증을 포함합니다.
+- Windows Excel **16.0 build 19127**의 별도 시험 문서에서 16개 조건의 표시 행/부분합을 수집해 `tests/fixtures/excel-filters.json`에 보관했습니다. 필터 상태에서 정렬할 때 숨겨진 레코드를 이동하지 않는 동작도 실제 Excel에서 수집했습니다. 사용자 문서와 기존 Excel 세션은 사용하지 않았습니다.
+- `node scripts/filters-native-smoke.mjs`: 16개 조건의 XLSX를 실제 Excel에서 열고 **다시 적용한 후에도** 표시 행과 SUBTOTAL이 일치했습니다. 날짜 선택 목록/날짜 조건 2개도 별도로 열기/재적용을 확인했습니다. 최초 검사에서 빈 셀 제외 조건의 OOXML 값과 날짜 목록 인코딩 차이를 찾아 수정했습니다.
+- `node scripts/filters-xlsm-smoke.mjs`: 기존 시험 XLSM에 숫자/값 복합 필터와 날짜 선택 필터를 추가해 저장·재열기·다시 적용·필터 제거를 검증했습니다. 원본 파일 바이트는 불변이고 VBA 프로젝트 파트가 결과에 남아 있습니다. Excel은 저장 시 VBA 내부 메타데이터를 다시 쓸 수 있으므로 VBA 파트의 바이트 동일성을 주장하지 않습니다. 이 검사에서는 매크로를 실행하지 않았습니다.
+- `npm run package:win`: **0.6.0 패키지 생성 성공**. 최종 ASAR의 HTML, CSS/JavaScript, 라이선스 고지와 Electron 브리지 9개 파일이 작업 결과와 바이트 단위로 일치하고 패키지 버전이 0.6.0임을 확인했습니다.
+- 다음 검사를 최종 Windows 패키지에서 통과했습니다:
+  - `node tests/ui-filters.mjs --packaged`: 버튼 토글/범위/머리글 화살표, 검색·체크/취소/빈 결과·기존 선택 추가, 복합 조건/날짜/상위 항목, 여러 열 필터, 지우기/다시 적용, 필터 밖 행 유지, 방향키, 복사, 정렬, 시트 전환, 실행 취소/복원 및 재시작. 복사 검사만 OS 클립보드 권한과 분리한 메모리 클립보드를 사용합니다.
+  - `node tests/ui-formulas.mjs --packaged`, `node tests/ui-functions.mjs --packaged`: 자동 합계·참조 표시·함수 도우미, 필터 상태에서 시트 참조 편집 후 복귀.
+  - `node tests/ui-charts.mjs --packaged`, `node tests/ui-excel-charts.mjs --packaged`, `node tests/ui-pivot.mjs --packaged`: 차트 크기/저장/피벗 회귀 검사.
+  - `node scripts/electron-smoke.cjs --packaged`, `node scripts/vba-ui-smoke.cjs --packaged`: 데스크톱 시작, XLSM 연결/결과 가져오기/보존 저장.
+- `node tests/ui-features.mjs`는 최종 dist를 Vite preview로 제공해 통과했습니다. 처음 브라우저용 차트/피벗 검사를 서버 없이 실행한 시도는 연결 거부였으며, 위 패키지 검사로 다시 확인했습니다.
+- macOS CI에 필터 UI 검사를 추가했습니다. **실제 Mac 빌드·실행은 미검증**입니다. 색/아이콘 필터, 날짜 계층/상대 날짜, 구조화된 표별 필터 등 남은 범위는 [필터 안내](docs/FILTERS.md)에 명시했습니다.
+
+0.6.0 휴대용 실행 파일: `release/0.6.0/win-x64/Sheet-Studio-0.6.0-Windows-x64.exe` (92,096,231 bytes). SHA-256: `0eb53a2847ac3acdae4dd90c2392382431b7dfbc95291d7b98403adb4e3fd70c`. Windows 코드 서명은 되어 있지 않습니다.
+
 ## 0.5.0 — Excel 함수 라이브러리 확장
 
 - 기존 37개에서 **379개 함수 이름**으로 확장했습니다. 이전 버전 별칭 30개를 포함합니다. Formula.js 4.6.1을 고정하고 Excel의 범위/배열/논리값/빈 셀/오류 처리, 참조 함수, 날짜 번호, 조건 집계, 일부 통계·재무·공학 계산을 앱에서 보정했습니다. 전체 목록과 제한은 [함수 안내](docs/FUNCTIONS.md)에 있습니다.

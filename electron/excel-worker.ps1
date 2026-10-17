@@ -88,6 +88,29 @@ function Set-Chart($sheet,$patch) {
     foreach($field in @('xTitle','yTitle')){if((Has-Field $patch $field) -and $chart.ChartType -notin @(5,-4120,-4151,81,82)){$axisType=1;if($field -eq 'yTitle'){$axisType=2};if($chart.HasAxis($axisType,1)){$axis=$chart.Axes($axisType,1);$axis.HasTitle=[bool]$patch.$field;if($patch.$field){$axis.AxisTitle.Text=[string]$patch.$field};Release-Com $axis}}}
   }finally{Release-Com $chart;Release-Com $object}
 }
+function Set-AutoFilter($sheet,$filter) {
+  if($sheet.AutoFilterMode){$sheet.AutoFilterMode=$false}
+  if($null -eq $filter){return}
+  $range=$sheet.Range([string]$filter.range)
+  try {
+    [void]$range.AutoFilter()
+    foreach($rule in $filter.filters){
+      $v=[Type]::Missing;if($null -ne $rule.criteria1){$v=$rule.criteria1};if($v -is [array]){$v=[object[]]$v}
+      if($rule.dateValues){
+        $dates=@{};foreach($day in $rule.dateValues){$dates[[string]$day]=$true}
+        $labels=@();if($rule.criteria1){$labels+=@($rule.criteria1)}
+        for($i=2;$i -le $range.Rows.Count;$i++){$cell=$range.Cells.Item($i,[int]$rule.field);try{$value=$cell.Value2;if($value -is [double] -and $dates.ContainsKey([string][Math]::Floor($value))){$labels+=[string]$cell.Text}}finally{Release-Com $cell}}
+        if(!$labels.Count){$labels=@($rule.dateValues | ForEach-Object {[string]$_})};$v=[string[]]@($labels | Select-Object -Unique)
+      }
+      $op=[Type]::Missing;if($null -ne $rule.operator){$op=[int]$rule.operator}
+      $v2=[Type]::Missing;if($null -ne $rule.criteria2){$v2=$rule.criteria2}
+      [void]$range.AutoFilter([int]$rule.field,$v,$op,$v2)
+    }
+    # Keep the user's applied snapshot until Reapply, as in Excel after cell edits.
+    $range.EntireRow.Hidden=$false
+    foreach($row in $filter.hiddenRows){$r=$sheet.Rows.Item([int]$row+1);try{$r.Hidden=$true}finally{Release-Com $r}}
+  }finally{Release-Com $range}
+}
 function Apply-Plan($book,$plan) {
   $map=@{}
   foreach($entry in $plan.sheets) {
@@ -108,6 +131,7 @@ function Apply-Plan($book,$plan) {
       foreach($range in $entry.merge){$r=$sheet.Range([string]$range);try{[void]$r.Merge()}finally{Release-Com $r}}
       foreach($name in $entry.deletedCharts){$object=$sheet.ChartObjects().Item([string]$name);try{[void]$object.Delete()}finally{Release-Com $object}}
       foreach($patch in $entry.charts){Set-Chart $sheet $patch}
+      if($entry.PSObject.Properties.Name -contains 'autoFilter'){Set-AutoFilter $sheet $entry.autoFilter}
     }
     if($map.ContainsKey([string]$plan.activeSheetId) -and $map[[string]$plan.activeSheetId].Visible -eq -1){[void]$map[[string]$plan.activeSheetId].Activate()}
   }finally{foreach($s in $map.Values){Release-Com $s}}
