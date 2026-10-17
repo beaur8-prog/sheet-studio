@@ -1,0 +1,159 @@
+param([Parameter(Mandatory=$true)][string]$JobDir,[switch]$CancelOwned)
+$ErrorActionPreference = 'Stop'
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+function Write-State([string]$state,[string]$message) {
+  $value = @{state=$state;message=$message} | ConvertTo-Json -Compress
+  $temporary = Join-Path $JobDir 'status-next.json'
+  [IO.File]::WriteAllText($temporary,$value,$utf8)
+  Move-Item -LiteralPath $temporary -Destination (Join-Path $JobDir 'status.json') -Force
+}
+function Release-Com($object) { if ($null -ne $object -and [Runtime.InteropServices.Marshal]::IsComObject($object)) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($object) } }
+function Check-Cancel { if(Test-Path -LiteralPath (Join-Path $JobDir 'cancel.flag')){throw [OperationCanceledException]::new('Excel 작업을 취소했습니다.')} }
+function Save-Result($workbook,$zone) {
+  $output=Join-Path $JobDir 'result.xlsm'
+  [void]$workbook.SaveCopyAs($output)
+  if($zone){[IO.File]::WriteAllText($output+':Zone.Identifier',[string]$zone,$utf8)}
+}
+if ($CancelOwned) {
+  $ownerPath = Join-Path $JobDir 'owner.json'
+  if (Test-Path -LiteralPath $ownerPath) {
+    $owner = Get-Content -LiteralPath $ownerPath -Raw | ConvertFrom-Json
+    $owned = Get-Process -Id $owner.processId -ErrorAction SilentlyContinue
+    if ($owned -and $owned.ProcessName -eq 'EXCEL' -and $owned.StartTime.ToUniversalTime().Ticks.ToString() -eq $owner.started) { Stop-Process -Id $owned.Id -Force }
+  }
+  exit
+}
+function Has-Field($object,[string]$name) { return $null -ne $object.PSObject.Properties[$name] }
+function Color-Number([string]$value) {
+  if ($value -match '^#([a-fA-F0-9]{3})$') { $hex=($value.Substring(1).ToCharArray() | ForEach-Object { "$_$_" }) -join ''; $value='#'+$hex }
+  if ($value -notmatch '^#[a-fA-F0-9]{6}$') { throw "Excel color must be #RRGGBB: $value" }
+  return [Convert]::ToInt32($value.Substring(1,2),16) + 256*[Convert]::ToInt32($value.Substring(3,2),16) + 65536*[Convert]::ToInt32($value.Substring(5,2),16)
+}
+function Set-Cell($sheet,$patch) {
+  $cell=$sheet.Range($patch.address)
+  try {
+    if (Has-Field $patch 'raw') {
+      $raw=[string]$patch.raw
+      if ($raw -eq '') { [void]$cell.ClearContents() }
+      elseif ($raw.StartsWith('=')) { try {$cell.Formula2=$raw} catch {$cell.Formula=$raw} }
+      elseif ($raw.StartsWith("'")) {$cell.Value2=$raw}
+      elseif ($raw -match '^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$') { $cell.Value2=[double]::Parse($raw,[Globalization.CultureInfo]::InvariantCulture) }
+      elseif ($raw -match '^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$') {$cell.Value2=[double]::Parse($raw.TrimEnd('%'),[Globalization.CultureInfo]::InvariantCulture)/100}
+      elseif ($raw -match '^(?i:TRUE|FALSE)$') {$cell.Value2=($raw.ToUpperInvariant() -eq 'TRUE')}
+      else {$cell.Value2=[string]("'"+$raw)}
+    }
+    if (Has-Field $patch 'style') {
+      $style=$patch.style
+      foreach($property in $style.PSObject.Properties) {
+        $value=$property.Value
+        switch($property.Name) {
+          'bold' {$cell.Font.Bold=[bool]$value}
+          'italic' {$cell.Font.Italic=[bool]$value}
+          'underline' {if($value){$cell.Font.Underline=2}else{$cell.Font.Underline=-4142}}
+          'fontFamily' {if($value){$cell.Font.Name=[string]$value}else{$cell.Font.Name='Calibri'}}
+          'fontSize' {if($value){$cell.Font.Size=[double]$value}else{$cell.Font.Size=11}}
+          'color' {if($value){$cell.Font.Color=Color-Number $value}else{$cell.Font.ColorIndex=-4105}}
+          'background' {if($value){$cell.Interior.Color=Color-Number $value}else{$cell.Interior.ColorIndex=-4142}}
+          'wrap' {$cell.WrapText=[bool]$value}
+          'align' {$align=@{left=-4131;center=-4108;right=-4152;fill=5;justify=-4130;distributed=-4117;centerContinuous=7};if($align.ContainsKey([string]$value)){$cell.HorizontalAlignment=$align[[string]$value]}else{$cell.HorizontalAlignment=1}}
+          'verticalAlign' {$align=@{top=-4160;middle=-4108;bottom=-4107};if($align.ContainsKey([string]$value)){$cell.VerticalAlignment=$align[[string]$value]}else{$cell.VerticalAlignment=-4107}}
+          'border' {if($value){$cell.Borders.LineStyle=1;$cell.Borders.Weight=2}else{$cell.Borders.LineStyle=-4142}}
+          'format' {$formats=@{general='General';number='#,##0.00';currency='₩#,##0.00';accounting='₩#,##0.00';percent='0.00%';date='yyyy-mm-dd'};if($formats.ContainsKey([string]$value)){$cell.NumberFormat=$formats[[string]$value]}else{$cell.NumberFormat='General'}}
+        }
+      }
+      if ((Has-Field $style 'numberFormat') -and $style.numberFormat) {$cell.NumberFormat=[string]$style.numberFormat}
+      if ((Has-Field $style 'decimals') -and $null -ne $style.decimals) {
+        $places=[Math]::Min(12,[Math]::Max(0,[int]$style.decimals));$fraction='';if($places){$fraction='.'+('0'*$places)}
+        if($style.format -eq 'percent'){$cell.NumberFormat='0'+$fraction+'%'}elseif($style.format -in @('currency','accounting')){$cell.NumberFormat='₩#,##0'+$fraction}else{$cell.NumberFormat='#,##0'+$fraction}
+      }
+    }
+    if (Has-Field $patch 'note') { if($cell.Comment){[void]$cell.Comment.Delete()};if($patch.note){[void]$cell.AddComment([string]$patch.note)} }
+  } finally {Release-Com $cell}
+}
+function Apply-Plan($book,$plan) {
+  $map=@{}
+  foreach($entry in $plan.sheets) {
+    if($entry.sourceName){$sheet=$book.Worksheets.Item([string]$entry.sourceName)}else{$sheet=$book.Worksheets.Add([Type]::Missing,$book.Worksheets.Item($book.Worksheets.Count))}
+    $map[[string]$entry.id]=$sheet
+  }
+  try {
+    foreach($name in $plan.deleted){$sheet=$book.Worksheets.Item([string]$name);try{[void]$sheet.Delete()}finally{Release-Com $sheet}}
+    foreach($entry in $plan.sheets){$sheet=$map[[string]$entry.id];if($sheet.Name -ne $entry.name){$sheet.Name='ss_'+[Guid]::NewGuid().ToString('N').Substring(0,20)}}
+    foreach($entry in $plan.sheets){$map[[string]$entry.id].Name=[string]$entry.name}
+    foreach($op in $plan.operations){$sheet=$map[[string]$op.sheetId];if(!$sheet){continue};if($op.axis -eq 'r'){$range=$sheet.Rows.Item([int]$op.index+1)}else{$range=$sheet.Columns.Item([int]$op.index+1)};try{if($op.delta -eq 1){[void]$range.Insert()}else{[void]$range.Delete()}}finally{Release-Com $range}}
+    foreach($entry in $plan.sheets) {
+      $sheet=$map[[string]$entry.id]
+      foreach($range in $entry.unmerge){$r=$sheet.Range([string]$range);try{[void]$r.UnMerge()}finally{Release-Com $r}}
+      foreach($patch in $entry.cells){Set-Cell $sheet $patch}
+      foreach($p in $entry.columnWidths.PSObject.Properties){$r=$sheet.Columns.Item([int]$p.Name+1);try{if($null -eq $p.Value){$r.ColumnWidth=$sheet.StandardWidth}else{$r.ColumnWidth=[Math]::Max(1,([double]$p.Value-5)/7)}}finally{Release-Com $r}}
+      foreach($p in $entry.rowHeights.PSObject.Properties){$r=$sheet.Rows.Item([int]$p.Name+1);try{if($null -eq $p.Value){$r.RowHeight=$sheet.StandardHeight}else{$r.RowHeight=[Math]::Max(1,[double]$p.Value*3/4)}}finally{Release-Com $r}}
+      foreach($range in $entry.merge){$r=$sheet.Range([string]$range);try{[void]$r.Merge()}finally{Release-Com $r}}
+    }
+    if($map.ContainsKey([string]$plan.activeSheetId) -and $map[[string]$plan.activeSheetId].Visible -eq -1){[void]$map[[string]$plan.activeSheetId].Activate()}
+  }finally{foreach($s in $map.Values){Release-Com $s}}
+}
+$excel=$null;$book=$null;$owned=$false
+try {
+  $request=Get-Content -LiteralPath (Join-Path $JobDir 'request.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+  $sourcePath=Join-Path $JobDir $request.filename
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip=[IO.Compression.ZipFile]::OpenRead($sourcePath)
+  try {if($zip.Entries | Where-Object {$_.FullName -match '(?i)(^|/)macrosheets/'}){throw 'Excel 4.0 (XLM) macro sheets are not supported.'}}finally{$zip.Dispose()}
+  Write-State 'starting' 'Excel 작업 사본을 준비하고 있습니다.'
+  Check-Cancel
+  $before=@(Get-Process EXCEL -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+  $excel=New-Object -ComObject Excel.Application
+  Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class SheetStudioWindowOwner { [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId); }'
+  [uint32]$excelProcessId=0;[void][SheetStudioWindowOwner]::GetWindowThreadProcessId([IntPtr]$excel.Hwnd,[ref]$excelProcessId)
+  if(!$excelProcessId -or $before -contains [int]$excelProcessId){throw 'A separate Excel instance could not be verified. Existing Excel windows were not modified.'}
+  $process=Get-Process -Id $excelProcessId;$owned=$true
+  [IO.File]::WriteAllText((Join-Path $JobDir 'owner-next.json'),(@{processId=$excelProcessId;started=$process.StartTime.ToUniversalTime().Ticks.ToString()}|ConvertTo-Json -Compress),$utf8)
+  Move-Item -LiteralPath (Join-Path $JobDir 'owner-next.json') -Destination (Join-Path $JobDir 'owner.json')
+  Check-Cancel
+  # Never lower macro security or enable VBA project access. All initial edits
+  # occur with macros and events disabled, using the original OOXML package.
+  $excel.AutomationSecurity=3;$excel.EnableEvents=$false;$excel.DisplayAlerts=$false;$excel.AskToUpdateLinks=$false
+  $book=$excel.Workbooks.Open($sourcePath,0,$false)
+  if($book.ReadOnly){throw 'Excel opened the working copy read-only. Check workbook protection or trust settings in Excel.'}
+  Apply-Plan $book $request.plan
+  [void]$book.Save()
+  if($request.zone){[IO.File]::WriteAllText($sourcePath+':Zone.Identifier',[string]$request.zone,$utf8)}
+  if($request.mode -eq 'save'){
+    Save-Result $book $request.zone
+    Write-State 'completed' 'VBA 프로젝트를 유지한 XLSM을 저장했습니다.'
+  } else {
+    [void]$book.Close($false);Release-Com $book;$book=$null
+    $excel.Visible=$true;$excel.DisplayAlerts=$true;$excel.EnableEvents=$true
+    # ByUI respects the user's Trust Center/MOTW decisions on this explicit run.
+    $excel.AutomationSecurity=2
+    $book=$excel.Workbooks.Open($sourcePath,0,$false)
+    Write-State 'ready' 'Excel 작업 사본을 열었습니다. 매크로를 실행한 뒤 결과 가져오기를 누르세요.'
+    $finished=$false
+    while(!$finished){
+      Check-Cancel
+      $commandPath=Join-Path $JobDir 'command.json'
+      if(!(Test-Path -LiteralPath $commandPath)){Start-Sleep -Milliseconds 200;continue}
+      $command=Get-Content -LiteralPath $commandPath -Raw -Encoding UTF8|ConvertFrom-Json
+      Remove-Item -LiteralPath $commandPath
+      try {
+        switch($command.type){
+          'run' {
+            Write-State 'running' 'Excel에서 VBA 매크로를 실행하고 있습니다.'
+            [void]$book.Activate()
+            $qualified="'"+$book.Name.Replace("'","''")+"'!"+[string]$command.name
+            [void]$excel.Run($qualified)
+            Write-State 'ready' '매크로가 반환되었습니다. 결과 가져오기를 누르면 Sheet Studio에 반영됩니다.'
+          }
+          'dialog' {Write-State 'running' 'Excel의 매크로 창에서 실행할 매크로를 선택하세요.';[void]$book.Activate();[void]$excel.Dialogs.Item(17).Show();Write-State 'ready' 'Excel 매크로 창을 닫았습니다. 결과를 가져올 수 있습니다.'}
+          'finish' {$excel.EnableEvents=$false;Save-Result $book $request.zone;Write-State 'completed' 'Excel의 실행 결과를 가져옵니다.';$finished=$true}
+          'cancel' {Write-State 'cancelled' '작업 사본을 닫았습니다.';$finished=$true}
+        }
+      } catch {Write-State 'ready' ('Excel: '+$_.Exception.Message+' 매크로 이름과 Excel 보안 설정을 확인하세요. 보안 설정은 자동 변경하지 않습니다.')}
+    }
+  }
+}catch{if(Test-Path -LiteralPath (Join-Path $JobDir 'cancel.flag')){Write-State 'cancelled' 'Excel 작업을 취소했습니다.'}else{[IO.File]::WriteAllText((Join-Path $JobDir 'error.log'),($_.Exception.ToString()+[Environment]::NewLine+$_.ScriptStackTrace),$utf8);Write-State 'error' $_.Exception.Message}}
+finally {
+  if($owned -and $excel){try{$excel.EnableEvents=$false;$excel.DisplayAlerts=$false;if($book){[void]$book.Close($false)};[void]$excel.Quit()}catch{}}
+  Release-Com $book;Release-Com $excel
+  [GC]::Collect();[GC]::WaitForPendingFinalizers()
+}

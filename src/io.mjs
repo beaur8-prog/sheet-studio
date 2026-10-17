@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
 import { createEvaluator } from './engine.mjs';
+import { attachNativeSource } from './native-plan.mjs';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_CELLS = 200_000;
@@ -33,7 +34,7 @@ function bytes(value) {
   if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
   return new Uint8Array(value);
 }
-function fileName(value) { return String(value || '통합 문서').replace(/\.(xlsx|csv|tsv|sheet\.json|json)$/i, ''); }
+function fileName(value) { return String(value || '통합 문서').replace(/\.(xlsx|xlsm|csv|tsv|sheet\.json|json)$/i, ''); }
 function stringRaw(value) {
   const text = String(value);
   // Preserve XLSX text types, including numeric-looking identifiers and '=…'.
@@ -132,7 +133,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   const data = bytes(arrayBuffer);
   if (data.byteLength > 100 * 1024 * 1024) throw new Error('100 MB 이하의 파일을 선택하세요.');
   if (/\.(csv|tsv)$/i.test(filename)) return readDelimited(data, filename);
-  if (!/\.xlsx$/i.test(filename)) throw new Error('XLSX, CSV 또는 TSV 파일을 선택하세요.');
+  if (!/\.xls[xm]$/i.test(filename)) throw new Error('XLSX, XLSM, CSV 또는 TSV 파일을 선택하세요.');
   const book = new ExcelJS.Workbook();
   try { await book.xlsx.load(data); }
   catch (error) { throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.', { cause: error }); }
@@ -170,7 +171,8 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   });
   if (!sheets.length) sheets.push(newSheet());
   const activeIndex = book.views?.[0]?.activeTab || 0;
-  return { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
+  const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
+  return /\.xlsm$/i.test(filename) ? attachNativeSource(result, data, filename) : result;
 }
 
 async function evaluator() {
@@ -233,9 +235,10 @@ function cachedResult(evaluate, workbook, sheet, addr, cell) {
 }
 
 /** Export XLSX (all sheets) or CSV/TSV (the active sheet). */
-export async function writeSpreadsheet(workbook, format = 'xlsx') {
+export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) {
   const kind = String(format).toLowerCase().replace(/^\./, '');
   if (!workbook?.sheets?.length) throw new Error('통합 문서에 시트가 없습니다.');
+  if (workbook.nativeSource && !options.allowMacroLoss) throw new Error('VBA 보존을 위해 XLSM 저장을 사용하세요. 일반 형식 변환에는 매크로 제외 확인이 필요합니다.');
   if (!['xlsx', 'csv', 'tsv'].includes(kind)) throw new Error('지원되지 않는 저장 형식입니다.');
   const evaluate = await evaluator();
   if (kind === 'csv' || kind === 'tsv') {

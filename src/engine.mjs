@@ -814,6 +814,13 @@ function validateWorkbook(data) {
     }
   }
   if (typeof data.activeSheetId !== 'string' || !ids.has(data.activeSheetId)) throw new Error('활성 시트가 없습니다.');
+  if (data.nativeSource !== undefined) {
+    const source=data.nativeSource;
+    if(!object(source)||source.format!=='xlsm'||typeof source.filename!=='string'||source.filename.length>255||typeof source.base64!=='string'||source.base64.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(source.base64)||!Array.isArray(source.baseline)||!source.baseline.length||!Array.isArray(source.operations)||source.operations.length>10000)throw new Error('VBA 원본 데이터가 올바르지 않습니다.');
+    if(source.originToken!==undefined&&(typeof source.originToken!=='string'||source.originToken.length>150))throw new Error('VBA 출처 정보가 올바르지 않습니다.');
+    validateWorkbook({name:data.name,activeSheetId:source.baseline[0].id,sheets:source.baseline});
+    for(const op of source.operations)if(!object(op)||typeof op.sheetId!=='string'||!['r','c'].includes(op.axis)||!Number.isInteger(op.index)||op.index<0||op.index>=(op.axis==='r'?1048576:16384)||![-1,1].includes(op.delta))throw new Error('VBA 구조 변경 정보가 올바르지 않습니다.');
+  }
   return data;
 }
 

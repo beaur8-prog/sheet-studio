@@ -4,11 +4,12 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
+const vba = require('./vba.cjs');
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const filters = [
-  { name: '스프레드시트', extensions: ['xlsx', 'csv', 'tsv', 'json'] },
-  { name: 'Excel 통합 문서', extensions: ['xlsx'] },
+  { name: '스프레드시트', extensions: ['xlsx', 'xlsm', 'csv', 'tsv', 'json'] },
+  { name: 'Excel 통합 문서', extensions: ['xlsx', 'xlsm'] },
   { name: 'CSV', extensions: ['csv'] },
   { name: 'Sheet Studio', extensions: ['sheet.json', 'json'] },
 ];
@@ -29,7 +30,9 @@ ipcMain.handle('sheet:open-file', async event => {
   if (result.canceled || !result.filePaths.length) return null;
   const file = result.filePaths[0];
   if ((await fs.stat(file)).size > MAX_FILE_BYTES) throw new Error('100 MB 이하의 통합 문서를 선택하세요.');
-  return { name: path.basename(file), data: Array.from(await fs.readFile(file)) };
+  const data=await fs.readFile(file);
+  const originToken=/\.xlsm$/i.test(file)?await vba.rememberFile(file,data):undefined;
+  return { name: path.basename(file), data: Array.from(data), ...(originToken?{originToken}:{}) };
 });
 
 ipcMain.handle('sheet:save-file', async (event, payload) => {
@@ -48,6 +51,8 @@ ipcMain.handle('sheet:save-file', async (event, payload) => {
   const tempPath = path.join(path.dirname(result.filePath), '.' + path.basename(result.filePath) + '.' + randomUUID() + '.tmp');
   try {
     await fs.writeFile(tempPath, Buffer.from(payload.data), { flag: 'wx' });
+    // XLSM exports keep their internet-origin marker when one is present.
+    if(extension==='xlsm')await vba.markExport(tempPath,Buffer.from(payload.data),payload.originToken);
     await fs.rename(tempPath, result.filePath);
   } catch (error) {
     await fs.unlink(tempPath).catch(() => {});
@@ -55,6 +60,10 @@ ipcMain.handle('sheet:save-file', async (event, payload) => {
   }
   return result.filePath;
 });
+
+for(const [name,handler] of Object.entries({vbaProbe:()=>vba.probe(),vbaStart:payload=>vba.start(payload),vbaStatus:id=>vba.status(id),vbaCommand:payload=>vba.command(payload.id,payload.command),vbaResult:id=>vba.result(id),vbaCancel:id=>vba.cancel(id)})){
+  ipcMain.handle('sheet:'+name,async(event,payload)=>{trusted(event);return handler(payload);});
+}
 
 ipcMain.on('sheet:set-title', (event, title) => {
   trusted(event);
@@ -87,4 +96,4 @@ app.whenReady().then(createWindow).catch(error => {
   app.exit(1);
 });
 app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { vba.closeAll().finally(()=>{if(process.platform!=='darwin')app.quit();}); });

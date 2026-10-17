@@ -2,6 +2,18 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.2.0 — XLSM / VBA 연결
+
+- `npm test`: **31/31 통과**. 기존 25개에 원본 XLSM 바이트/JSON 보존, 명시적인 매크로 제외 변환, 최소 변경 계획, 구조 변경 비교, 유효하지 않은 native 요청 거부, 사용자 함수 저장값 표시와 Windows 출처 표시 유지 검사를 추가했습니다.
+- `npm run build` 및 `node scripts/electron-smoke.cjs`: 통과. 확장된 preload IPC, Excel 설치 탐지와 기존 파일 작업을 확인했습니다.
+- `node scripts/vba-ui-smoke.cjs`: 통과. 실제 앱에서 XLSM 열기, 개발 도구 패널, Excel 연결, 연결 중 앱 단축키 차단, 결과 가져오기, A1 편집 후 보존 저장과 A2 수식 재계산을 확인했습니다. 렌더러 예외 0개입니다.
+- 패키징한 `release/win-unpacked/Sheet Studio.exe`에서도 `electron-smoke.cjs --packaged` 및 `vba-ui-smoke.cjs --packaged`가 통과했습니다. ASAR 내부의 PowerShell 작업 파일을 꺼내 실행하는 배포 경로도 확인했습니다.
+- `node scripts/native-smoke.mjs .verification/native-source.xlsm`: 저장·연결·결과 반환·중단, 새 시트/행 삽입/크기/병합, 원본 파일 불변, 기존 차트와 이름 정의 및 VBA 프로젝트 유지 검사가 통과했습니다. 테스트 보고서에서 `macroExecuted`는 **false**입니다.
+- 실제 Excel 편집기에서 직접 작성한 `Smoke` VBA 모듈을 oletools 0.60.2로 저장 전후 추출해 **모듈 소스와 기존 시트 CodeName 동일**을 확인했습니다. Excel이 VBA 프로젝트의 내부 메타데이터를 다시 기록하므로 바이너리 해시는 달라집니다. 시작 도중 앱 종료 요청을 받는 경우에도 작업을 취소하는 검사에 통과했습니다.
+- 실제 `Application.Run` 요청은 Excel의 “매크로를 실행할 수 없습니다” 오류로 거부되었습니다. 테스트는 이 오류와 결과 셀 불변을 기록했으며 보안 설정을 완화하지 않았습니다. **실제 VBA 실행 성공, UserForm, 외부 참조 및 모든 업무 매크로 호환성을 검증한 결과가 아닙니다.**
+
+로컬 테스트 산출물과 작업 사본은 `.verification/`, `test-results/`, Windows 임시 폴더에 있으며 공개 저장소에 포함하지 않습니다. 아래는 0.1.0 최초 구현의 검증 기록입니다.
+
 ## 자동 검증
 
 GitHub 업로드 전 추적 대상 소스 27개만 별도 임시 폴더에 복사하여 `npm ci --ignore-scripts`, `npm test`, `npm run build`를 실행했고 모두 통과했습니다. 이 검증은 부모 작업 폴더의 node_modules를 사용하지 않았습니다. Electron 다운로드·설치 스크립트는 이 소스 설치 검사에서 생략했으며, 데스크톱 실행 검증은 아래 별도 기록을 참조하세요.
