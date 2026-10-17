@@ -54,7 +54,7 @@ async function createIcon(directory) {
   });
   const icon = path.join(directory, 'app.ico');
   await fs.writeFile(icon, Buffer.concat([header, ...images.map(image => image.bytes)]));
-  await fs.writeFile(path.join(directory, 'app.png'), images.at(-1).bytes);
+  await fs.writeFile(path.join(directory, 'app.png'), makePNG(1024));
   return icon;
 }
 

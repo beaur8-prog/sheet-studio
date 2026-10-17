@@ -812,6 +812,7 @@ function validateWorkbook(data) {
     for (const chart of sheet.charts) {
       if (!object(chart) || !validRange(chart.range)) throw new Error('차트 데이터 범위가 올바르지 않습니다.');
       for (const field of ['id', 'title', 'type']) if (chart[field] !== undefined && typeof chart[field] !== 'string') throw new Error('차트 속성이 올바르지 않습니다.');
+      for (const field of ['width', 'height']) if (chart[field] !== undefined && (typeof chart[field] !== 'number' || !Number.isFinite(chart[field]) || chart[field] < 100 || chart[field] > 10000)) throw new Error('차트 크기가 올바르지 않습니다.');
       for (const field of ['x', 'y']) if (chart[field] !== undefined && (typeof chart[field] !== 'number' || !Number.isFinite(chart[field]) || chart[field] < 0)) throw new Error('차트 위치가 올바르지 않습니다.');
     }
   }

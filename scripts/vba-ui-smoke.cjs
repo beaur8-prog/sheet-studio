@@ -9,7 +9,7 @@ async function run(){
   const source=path.resolve(process.argv.slice(2).find(a=>!a.startsWith('--'))||path.join(root,'.verification/native-source.xlsm'));
   const destination=path.join(root,'.verification/ui-saved.xlsm');
   const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package/vba-smoke-data')};delete env.ELECTRON_RUN_AS_NODE;
-  const application=await _electron.launch({executablePath:packaged?path.join(root,'release/win-unpacked/Sheet Studio.exe'):runtime,args:packaged?[]:[root],env});
+  const application=await _electron.launch({executablePath:packaged?require('./platform.cjs').packagedExecutable(root,require('../package.json').version):runtime,args:packaged?[]:[root],env});
   try{
     const page=await application.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.waitForSelector('.cell');

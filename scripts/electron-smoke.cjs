@@ -6,8 +6,9 @@ const assert = require('node:assert/strict');
 const { _electron } = require('playwright');
 const root = path.resolve(__dirname, '..');
 const locations = [root, path.dirname(root), path.join(path.dirname(root), 'word-studio'), path.join(path.dirname(root), 'slide-studio')];
-const runtime = locations.map(folder => path.join(folder, 'node_modules/electron/dist/electron.exe')).find(fs.existsSync);
-const packaged = path.join(root, 'release/win-unpacked/Sheet Studio.exe');
+const {findRuntime,runtimeSuffix,packagedExecutable}=require('./platform.cjs');
+const runtime=path.join(findRuntime(root),'dist',runtimeSuffix());
+const packaged=packagedExecutable(root,require('../package.json').version);
 
 async function smoke() {
   const environment = { ...process.env, SHEET_STUDIO_DATA: path.join(root, '.package/smoke-data') };
@@ -29,7 +30,7 @@ async function smoke() {
       body: document.body.innerText.slice(0, 350),
     }));
     assert.equal(state.nodeIntegration, 'undefined');
-    assert.deepEqual(state.bridge, ['openFile', 'saveFile', 'setTitle', 'vbaCancel', 'vbaCommand', 'vbaProbe', 'vbaResult', 'vbaStart', 'vbaStatus']);
+    assert.deepEqual(state.bridge, ['editText', 'onMenuAction', 'openFile', 'saveFile', 'setTitle', 'vbaCancel', 'vbaCommand', 'vbaProbe', 'vbaResult', 'vbaStart', 'vbaStatus']);
     assert.equal(typeof (await page.evaluate(() => window.desktop.vbaProbe())).available, 'boolean');
     assert.ok(state.cells > 0, 'Spreadsheet grid rendered');
     await page.evaluate(() => window.desktop.setTitle('Sheet Studio – smoke test'));
@@ -59,6 +60,22 @@ async function smoke() {
     });
     assert.equal(await page.evaluate(() => window.desktop.openFile()), null);
     assert.equal(await page.evaluate(() => window.desktop.saveFile({ name: 'cancel.csv', data: [] })), null);
+    // Exercise the same menu IPC used by macOS, on every test host.
+    const menuAction = action => application.evaluate(({ BrowserWindow }, action) => BrowserWindow.getAllWindows()[0].webContents.send('sheet:menu-action', action), action);
+    await page.locator('#book-title').focus();
+    await menuAction('select-all');
+    await page.waitForFunction(() => { const el=document.querySelector('#book-title');return el.selectionStart===0&&el.selectionEnd===el.value.length; });
+    await page.locator('#name-box').fill('A1');await page.locator('#name-box').press('Enter');
+    await page.keyboard.press('F2');await page.locator('#editor').fill('17');await page.locator('#editor').press('Enter');
+    await page.locator('#name-box').fill('A1');await page.locator('#name-box').press('Enter');
+    await application.evaluate(({ clipboard }) => clipboard.writeText('42'));
+    await menuAction('paste');await page.waitForFunction(() => sheetStudio.evaluate('A1')===42);
+    await menuAction('undo');await page.waitForFunction(() => sheetStudio.evaluate('A1')===17);
+    await menuAction('redo');await page.waitForFunction(() => sheetStudio.evaluate('A1')===42);
+    await menuAction('find');await page.getByRole('dialog').waitFor();
+    await menuAction('new');assert.equal(await page.getByRole('dialog').count(),1);
+    assert.equal(await page.evaluate(async () => {try {await desktop.editText('executeJavaScript');return false;}catch{return true;}}),true);
+    await page.keyboard.press('Escape');
     const output = path.join(root, 'test-results');
     await fsp.mkdir(output, { recursive: true });
     await page.screenshot({ path: path.join(output, usingPackage ? 'desktop-packaged.png' : 'desktop.png') });

@@ -5,6 +5,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const vba = require('./vba.cjs');
+const { applicationMenu } = require('./menu.cjs');
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const filters = [
@@ -70,6 +71,13 @@ ipcMain.on('sheet:set-title', (event, title) => {
   if (typeof title === 'string') win.setTitle(title.slice(0, 250).replace(/[\r\n]/g, ' '));
 });
 
+ipcMain.handle('sheet:edit-text', (event, action) => {
+  trusted(event);
+  const methods = { undo: 'undo', redo: 'redo', cut: 'cut', copy: 'copy', paste: 'paste', 'select-all': 'selectAll' };
+  if (!Object.hasOwn(methods, action)) throw new Error('허용되지 않는 편집 요청입니다.');
+  win.webContents[methods[action]]();
+});
+
 async function createWindow() {
   win = new BrowserWindow({
     width: 1540, height: 970, minWidth: 1000, minHeight: 650,
@@ -80,7 +88,8 @@ async function createWindow() {
       nodeIntegration: false, sandbox: true, webviewTag: false,
     },
   });
-  Menu.setApplicationMenu(null);
+  const menu = applicationMenu(process.platform, action => win?.webContents.send('sheet:menu-action', action));
+  Menu.setApplicationMenu(menu ? Menu.buildFromTemplate(menu) : null);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -96,4 +105,4 @@ app.whenReady().then(createWindow).catch(error => {
   app.exit(1);
 });
 app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
-app.on('window-all-closed', () => { vba.closeAll().finally(()=>{if(process.platform!=='darwin')app.quit();}); });
+app.on('window-all-closed', () => { if(process.platform!=='darwin')vba.closeAll().finally(()=>app.quit()); });

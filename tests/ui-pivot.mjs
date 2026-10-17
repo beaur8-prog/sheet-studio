@@ -2,9 +2,12 @@ import {chromium,_electron} from 'playwright';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import platform from '../scripts/platform.cjs';
+import {createRequire} from 'node:module';
+const version=createRequire(import.meta.url)('../package.json').version;
 const root=path.resolve(import.meta.dirname,'..'),desktop=process.argv.includes('--packaged');
 let application,browser,page;
-if(desktop){const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','pivot-smoke-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:path.join(root,'release/win-unpacked/Sheet Studio.exe'),env});page=await application.firstWindow();}
+if(desktop){const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','pivot-smoke-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:platform.packagedExecutable(root,version),env});page=await application.firstWindow();}
 else{browser=await chromium.launch({headless:true,channel:'msedge'});page=await browser.newPage({viewport:{width:1480,height:960}});}
 const errors=[];
 page.on('pageerror',e=>errors.push(e.message));

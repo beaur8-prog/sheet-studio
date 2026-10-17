@@ -12,8 +12,8 @@ const digest=data=>createHash('sha256').update(data).digest('hex');
 const unknownZone='[ZoneTransfer]\r\nZoneId=3\r\n';
 async function waitForExit(session,timeout=15000){if(session.done)return;await Promise.race([new Promise(resolve=>session.child.once('exit',resolve)),new Promise(resolve=>{const timer=setTimeout(resolve,timeout);timer.unref();})]);}
 function registerOrigin(data,zone){const token=randomUUID();origins.set(token,{hash:digest(data),zone});return token;}
-async function rememberFile(filename,data){let zone=null;try{zone=await fs.readFile(filename+':Zone.Identifier','utf8');}catch(error){if(!['ENOENT','EINVAL','ENOTSUP'].includes(error.code))zone=unknownZone;}return registerOrigin(data,zone);}
-async function markExport(filename,data,token){const origin=origins.get(token),zone=origin?.hash===digest(data)?origin.zone:unknownZone;if(zone)await fs.writeFile(filename+':Zone.Identifier',zone);}
+async function rememberFile(filename,data){if(process.platform!=='win32')return registerOrigin(data,null);let zone=null;try{zone=await fs.readFile(filename+':Zone.Identifier','utf8');}catch(error){if(!['ENOENT','EINVAL','ENOTSUP'].includes(error.code))zone=unknownZone;}return registerOrigin(data,zone);}
+async function markExport(filename,data,token){if(process.platform!=='win32')return;const origin=origins.get(token),zone=origin?.hash===digest(data)?origin.zone:unknownZone;if(zone)await fs.writeFile(filename+':Zone.Identifier',zone);}
 const nameOK=value=>typeof value==='string'&&value.length>0&&value.length<=31&&!/[\\/*?:\[\]]/.test(value);
 const addrOK=value=>typeof value==='string'&&/^[A-Z]{1,3}[1-9]\d{0,6}$/.test(value)&&Number(value.match(/\d+/)[0])<=1048576&&value.match(/[A-Z]+/)[0].split('').reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)<=16384;
 const rangeOK=value=>typeof value==='string'&&value.split(':').length===2&&value.split(':').every(addrOK);

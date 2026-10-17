@@ -2,6 +2,17 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.3.1 — 차트 크기 조절 / macOS 빌드 경로
+
+- `npm test`: **43/43 통과**. 차트 최소·최대 크기, 반대편 고정점, JSON 크기 보존 및 이전 문서 기본 크기, Mac 아키텍처 선택과 메뉴 동작 검사를 추가했습니다.
+- `node tests/ui-charts.mjs --desktop` 및 `--packaged`: 실제 Windows Electron에서 8개 조절점, 모서리·변 드래그, 150% 배율, 스크롤, 1회 단위 실행 취소/다시 실행, Escape 취소, 방향키 조절, 제목 변경, 이동, 최소 크기, 재시작, JSON 저장/열기, 크기가 없는 이전 문서, 꺾은선 차트까지 통과했습니다. 결과 화면의 조절점과 차트 배치를 시각적으로 확인했습니다.
+- `node scripts/electron-smoke.cjs --packaged`: 파일 다이얼로그, 제한된 preload, 파일 저장 검증, Mac 메뉴와 같은 IPC 경로를 통한 입력란 전체 선택·셀 붙여넣기·실행 취소/복원·모달 차단 검사 통과. 실제 macOS 기본 메뉴 실행 검사는 아닙니다.
+- `node tests/ui-pivot.mjs --packaged`, `node scripts/vba-ui-smoke.cjs --packaged`: 피벗과 Windows Excel 연결·결과 가져오기·VBA 보존 XLSM 저장 회귀 검사 통과. 렌더러 예외 0개입니다.
+- `npm run build`, `node scripts/package.cjs --win`: 통과. 버전/플랫폼/아키텍처별 출력 폴더를 사용하여 이전 버전의 실행 파일을 유지합니다.
+- macOS arm64/x64 패키징 및 기본 메뉴 코드를 추가했습니다. 실제 Mac 빌드·실행·서명·공증은 **미검증**입니다. 수동 GitHub Actions 워크플로와 [Mac 빌드 안내](docs/MACOS.md)를 제공합니다. VBA 실행 연결은 Windows 전용입니다.
+
+0.3.1 휴대용 실행 파일: `release/0.3.1/win-x64/Sheet-Studio-0.3.1-Windows-x64.exe` (91,987,511 bytes). SHA-256: `00c02e5acf1274712aab4a31633a6965d64c59bac4f4b50eb29b10b1f14fc1da`. Windows 실행 파일은 코드 서명하지 않았습니다.
+
 ## 0.3.0 — 피벗테이블
 
 - `npm test`: **39/39 통과**. 교차 집계, 가중 총평균, 여러 값/필드, 빈 셀·자료형 구분, 계산 오류, 범위 변경, JSON 설정, 실제 XLSX 파트/왕복, 보고서 필터 위치와 다른 시트의 참조 수식 보존을 검증했습니다.

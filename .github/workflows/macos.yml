@@ -1,0 +1,46 @@
+name: macOS packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      SHEET_STUDIO_ADHOC: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run package:mac -- --arch=${{ matrix.arch }}
+      - run: node scripts/electron-smoke.cjs --packaged
+      - run: node tests/ui-charts.mjs --packaged
+      - run: node tests/ui-pivot.mjs --packaged
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sheet-Studio-macOS-${{ matrix.arch }}
+          path: |
+            release/**/*.dmg
+            release/**/*.zip
+            release/**/artifact-manifest.json
+            release/**/runtime-provenance.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macOS-test-screenshots-${{ matrix.arch }}
+          path: test-results/*.png
+          if-no-files-found: ignore
