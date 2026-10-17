@@ -28,6 +28,7 @@ jobs:
       - run: npm run package:mac -- --arch=${{ matrix.arch }}
       - run: node scripts/electron-smoke.cjs --packaged
       - run: node tests/ui-charts.mjs --packaged
+      - run: node tests/ui-excel-charts.mjs --packaged
       - run: node tests/ui-pivot.mjs --packaged
       - uses: actions/upload-artifact@v4
         with:

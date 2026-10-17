@@ -40,7 +40,7 @@ Formula export calls `evaluateCell(workbook, sheet.id, address)` from `src/engin
 
 CSV parsing supports UTF-8 BOM, UTF-16 BOM, RFC-style quoted fields, escaped quotes, CR/LF and embedded line breaks. CSV export uses UTF-8 BOM for Korean text. Leading-zero CSV identifiers are read as text. Plain-text values beginning with a formula marker are escaped on CSV export.
 
-Limits: 100 MB input, 200,000 imported nonempty XLSX cells or CSV fields, and a 2 million-position CSV export rectangle. XLSX exports containing embedded charts, third-party pivot tables, conditional formatting, images, validation rules, protections, custom themes or advanced layout will lose those unsupported features when saved. Existing charts in the app remain in the app's project JSON, not XLSX. Custom theme colors are approximated by the default Office palette. Password-encrypted files and legacy `.xls` are unsupported.
+Limits: 100 MB input, 200,000 imported nonempty XLSX cells or CSV fields, and a 2 million-position CSV export rectangle. Embedded worksheet charts are imported and exported as native DrawingML. Supported chart types render in the app; advanced types retain their original chart parts with limited previews. Chart themes and direct chart dependencies are retained, but this is not full package preservation. Third-party pivot tables, standalone images, conditional formatting, validation, protection and other unsupported workbook objects may be lost. Cell theme colors may be approximated. See [chart support](docs/CHARTS.md). Password-encrypted files and legacy `.xls` are unsupported.
 
 XLSM has a separate preservation path: the original package is retained and edited through installed Excel. `writeSpreadsheet` refuses native-source workbooks unless `allowMacroLoss: true` is explicitly supplied. See [VBA support](docs/VBA.md).
 
@@ -59,7 +59,7 @@ File paths come from native user dialogs. The renderer has context isolation, sa
 
 ## Build and run
 
-From the cloned repository directory (Windows, Node.js 22.12 or newer):
+From the cloned repository directory (Windows or macOS, Node.js 22.12 or newer):
 
 ```powershell
 npm ci
@@ -69,13 +69,13 @@ npm run desktop
 npm run package
 ```
 
-`npm run start` launches the current build, building first if none exists. `npm run dev` starts the browser development server at `http://127.0.0.1:5192`. `npm run package:dir` makes only an unpacked Windows app.
+`npm run start` launches the current build, building first if none exists. `npm run dev` starts the browser development server at `http://127.0.0.1:5192`. `npm run package:dir` makes an unpacked app for the host platform. See [macOS builds](docs/MACOS.md) for DMG/ZIP and architecture selection.
 
 `npm ci` installs the declared tools and Electron 42.11.15 locally. The repository does not require another application checkout. Runtime resolution prefers the local installation; parent and sibling lookups remain available as development fallbacks. Packaging helpers explicitly declare their JSZip and resedit dependencies.
 
-The resolved Windows runtime is **Electron 42.11.15**, verified against the cached official release archive. Archive SHA-256: `f85fb7fb361508161bf0c3431e96518e34a9c10997048df21400a7da96658737`. The installed executable matches the archive's `electron.exe` at SHA-256 `8997a726173fb70b53bfb63b4f19865db759f9b247a66cd3b79b0b45c4eb626e`. Packaging writes `release/runtime-provenance.json` and changes only native product metadata/icon resources, checking that executable code-section hashes remain identical.
+The resolved Windows runtime is **Electron 42.11.15**, verified against the cached official release archive. Archive SHA-256: `f85fb7fb361508161bf0c3431e96518e34a9c10997048df21400a7da96658737`. The installed executable matches the archive's `electron.exe` at SHA-256 `8997a726173fb70b53bfb63b4f19865db759f9b247a66cd3b79b0b45c4eb626e`. Packaging writes `release/<version>/<platform>-<arch>/runtime-provenance.json` and changes only native product metadata/icon resources, checking that executable code-section hashes remain identical.
 
-Windows artifacts appear under `release/`: the portable `Sheet-Studio-0.3.0-Windows.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
+Windows artifacts appear under `release/0.4.0/win-x64/`: the portable `Sheet-Studio-0.4.0-Windows-x64.exe`, and the standalone directory `win-unpacked/Sheet Studio.exe`. The packaged app bundles the renderer and Electron bridge; ordinary spreadsheet editing does not require Node.js, npm, Excel or an internet connection. VBA execution and preserving XLSM edits require installed Windows desktop Excel.
 
 ## Dependency provenance and verification
 

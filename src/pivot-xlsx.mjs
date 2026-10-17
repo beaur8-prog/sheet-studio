@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import {buildPivot,applyPivot,aggregations,scalarKey} from './pivot.mjs';
 import {validatePivot} from './pivot-schema.mjs';
 import {address,transformFormulaReferences} from './engine.mjs';
+import {updateChartReferences} from './chart-model.mjs';
 
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL='http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
@@ -94,7 +95,7 @@ export async function restorePivotParts(bytes,workbook,{refresh=true}={}){
     validatePivot(entry.spec);if(target===source)throw new Error('피벗 원본은 다른 시트여야 합니다.');
     target.pivot={...entry.spec,sourceSheetId:source?.id||'missing-source'};
     if(entry.rowOffset!==undefined&&(!Number.isInteger(entry.rowOffset)||entry.rowOffset<0||entry.rowOffset>17))throw new Error('피벗 위치 정보가 올바르지 않습니다.');
-    if(refresh&&entry.rowOffset)for(const owner of workbook.sheets)for(const cell of Object.values(owner.cells))if(cell.raw?.startsWith('='))for(let i=0;i<entry.rowOffset;i++)cell.raw=transformFormulaReferences(cell.raw,{axis:'r',index:0,delta:-1,targetSheet:target.name,ownerSheet:owner.name});
+    if(refresh&&entry.rowOffset){for(const owner of workbook.sheets)for(const cell of Object.values(owner.cells))if(cell.raw?.startsWith('='))for(let i=0;i<entry.rowOffset;i++)cell.raw=transformFormulaReferences(cell.raw,{axis:'r',index:0,delta:-1,targetSheet:target.name,ownerSheet:owner.name});for(let i=0;i<entry.rowOffset;i++)updateChartReferences(workbook,target.id,'r',0,-1);}
     restored.push(target);
   }
   if(refresh)for(const target of restored)try{applyPivot(workbook,target,target.pivot);}catch(error){target.pivotError=error.message;}

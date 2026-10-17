@@ -30,6 +30,23 @@ function validatePayload(payload){
     for(const c of s.cells){if(++cells>200000||!addrOK(c.address)||(c.raw!==undefined&&(typeof c.raw!=='string'||c.raw.length>32768))||(c.note!==undefined&&(typeof c.note!=='string'||c.note.length>32768)))throw Error('셀 변경 계획이 올바르지 않습니다.');if(c.style!==undefined){if(!c.style||typeof c.style!=='object'||Array.isArray(c.style))throw Error('서식이 올바르지 않습니다.');for(const [key,value] of Object.entries(c.style)){if(!['bold','italic','underline','wrap','border','fontFamily','fontSize','color','background','align','verticalAlign','format','numberFormat','decimals'].includes(key)||!['string','number','boolean'].includes(typeof value)&&value!==null||typeof value==='string'&&value.length>512||typeof value==='number'&&!Number.isFinite(value))throw Error('서식 속성이 올바르지 않습니다.');}}}
     for(const prop of ['columnWidths','rowHeights']){if(!s[prop]||typeof s[prop]!=='object'||Array.isArray(s[prop]))throw Error('크기가 올바르지 않습니다.');for(const [key,value] of Object.entries(s[prop]))if(!/^\d+$/.test(key)||+key>=(prop==='columnWidths'?16384:1048576)||value!==null&&(!Number.isFinite(value)||value<0||value>10000))throw Error('크기가 올바르지 않습니다.');}
     for(const prop of ['merge','unmerge'])if(!Array.isArray(s[prop])||s[prop].length>10000||!s[prop].every(rangeOK))throw Error('병합 범위가 올바르지 않습니다.');
+    if(s.deletedCharts!==undefined&&(!Array.isArray(s.deletedCharts)||s.deletedCharts.length>200||s.deletedCharts.some(n=>typeof n!=='string'||!n||n.length>256)))throw Error('차트 삭제 목록이 올바르지 않습니다.');
+    if(s.charts!==undefined){
+      if(!Array.isArray(s.charts)||s.charts.length>200)throw Error('차트 변경 계획이 올바르지 않습니다.');
+      for(const c of s.charts){
+        if(!c||typeof c!=='object'||c.name!==null&&(typeof c.name!=='string'||!c.name||c.name.length>256))throw Error('차트 이름이 올바르지 않습니다.');
+        for(const [key,value] of Object.entries(c)){
+          if(key==='name')continue;
+          if(['x','y','width','height'].includes(key)){if(!Number.isFinite(value)||value<0||value>100000000||['width','height'].includes(key)&&(value<100||value>10000))throw Error('차트 크기가 올바르지 않습니다.');}
+          else if(['title','xTitle','yTitle'].includes(key)){if(typeof value!=='string'||value.length>4000)throw Error('차트 제목이 올바르지 않습니다.');}
+          else if(['legend','labels','combo','secondaryAxis'].includes(key)){if(typeof value!=='boolean')throw Error('차트 표시 설정이 올바르지 않습니다.');}
+          else if(key==='range'){if(!rangeOK(value))throw Error('차트 원본 범위가 올바르지 않습니다.');}
+          else if(key==='chartType'){if(![51,52,53,57,58,59,4,63,64,1,76,77,5,-4120,-4169,15,-4151].includes(value))throw Error('지원되지 않는 차트 유형입니다.');}
+          else throw Error('허용되지 않는 차트 속성입니다.');
+        }
+        if(c.name===null&&(!c.range||c.chartType===undefined))throw Error('새 차트의 원본 범위가 필요합니다.');
+      }
+    }
   }
   for(const op of p.operations)if(typeof op.sheetId!=='string'||!['r','c'].includes(op.axis)||!Number.isInteger(op.index)||op.index<0||op.index>=(op.axis==='r'?1048576:16384)||![-1,1].includes(op.delta))throw Error('행/열 작업이 올바르지 않습니다.');
   if(JSON.stringify(p).length>25*1024*1024)throw Error('변경 계획이 너무 큽니다.');

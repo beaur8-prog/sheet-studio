@@ -75,3 +75,15 @@ test('Windows exports preserve internet origin and reject trust tokens for chang
     await markExport(out,Buffer.from('PK changed data'),token);assert.equal(await fs.readFile(out+':Zone.Identifier','utf8'),'[ZoneTransfer]\r\nZoneId=3\r\n');
   }finally{await fs.unlink(source);await fs.unlink(out);await fs.rmdir(dir);}
 });
+
+test('native chart plan preserves untouched charts and validates size, type, deletion and rebuild requests',async()=>{
+  const {book}=await fixture(),s=book.sheets[0];
+  const old={id:'old-chart',nativeName:'Chart 1',type:'bar',range:'A1:B2',x:10,y:20,width:500,height:300,title:'Before'};
+  s.charts=[structuredClone(old)];book.nativeSource.baseline[0].charts=[structuredClone(old)];
+  assert.deepEqual(buildNativePlan(book).sheets[0].charts,[]);
+  s.charts[0].width=650;s.charts[0].title='After';
+  const p=buildNativePlan(book);assert.deepEqual(p.sheets[0].charts,[{name:'Chart 1',width:650,title:'After'}]);
+  validatePayload({mode:'save',source:book.nativeSource,plan:p});
+  for(const patch of [{name:'Chart 1',Formula:'=UNSAFE()'},{name:'Chart 1',width:-1},{name:null,range:'A1:B2',chartType:999}]){const bad=structuredClone(p);bad.sheets[0].charts=[patch];assert.throws(()=>validatePayload({mode:'save',source:book.nativeSource,plan:bad}));}
+  s.charts=[];assert.deepEqual(buildNativePlan(book).sheets[0].deletedCharts,['Chart 1']);
+});

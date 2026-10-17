@@ -1,3 +1,4 @@
+import {validateChart} from './chart-schema.mjs';
 import {validatePivot} from './pivot-schema.mjs';
 /** A small, original spreadsheet evaluator. No JavaScript evaluation is used. */
 const MAX_ROWS = 1048576;
@@ -784,6 +785,7 @@ function validateWorkbook(data) {
     if (!object(sheet) || typeof sheet.id !== 'string' || !sheet.id || ids.has(sheet.id)) throw new Error('시트 ID가 올바르지 않습니다.');
     if (typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 31 || /[:\\/?*\[\]]/.test(sheet.name) || names.has(sheet.name.toLowerCase())) throw new Error('시트 이름이 올바르지 않습니다.');
     ids.add(sheet.id); names.add(sheet.name.toLowerCase());
+    for(const key of ['defaultColumnWidth','defaultRowHeight'])if(sheet[key]!==undefined&&(!Number.isFinite(sheet[key])||sheet[key]<1||sheet[key]>10000))throw new Error('시트 기본 크기가 올바르지 않습니다.');
     if (sheet.pivot !== undefined) { validatePivot(sheet.pivot); if (sheet.pivot.sourceSheetId === sheet.id) throw new Error('피벗 원본은 다른 시트여야 합니다.'); }
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
     for (const [ref, cell] of Object.entries(sheet.cells)) {
@@ -810,6 +812,7 @@ function validateWorkbook(data) {
     }
     if (sheet.merges.some(range => !validRange(range))) throw new Error('병합 범위가 올바르지 않습니다.');
     for (const chart of sheet.charts) {
+      validateChart(chart);
       if (!object(chart) || !validRange(chart.range)) throw new Error('차트 데이터 범위가 올바르지 않습니다.');
       for (const field of ['id', 'title', 'type']) if (chart[field] !== undefined && typeof chart[field] !== 'string') throw new Error('차트 속성이 올바르지 않습니다.');
       for (const field of ['width', 'height']) if (chart[field] !== undefined && (typeof chart[field] !== 'number' || !Number.isFinite(chart[field]) || chart[field] < 100 || chart[field] > 10000)) throw new Error('차트 크기가 올바르지 않습니다.');
@@ -817,6 +820,9 @@ function validateWorkbook(data) {
     }
   }
   if (typeof data.activeSheetId !== 'string' || !ids.has(data.activeSheetId)) throw new Error('활성 시트가 없습니다.');
+  if(data.chartTheme!==undefined&&(typeof data.chartTheme!=='string'||data.chartTheme.length>2000000||/<!DOCTYPE|<!ENTITY/i.test(data.chartTheme)))throw new Error('차트 테마가 올바르지 않습니다.');
+  if(data.chartNames!==undefined&&(!Array.isArray(data.chartNames)||data.chartNames.length>10000||data.chartNames.some(n=>!object(n)||typeof n.name!=='string'||n.name.length>255||typeof n.formula!=='string'||n.formula.length>8192||n.sheetId!==undefined&&typeof n.sheetId!=='string'||n.hidden!==undefined&&typeof n.hidden!=='boolean')))throw new Error('차트 이름 참조가 올바르지 않습니다.');
+  if(data.chartNameSheets!==undefined&&(!Array.isArray(data.chartNameSheets)||data.chartNameSheets.length>100||data.chartNameSheets.some(s=>!object(s)||typeof s.id!=='string'||typeof s.name!=='string'||s.name.length>31)))throw new Error('차트 원본 시트가 올바르지 않습니다.');
   if (data.nativeSource !== undefined) {
     const source=data.nativeSource;
     if(!object(source)||source.format!=='xlsm'||typeof source.filename!=='string'||source.filename.length>255||typeof source.base64!=='string'||source.base64.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(source.base64)||!Array.isArray(source.baseline)||!source.baseline.length||!Array.isArray(source.operations)||source.operations.length>10000)throw new Error('VBA 원본 데이터가 올바르지 않습니다.');
@@ -828,7 +834,7 @@ function validateWorkbook(data) {
 }
 
 export function parseWorkbook(text) {
-  if (typeof text !== 'string' || text.length > 25000000) throw new Error('통합 문서 크기가 제한을 초과했습니다.');
+  if (typeof text !== 'string' || text.length > 100000000) throw new Error('통합 문서 크기가 제한을 초과했습니다.');
   const data = JSON.parse(text, (key, value) => {
     if (key === '__proto__' || key === 'prototype' || key === 'constructor') throw new Error('안전하지 않은 통합 문서 키입니다.');
     return value;

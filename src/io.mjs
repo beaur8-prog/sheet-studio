@@ -3,6 +3,7 @@ import { createEvaluator,transformFormulaReferences } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
 import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
 import {applyPivot} from './pivot.mjs';
+import {restoreChartParts,addChartParts} from './chart-xlsx.mjs';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_CELLS = 200_000;
@@ -174,6 +175,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if (!sheets.length) sheets.push(newSheet());
   const activeIndex = book.views?.[0]?.activeTab || 0;
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
+  await restoreChartParts(data,result);
   await restorePivotParts(data,result,{refresh:!/\.xlsm$/i.test(filename)});
   return /\.xlsm$/i.test(filename) ? attachNativeSource(result, data, filename) : result;
 }
@@ -282,6 +284,8 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   const names = new Set(), exportNames = new Map();
   for (const sheet of workbook.sheets) {
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
+    if(sheet.defaultColumnWidth)target.properties.defaultColWidth=(sheet.defaultColumnWidth-5)/7;
+    if(sheet.defaultRowHeight)target.properties.defaultRowHeight=sheet.defaultRowHeight*3/4;
     exportNames.set(sheet.id,target.name);
     const pageFilters=sheet.pivot?.filters.filter(f=>!sheet.pivot.rows.includes(f.field)&&!sheet.pivot.columns.includes(f.field))||[];
     pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
@@ -310,6 +314,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       target.mergeCells(merge);
     }
   }
-  const data = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
+  const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
+  const data = await addChartParts(pivotBytes,workbook,exportNames);
   return { data, mime: XLSX_MIME, extension: 'xlsx' };
 }

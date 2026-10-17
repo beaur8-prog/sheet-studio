@@ -9,10 +9,13 @@ function Write-State([string]$state,[string]$message) {
 }
 function Release-Com($object) { if ($null -ne $object -and [Runtime.InteropServices.Marshal]::IsComObject($object)) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($object) } }
 function Check-Cancel { if(Test-Path -LiteralPath (Join-Path $JobDir 'cancel.flag')){throw [OperationCanceledException]::new('Excel 작업을 취소했습니다.')} }
+function Preserve-Origin([string]$file,[string]$zone) {
+  if($zone){Set-Content -LiteralPath $file -Stream Zone.Identifier -Encoding Byte -Value $utf8.GetBytes($zone)}
+}
 function Save-Result($workbook,$zone) {
   $output=Join-Path $JobDir 'result.xlsm'
   [void]$workbook.SaveCopyAs($output)
-  if($zone){[IO.File]::WriteAllText($output+':Zone.Identifier',[string]$zone,$utf8)}
+  Preserve-Origin $output $zone
 }
 if ($CancelOwned) {
   $ownerPath = Join-Path $JobDir 'owner.json'
@@ -70,6 +73,21 @@ function Set-Cell($sheet,$patch) {
     if (Has-Field $patch 'note') { if($cell.Comment){[void]$cell.Comment.Delete()};if($patch.note){[void]$cell.AddComment([string]$patch.note)} }
   } finally {Release-Com $cell}
 }
+function Set-Chart($sheet,$patch) {
+  $object=$null;$chart=$null
+  try {
+    if($patch.name){$object=$sheet.ChartObjects().Item([string]$patch.name)}else{$object=$sheet.ChartObjects().Add([double]$patch.x*0.75,[double]$patch.y*0.75,[double]$patch.width*0.75,[double]$patch.height*0.75)}
+    $chart=$object.Chart
+    if(Has-Field $patch 'range'){$chart.SetSourceData($sheet.Range([string]$patch.range),2)}
+    if(Has-Field $patch 'chartType'){$chart.ChartType=[int]$patch.chartType}
+    if($patch.combo){$series=$chart.SeriesCollection();if($series.Count -gt 1){$last=$series.Item($series.Count);$last.ChartType=4;if($patch.secondaryAxis){$last.AxisGroup=2};Release-Com $last};Release-Com $series}
+    foreach($key in @('x','y','width','height')){if(Has-Field $patch $key){$value=[double]$patch.$key*0.75;switch($key){'x'{$object.Left=$value}'y'{$object.Top=$value}'width'{$object.Width=$value}'height'{$object.Height=$value}}}}
+    if(Has-Field $patch 'title'){$chart.HasTitle=[bool]$patch.title;if($patch.title){$chart.ChartTitle.Text=[string]$patch.title}}
+    if(Has-Field $patch 'legend'){$chart.HasLegend=[bool]$patch.legend}
+    if(Has-Field $patch 'labels'){if($patch.labels){[void]$chart.ApplyDataLabels()}else{foreach($series in $chart.SeriesCollection()){$series.HasDataLabels=$false;Release-Com $series}}}
+    foreach($field in @('xTitle','yTitle')){if((Has-Field $patch $field) -and $chart.ChartType -notin @(5,-4120,-4151,81,82)){$axisType=1;if($field -eq 'yTitle'){$axisType=2};if($chart.HasAxis($axisType,1)){$axis=$chart.Axes($axisType,1);$axis.HasTitle=[bool]$patch.$field;if($patch.$field){$axis.AxisTitle.Text=[string]$patch.$field};Release-Com $axis}}}
+  }finally{Release-Com $chart;Release-Com $object}
+}
 function Apply-Plan($book,$plan) {
   $map=@{}
   foreach($entry in $plan.sheets) {
@@ -88,6 +106,8 @@ function Apply-Plan($book,$plan) {
       foreach($p in $entry.columnWidths.PSObject.Properties){$r=$sheet.Columns.Item([int]$p.Name+1);try{if($null -eq $p.Value){$r.ColumnWidth=$sheet.StandardWidth}else{$r.ColumnWidth=[Math]::Max(1,([double]$p.Value-5)/7)}}finally{Release-Com $r}}
       foreach($p in $entry.rowHeights.PSObject.Properties){$r=$sheet.Rows.Item([int]$p.Name+1);try{if($null -eq $p.Value){$r.RowHeight=$sheet.StandardHeight}else{$r.RowHeight=[Math]::Max(1,[double]$p.Value*3/4)}}finally{Release-Com $r}}
       foreach($range in $entry.merge){$r=$sheet.Range([string]$range);try{[void]$r.Merge()}finally{Release-Com $r}}
+      foreach($name in $entry.deletedCharts){$object=$sheet.ChartObjects().Item([string]$name);try{[void]$object.Delete()}finally{Release-Com $object}}
+      foreach($patch in $entry.charts){Set-Chart $sheet $patch}
     }
     if($map.ContainsKey([string]$plan.activeSheetId) -and $map[[string]$plan.activeSheetId].Visible -eq -1){[void]$map[[string]$plan.activeSheetId].Activate()}
   }finally{foreach($s in $map.Values){Release-Com $s}}
@@ -127,7 +147,7 @@ try {
     }
   }
   [void]$book.Save()
-  if($request.zone){[IO.File]::WriteAllText($sourcePath+':Zone.Identifier',[string]$request.zone,$utf8)}
+  Preserve-Origin $sourcePath $request.zone
   if($request.mode -eq 'save'){
     Save-Result $book $request.zone
     Write-State 'completed' 'VBA 프로젝트를 유지한 XLSM을 저장했습니다.'

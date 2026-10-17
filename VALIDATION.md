@@ -2,6 +2,17 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.4.0 — Excel 차트 호환성 확대
+
+- `npm test`: **50/50 통과**. 18개 차트 조합의 네이티브 XLSX/JSON 왕복, 여러 계열, 참조·캐시·시트 이름 변경, 제목·범례·레이블·축 제목, 반복 저장, 정의된 이름, 알 수 없는 차트/연결 이미지/ChartEx 보존 및 제한된 네이티브 변경 계획을 검증했습니다.
+- `node scripts/chart-native-smoke.mjs`: 설치된 Windows Excel에서 **새 차트 18개 조합**을 열고 차트 유형·첫 계열 값·한국어 제목을 확인한 뒤 재저장했습니다. 혼합형의 계열별 막대/꺾은선 유형과 주축/보조축도 확인했습니다. **Excel에서 만든 기존 차트 13개**(3D·표면형 포함)를 가져와 제목·크기·셀 값 변경을 반영하고, 차트 개수와 원본 파일 불변을 검증했습니다.
+- `node scripts/chart-xlsm-smoke.mjs`: Windows Excel 보존 경로로 기존 차트 제목·크기·범례 수정, 새 차트 18개 생성, 삭제, 원본 XLSM 불변 검사를 통과했습니다. 인터넷 출처 표시를 실제 Windows 대체 데이터 스트림에 기록하도록 고쳤으며, 출처를 알 수 없는 입력에도 표시를 유지하는 저장 경로를 확인했습니다. VBA 매크로 실행 성공 검사는 아닙니다.
+- `npm run package:win`: 통과. `node scripts/electron-smoke.cjs --packaged`, `node tests/ui-charts.mjs --packaged`, `node tests/ui-excel-charts.mjs --packaged`, `node tests/ui-pivot.mjs --packaged`, `node scripts/vba-ui-smoke.cjs --packaged` 모두 통과했습니다. 실제 배포용 앱에서 차트 10종 생성, 설정, XLSX 저장/열기, 셀 변경, 원본 차트의 명시적인 변환, 지원하지 않는 차트의 변환, 실행 취소·재시작과 기존 8방향 크기 조절을 확인했습니다. 렌더러 예외 0개이며 혼합형·도넛형 화면을 시각적으로 확인했습니다.
+- 최신 ChartEx는 합성 OOXML의 파트·관계 보존만 검사했습니다. 로컬 Excel에서 최신 차트 생성 호출이 거부되어 실제 최신 차트 왕복은 미검증입니다. 주식형 생성용 네이티브 테스트 자료도 성립하지 않아 원본 보존은 합성 자료로 검사했습니다. 전체 Excel 차트 기능과의 동일성을 뜻하지 않습니다.
+- macOS 공통 코드와 패키지 UI 검사 워크플로를 갱신했습니다. 실제 Mac 빌드·실행은 **미검증**입니다. 지원 유형과 제한은 [차트 안내](docs/CHARTS.md)에 있습니다.
+
+0.4.0 휴대용 실행 파일: `release/0.4.0/win-x64/Sheet-Studio-0.4.0-Windows-x64.exe` (92,026,342 bytes). SHA-256: `ff60a771502e285f8344cef1e740500dce2a8cca83e951c96a4fffdcc9c93c4b`. Windows 실행 파일은 코드 서명하지 않았습니다.
+
 ## 0.3.1 — 차트 크기 조절 / macOS 빌드 경로
 
 - `npm test`: **43/43 통과**. 차트 최소·최대 크기, 반대편 고정점, JSON 크기 보존 및 이전 문서 기본 크기, Mac 아키텍처 선택과 메뉴 동작 검사를 추가했습니다.
