@@ -36,7 +36,7 @@ function Set-Cell($sheet,$patch) {
       $raw=[string]$patch.raw
       if ($raw -eq '') { [void]$cell.ClearContents() }
       elseif ($raw.StartsWith('=')) { try {$cell.Formula2=$raw} catch {$cell.Formula=$raw} }
-      elseif ($raw.StartsWith("'")) {$cell.Value2=$raw}
+      elseif ($raw.StartsWith("'")) {$cell.Value2=[string]$raw}
       elseif ($raw -match '^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$') { $cell.Value2=[double]::Parse($raw,[Globalization.CultureInfo]::InvariantCulture) }
       elseif ($raw -match '^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$') {$cell.Value2=[double]::Parse($raw.TrimEnd('%'),[Globalization.CultureInfo]::InvariantCulture)/100}
       elseif ($raw -match '^(?i:TRUE|FALSE)$') {$cell.Value2=($raw.ToUpperInvariant() -eq 'TRUE')}
@@ -58,11 +58,11 @@ function Set-Cell($sheet,$patch) {
           'align' {$align=@{left=-4131;center=-4108;right=-4152;fill=5;justify=-4130;distributed=-4117;centerContinuous=7};if($align.ContainsKey([string]$value)){$cell.HorizontalAlignment=$align[[string]$value]}else{$cell.HorizontalAlignment=1}}
           'verticalAlign' {$align=@{top=-4160;middle=-4108;bottom=-4107};if($align.ContainsKey([string]$value)){$cell.VerticalAlignment=$align[[string]$value]}else{$cell.VerticalAlignment=-4107}}
           'border' {if($value){$cell.Borders.LineStyle=1;$cell.Borders.Weight=2}else{$cell.Borders.LineStyle=-4142}}
-          'format' {$formats=@{general='General';number='#,##0.00';currency='₩#,##0.00';accounting='₩#,##0.00';percent='0.00%';date='yyyy-mm-dd'};if($formats.ContainsKey([string]$value)){$cell.NumberFormat=$formats[[string]$value]}else{$cell.NumberFormat='General'}}
+          'format' {$formats=@{general=[string]$sheet.Application.International(26);number='#,##0.00';currency='₩#,##0.00';accounting='₩#,##0.00';percent='0.00%';date='yyyy-mm-dd'};if($formats.ContainsKey([string]$value)){$cell.NumberFormat=[string]$formats[[string]$value]}else{$cell.NumberFormat=[string]$sheet.Application.International(26)}}
         }
       }
-      if ((Has-Field $style 'numberFormat') -and $style.numberFormat) {$cell.NumberFormat=[string]$style.numberFormat}
-      if ((Has-Field $style 'decimals') -and $null -ne $style.decimals) {
+      if ((Has-Field $style 'numberFormat') -and $style.numberFormat) {if($style.numberFormat -eq 'General'){$cell.NumberFormat=[string]$sheet.Application.International(26)}else{$cell.NumberFormat=[string]$style.numberFormat}}
+      if ((Has-Field $style 'decimals') -and $null -ne $style.decimals -and $style.format -in @('number','currency','accounting','percent')) {
         $places=[Math]::Min(12,[Math]::Max(0,[int]$style.decimals));$fraction='';if($places){$fraction='.'+('0'*$places)}
         if($style.format -eq 'percent'){$cell.NumberFormat='0'+$fraction+'%'}elseif($style.format -in @('currency','accounting')){$cell.NumberFormat='₩#,##0'+$fraction}else{$cell.NumberFormat='#,##0'+$fraction}
       }
@@ -116,6 +116,16 @@ try {
   $book=$excel.Workbooks.Open($sourcePath,0,$false)
   if($book.ReadOnly){throw 'Excel opened the working copy read-only. Check workbook protection or trust settings in Excel.'}
   Apply-Plan $book $request.plan
+  # Preserve app pivot settings alongside the materialized XLSM result. Only our namespace is replaced.
+  if($null -ne $request.plan.pivots){
+    $parts=$book.CustomXMLParts.SelectByNamespace('urn:sheet-studio:pivots:1')
+    for($i=$parts.Count;$i -ge 1;$i--){$part=$parts.Item($i);[void]$part.Delete();Release-Com $part};Release-Com $parts
+    if(@($request.plan.pivots).Count -gt 0){
+      $json=ConvertTo-Json -InputObject @($request.plan.pivots) -Depth 20 -Compress
+      $xml='<pivots xmlns="urn:sheet-studio:pivots:1">'+[Security.SecurityElement]::Escape($json)+'</pivots>'
+      $part=$book.CustomXMLParts.Add($xml);Release-Com $part
+    }
+  }
   [void]$book.Save()
   if($request.zone){[IO.File]::WriteAllText($sourcePath+':Zone.Identifier',[string]$request.zone,$utf8)}
   if($request.mode -eq 'save'){

@@ -1,6 +1,8 @@
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
-import { createEvaluator } from './engine.mjs';
+import { createEvaluator,transformFormulaReferences } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
+import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
+import {applyPivot} from './pivot.mjs';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_CELLS = 200_000;
@@ -172,6 +174,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if (!sheets.length) sheets.push(newSheet());
   const activeIndex = book.views?.[0]?.activeTab || 0;
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
+  await restorePivotParts(data,result,{refresh:!/\.xlsm$/i.test(filename)});
   return /\.xlsm$/i.test(filename) ? attachNativeSource(result, data, filename) : result;
 }
 
@@ -269,20 +272,28 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     }
     return { data: new TextEncoder().encode('\uFEFF' + rows.join('\r\n')), mime: kind === 'csv' ? 'text/csv;charset=utf-8' : 'text/tab-separated-values;charset=utf-8', extension: kind };
   }
+  // Export a consistent snapshot: cached result cells and native pivot cache use the same source.
+  if(workbook.sheets.some(s=>s.pivot)){workbook=structuredClone(workbook);for(const s of workbook.sheets)if(s.pivot)applyPivot(workbook,s,s.pivot);}
   const book = new ExcelJS.Workbook();
   book.creator = 'Sheet Studio';
   book.created = new Date(); book.modified = new Date();
   book.calcProperties.fullCalcOnLoad = true;
   book.views = [{ activeTab: Math.max(0, workbook.sheets.findIndex(sheet => sheet.id === workbook.activeSheetId)), visibility: 'visible' }];
-  const names = new Set();
+  const names = new Set(), exportNames = new Map();
   for (const sheet of workbook.sheets) {
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
+    exportNames.set(sheet.id,target.name);
+    const pageFilters=sheet.pivot?.filters.filter(f=>!sheet.pivot.rows.includes(f.field)&&!sheet.pivot.columns.includes(f.field))||[];
+    pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
     for (const [addr, cell] of Object.entries(sheet.cells || {})) {
       if (!coordinates(addr)) continue;
-      const targetCell = target.getCell(addr);
+      const pos=coordinates(addr), offset=pageFilters.length?pageFilters.length+1:0;
+      const targetCell = target.getCell(offset?address(pos.col,pos.row+offset):addr);
       if (typeof cell.raw === 'string' && cell.raw.startsWith('=')) {
         const result = cachedResult(evaluate, workbook, sheet, addr, cell);
-        targetCell.value = { formula: cell.raw.slice(1), ...(result === undefined ? {} : { result }) };
+        let formula=cell.raw;
+        for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
+        targetCell.value = { formula: formula.slice(1), ...(result === undefined ? {} : { result }) };
       } else targetCell.value = toScalar(cell.raw);
       applyStyle(targetCell, cell.style);
       if (typeof cell.raw === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim()) && (!cell.style?.format || cell.style.format === 'general')) targetCell.numFmt = '0.00%';
@@ -292,13 +303,13 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if (/^\d+$/.test(index) && Number(index) < 16384 && Number.isFinite(Number(width))) target.getColumn(Number(index) + 1).width = Math.max(1, (Number(width) - 5) / 7);
     }
     for (const [index, height] of Object.entries(sheet.rowHeights || {})) {
-      if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1).height = Math.max(1, Number(height) * 3 / 4);
+      if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, Number(height) * 3 / 4);
     }
     for (const merge of sheet.merges || []) {
       if (typeof merge !== 'string' || !/^[A-Z]+\d+:[A-Z]+\d+$/i.test(merge)) continue;
       target.mergeCells(merge);
     }
   }
-  const data = new Uint8Array(await book.xlsx.writeBuffer());
+  const data = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
   return { data, mime: XLSX_MIME, extension: 'xlsx' };
 }

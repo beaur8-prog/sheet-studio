@@ -1,3 +1,4 @@
+import {validatePivot} from './pivot-schema.mjs';
 /** A small, original spreadsheet evaluator. No JavaScript evaluation is used. */
 const MAX_ROWS = 1048576;
 const MAX_COLS = 16384;
@@ -783,6 +784,7 @@ function validateWorkbook(data) {
     if (!object(sheet) || typeof sheet.id !== 'string' || !sheet.id || ids.has(sheet.id)) throw new Error('시트 ID가 올바르지 않습니다.');
     if (typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 31 || /[:\\/?*\[\]]/.test(sheet.name) || names.has(sheet.name.toLowerCase())) throw new Error('시트 이름이 올바르지 않습니다.');
     ids.add(sheet.id); names.add(sheet.name.toLowerCase());
+    if (sheet.pivot !== undefined) { validatePivot(sheet.pivot); if (sheet.pivot.sourceSheetId === sheet.id) throw new Error('피벗 원본은 다른 시트여야 합니다.'); }
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
     for (const [ref, cell] of Object.entries(sheet.cells)) {
       if (++cellCount > 200000) throw new Error('통합 문서의 셀 수가 제한을 초과했습니다.');

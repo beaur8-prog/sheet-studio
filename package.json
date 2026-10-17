@@ -1,6 +1,6 @@
 {
   "name": "lattice-sheet-studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Independent local spreadsheet editor with formulas and XLSX exchange",
   "author": "Sheet Studio",
   "private": true,
@@ -18,13 +18,13 @@
     "test:desktop": "npm run build && node scripts/electron-smoke.cjs"
   },
   "dependencies": {
-    "exceljs": "4.4.0"
+    "exceljs": "4.4.0",
+    "jszip": "3.10.2"
   },
   "devDependencies": {
     "electron": "42.11.15",
     "electron-builder": "26.15.3",
     "playwright": "1.64.1",
-    "jszip": "3.10.2",
     "resedit": "1.7.2",
     "vite": "7.3.7"
   },

@@ -2,6 +2,19 @@
 
 검증일: 2026-10-18 (Asia/Seoul).
 
+## 0.3.0 — 피벗테이블
+
+- `npm test`: **39/39 통과**. 교차 집계, 가중 총평균, 여러 값/필드, 빈 셀·자료형 구분, 계산 오류, 범위 변경, JSON 설정, 실제 XLSX 파트/왕복, 보고서 필터 위치와 다른 시트의 참조 수식 보존을 검증했습니다.
+- `node tests/ui-pivot.mjs`: 실제 화면에서 생성, 필드/집계 변경, 미리 보기, 결과 셀 보호, 원본 편집 뒤 새로 고침, 재시작, XLSX 저장/열기, 필터, 일반 범위 변환과 실행 취소 통과. 필드 편집 및 결과 화면의 스크린샷을 시각적으로 확인했습니다.
+- 기존 `ui-smoke.mjs` 및 `ui-features.mjs`: 통과.
+- `node scripts/pivot-native-smoke.mjs`: 설치된 Excel에서 9가지 XLSX 사례(합계, 평균, 다중 행·값, 다중 열·값, 행 필터, 보고서 필터, 값만 집계, 총합계 끄기, 필터 결과 0행)를 개방했습니다. 비어 있지 않은 8개는 실제 네이티브 PivotTable 존재와 새로 고침, 총합계를 검증했습니다. 0행 결과는 정적 셀과 앱 설정만 저장하는 예외를 확인했습니다. Excel이 다시 저장한 파일에서 앱 피벗 설정을 복원했습니다.
+- 같은 네이티브 검사에서 앱 피벗이 포함된 XLSM을 Excel 보존 경로로 저장하고 결과 셀·Custom XML 설정·원본 파일 불변을 확인했습니다. 이는 새 XLSM 네이티브 피벗 생성이나 VBA 실행 성공을 뜻하지 않습니다.
+- `node scripts/electron-smoke.cjs --packaged`, `node tests/ui-pivot.mjs --packaged`, `node scripts/vba-ui-smoke.cjs --packaged`: 배포용 Windows 앱에서 통과. 렌더러 예외 0개, 기존 Excel 연결과 XLSM 보존 저장도 통과했습니다.
+- 확인 중 고친 문제: 필드 선택 상자의 너비, Excel 피벗의 숫자 캐시 저장 방식, 보고서 필터 공간, 수식 참조 위치, 모든 항목을 제외한 Excel 필터, 한국어 Excel의 General 숫자 서식 및 텍스트 COM 변환.
+- 범위/호환성 한계는 [피벗 안내](docs/PIVOT.md)에 기록했습니다. 날짜 그룹·소계·슬라이서, 외부/OLAP 피벗, 기존 Excel 피벗 설정의 역변환은 검증 범위가 아닙니다.
+
+0.3.0 휴대용 실행 파일: `release/Sheet-Studio-0.3.0-Windows.exe` (91,997,987 bytes). SHA-256: `66c87c7c9e2d6cc3482f2a595fd01ba94fcae4fbf97951972260b21a4c09d8bb`. Windows 실행 파일은 코드 서명하지 않았습니다.
+
 ## 0.2.0 — XLSM / VBA 연결
 
 - `npm test`: **31/31 통과**. 기존 25개에 원본 XLSM 바이트/JSON 보존, 명시적인 매크로 제외 변환, 최소 변경 계획, 구조 변경 비교, 유효하지 않은 native 요청 거부, 사용자 함수 저장값 표시와 Windows 출처 표시 유지 검사를 추가했습니다.

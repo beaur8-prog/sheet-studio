@@ -42,7 +42,7 @@ export function buildNativePlan(workbook){
     const dimensions=prop=>Object.fromEntries([...new Set([...Object.keys(before?.[prop]||{}),...Object.keys(sheet[prop]||{})])].filter(key=>!equal(before?.[prop]?.[key],sheet[prop]?.[key])).map(key=>[key,sheet[prop]?.[key]??null]));
     return {id:sheet.id,sourceName:before?.name??null,name:sheet.name,cells,columnWidths:dimensions('columnWidths'),rowHeights:dimensions('rowHeights'),unmerge:(before?.merges||[]).filter(v=>!(sheet.merges||[]).includes(v)),merge:(sheet.merges||[]).filter(v=>!(before?.merges||[]).includes(v))};
   });
-  return {sheets,deleted:source.baseline.filter(s=>!workbook.sheets.some(v=>v.id===s.id)).map(s=>s.name),operations:clone(source.operations||[]),activeSheetId:workbook.activeSheetId};
+  return {pivots:workbook.sheets.filter(s=>s.pivot).map(s=>({sheet:s.name,source:workbook.sheets.find(source=>source.id===s.pivot.sourceSheetId)?.name||null,spec:clone(s.pivot)})),sheets,deleted:source.baseline.filter(s=>!workbook.sheets.some(v=>v.id===s.id)).map(s=>s.name),operations:clone(source.operations||[]),activeSheetId:workbook.activeSheetId};
 }
 
 export function nativeSourceChanged(workbook){const p=buildNativePlan(workbook);return !!(p.deleted.length||p.operations.length||p.sheets.some(s=>!s.sourceName||s.name!==s.sourceName||s.cells.length||s.merge.length||s.unmerge.length||Object.keys(s.columnWidths).length||Object.keys(s.rowHeights).length));}

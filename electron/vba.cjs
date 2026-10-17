@@ -23,6 +23,7 @@ function validatePayload(payload){
   if(!source||typeof source.base64!=='string'||source.base64.length>MAX_BYTES*4/3+4||!/^[A-Za-z0-9+/]*={0,2}$/.test(source.base64))throw Error('XLSM 원본 데이터가 올바르지 않습니다.');
   const data=Buffer.from(source.base64,'base64');if(data.length>MAX_BYTES||data.length<4||data[0]!==80||data[1]!==75)throw Error('XLSM ZIP 파일이 아닙니다.');
   const p=payload.plan;if(!p||!Array.isArray(p.sheets)||!p.sheets.length||p.sheets.length>100||!Array.isArray(p.deleted)||!p.deleted.every(nameOK)||!Array.isArray(p.operations)||p.operations.length>10000)throw Error('변경 계획이 올바르지 않습니다.');
+  if(p.pivots!==undefined&&(!Array.isArray(p.pivots)||p.pivots.length>100||JSON.stringify(p.pivots).length>2000000||p.pivots.some(v=>!v||!nameOK(v.sheet)||(v.source!==null&&!nameOK(v.source))||!v.spec||v.spec.version!==1)))throw Error('피벗 저장 설정이 올바르지 않습니다.');
   const ids=new Set(),names=new Set();let cells=0;
   for(const s of p.sheets){
     if(typeof s.id!=='string'||s.id.length>150||ids.has(s.id)||!nameOK(s.name)||names.has(s.name.toLowerCase())||(s.sourceName!==null&&!nameOK(s.sourceName))||!Array.isArray(s.cells))throw Error('시트 변경 계획이 올바르지 않습니다.');ids.add(s.id);names.add(s.name.toLowerCase());
