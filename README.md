@@ -13,7 +13,7 @@ npm ci
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.1/win-x64/Sheet-Studio-0.7.1-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.2/win-x64/Sheet-Studio-0.7.2-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
 **Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon) 또는 `--arch=x64`(Intel)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS 실제 실행 검증은 아직 하지 않았습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 
@@ -29,7 +29,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 - 셀 편집, 키보드 이동, 범위 선택, 복사·잘라내기·붙여넣기, 아래/오른쪽 채우기, Ctrl+Enter 범위 입력, 실행 취소·다시 실행
 - 자동 합계 범위 점선·확정/취소, 수식 참조 색상, 마우스·방향키 참조 선택, 다른 시트 참조 지정, F4 상대/절대 참조 전환 ([사용법과 점검 결과](docs/FEATURE-REVIEW.md))
 - 틀 고정, 복사 점선, 값·수식·서식 선택하여 붙여넣기·행/열 바꿈, 행·열 숨기기/자동 맞춤 ([워크시트 안내](docs/WORKSHEET.md))
-- 가상화 격자: A1부터 XFD1048576까지 이동, 열 너비·행 높이 조절
+- 가상화 격자: A1부터 XFD1048576까지 이동, 머리글 경계 드래그로 열 너비·행 높이 조절, 실시간 크기 안내·Esc 취소
 - 여러 시트, 이름 변경, 복제, 삭제, 다른 시트의 셀 참조
 - 행·열 삽입과 삭제, 연결된 수식과 범위 참조 조정
 - 글꼴, 굵게·기울임꼴·밑줄, 색, 정렬, 숫자·통화·날짜·백분율 표시, 셀 병합, 메모
@@ -64,6 +64,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 - [분석 요약](docs/ANALYSIS.md): 네이티브 분석과 화면 관찰의 범위 및 구현과의 구분
 - [검증 기록](VALIDATION.md): 테스트 실행과 실행 파일 확인
+- `node tests/ui-dimensions.mjs --packaged`: 열·행 경계 드래그, 안내선, 실행 취소, 자동 맞춤과 확대/고정 상태 검사
 - `node tests/ui-worksheet.mjs --packaged`: 틀 고정·붙여넣기·범위 입력·숨기기·조건부 서식 UI 검사
 - `node scripts/worksheet-native-smoke.mjs`: 설치된 Excel과 새 워크시트 기능 및 XLSM 저장 비교
 - `node tests/ui-functions.mjs --packaged`: 함수 검색·범주·삽입·자동 완성·인수 안내·수식 저장 검사
