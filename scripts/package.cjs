@@ -26,23 +26,26 @@ async function packageApp() {
   const icon = await createIcon(path.join(stage, 'electron'));
   await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({
     name: manifest.name, version: manifest.version, description: manifest.description,
-    author: manifest.author, main: manifest.main,
+    author: manifest.author, main: manifest.main, homepage: 'https://github.com/beaur8-prog/sheet-studio',
   }, null, 2));
   const output = process.env.SHEET_STUDIO_OUTPUT_DIR
     ? path.resolve(process.env.SHEET_STUDIO_OUTPUT_DIR)
     : outputDir(root, manifest.version, target.platform, target.arch);
-  const mac = target.platform === 'darwin';
+  const mac = target.platform === 'darwin', linux = target.platform === 'linux';
   let appOutDir;
   const artifacts = await build({
     projectDir: stage,
     publish: 'never',
-    targets: (mac ? Platform.MAC : Platform.WINDOWS).createTarget(target.directory ? 'dir' : mac ? ['dmg', 'zip'] : 'nsis', Arch[target.arch]),
+    targets: (mac ? Platform.MAC : linux ? Platform.LINUX : Platform.WINDOWS).createTarget(target.directory ? 'dir' : mac ? ['dmg', 'zip'] : linux ? 'deb' : 'nsis', Arch[target.arch]),
     config: {
       appId: 'local.lattice.sheetstudio', productName: 'Sheet Studio', publish: null,
       electronVersion: runtime.version, ...(reuseRuntime ? { electronDist: path.join(electronRoot, 'dist') } : {}),
       npmRebuild: false, asar: true,
       directories: { output },
       files: ['dist/**/*', 'electron/**/*', 'package.json'],
+      linux: { target: 'deb', executableName: 'sheet-studio', category: 'Office', icon: path.join(stage, 'electron/app.png'),
+        artifactName: 'Sheet-Studio-${version}-Linux-${arch}.${ext}',
+        maintainer: 'beaur8-prog <beaur8-prog@users.noreply.github.com>' },
       win: { target: 'nsis', signAndEditExecutable: false, icon },
       nsis: {
         artifactName: 'Sheet-Studio-${version}-Windows-${arch}-Setup.exe',
@@ -61,7 +64,7 @@ async function packageApp() {
         // Leave the installed runtime untouched.
         if (mac) await require('node:util').promisify(require('node:child_process').execFile)(
           '/usr/bin/xattr', ['-cr', path.join(context.appOutDir, 'Sheet Studio.app')]);
-        if (!mac) await brandExecutable(path.join(context.appOutDir, 'Sheet Studio.exe'), icon, manifest.version, root);
+        if (target.platform === 'win32') await brandExecutable(path.join(context.appOutDir, 'Sheet Studio.exe'), icon, manifest.version, root);
       },
     },
   });

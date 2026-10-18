@@ -20,6 +20,9 @@ jobs:
           - runner: windows-latest
             platform: win
             arch: x64
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
@@ -40,13 +43,33 @@ jobs:
         run: |
           node -e "if(process.env.RELEASE_TAG!=='v'+require('./package.json').version)throw Error('Tag/version mismatch')"
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+      - name: Install Linux test dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2 libgbm1
       - run: npm ci
       - run: npm run runtime:install
       - run: npm test
       - run: npm run package -- --${{ matrix.platform }} --arch=${{ matrix.arch }}
-      - run: node scripts/electron-smoke.cjs --packaged
-      - run: node tests/ui-sheet-lifecycle.mjs --packaged
-      - run: node tests/ui-colors.mjs --packaged
+      - name: Install Linux DEB
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get install -y ./release/*/linux-x64/*.deb
+          test -x '/opt/Sheet Studio/sheet-studio'
+          test -f /usr/share/applications/sheet-studio.desktop
+          echo 'SHEET_STUDIO_EXECUTABLE=/opt/Sheet Studio/sheet-studio' >> "$GITHUB_ENV"
+      - name: Test packaged application
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = linux ]; then
+            xvfb-run -a node scripts/electron-smoke.cjs --packaged
+            xvfb-run -a node tests/ui-sheet-lifecycle.mjs --packaged
+            xvfb-run -a node tests/ui-colors.mjs --packaged
+          else
+            node scripts/electron-smoke.cjs --packaged
+            node tests/ui-sheet-lifecycle.mjs --packaged
+            node tests/ui-colors.mjs --packaged
+          fi
       - name: Verify Windows installation and shortcut
         if: matrix.platform == 'win'
         shell: pwsh

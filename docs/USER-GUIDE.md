@@ -2,9 +2,9 @@
 
 > **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
 
-v0.7.6 기준 · 2026년 10월 18일
+v0.7.7 기준 · 2026년 10월 18일
 
-[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.6) · [버전별 변경 내역](CHANGELOG.md)
+[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.7) · [버전별 변경 내역](CHANGELOG.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -20,12 +20,13 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.6)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.7)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.6-macOS-arm64.dmg` 또는 `.zip` |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.6-Windows-x64-Setup.exe` |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.7-macOS-arm64.dmg` 또는 `.zip` |
+| Windows 64비트 x64 | `Sheet-Studio-0.7.7-Windows-x64-Setup.exe` |
+| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.7-Linux-x64.deb` |
 
 ### Mac
 
@@ -38,12 +39,25 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ### Windows
 
-1. `Sheet-Studio-0.7.6-Windows-x64-Setup.exe`를 다운로드합니다.
+1. `Sheet-Studio-0.7.7-Windows-x64-Setup.exe`를 다운로드합니다.
 2. Setup EXE를 실행해 설치합니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
 
 Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이나 조직 보안 정책이 경고 또는 차단할 수 있습니다. 배포 저장소와 파일명을 확인하고 조직 정책을 따르세요. 기본 표 편집에는 Microsoft Excel 설치가 필요하지 않습니다. VBA 연결에만 Windows 데스크톱 Excel이 필요합니다.
+
+### Linux (Ubuntu·Debian 계열 x64)
+
+`Sheet-Studio-0.7.7-Linux-x64.deb`를 다운로드한 폴더에서 설치합니다.
+
+```sh
+sudo apt install ./Sheet-Studio-0.7.7-Linux-x64.deb
+sheet-studio
+```
+
+설치 후 앱 목록의 **Sheet Studio**로도 실행할 수 있습니다. 앱은 일반 사용자로 실행하세요. 업데이트도 새 DEB 파일에 같은 설치 명령을 사용합니다. 삭제는 `sudo apt remove lattice-sheet-studio`입니다.
+
+Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다. 다른 배포판·Wayland 데스크톱은 별도 검증하지 않았습니다. ARM64·RPM 패키지는 제공하지 않습니다. Linux에서 Windows Excel/VBA 연결은 지원하지 않습니다. 다운로드한 DEB는 서명된 패키지 저장소를 통한 배포가 아니므로 출처와 SHA-256 체크섬을 확인하세요.
 
 ### 업데이트
 
@@ -139,7 +153,7 @@ Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 
 ```sh
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
-git checkout v0.7.6
+git checkout v0.7.7
 npm ci
 npm run runtime:install
 npm run desktop

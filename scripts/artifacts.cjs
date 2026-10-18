@@ -8,7 +8,7 @@ async function generateManifest({ output, appOutDir, files = [], platform, arch 
   const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   const appFiles = platform === 'darwin'
     ? ['Sheet Studio.app/Contents/MacOS/Sheet Studio', 'Sheet Studio.app/Contents/Resources/app.asar']
-    : ['Sheet Studio.exe', 'resources/app.asar'];
+    : [platform === 'linux' ? 'sheet-studio' : 'Sheet Studio.exe', 'resources/app.asar'];
   const artifacts = [];
   for (const absolute of new Set([...files, ...appFiles.map(file => path.join(appOutDir, file))])) {
     const stat = await fs.stat(absolute);
@@ -20,7 +20,7 @@ async function generateManifest({ output, appOutDir, files = [], platform, arch 
   const result = {
     product: 'Sheet Studio', version, platform, architecture: arch,
     createdAt: new Date().toISOString(), artifacts,
-    note: platform === 'darwin' ? 'Keep the complete .app bundle. Unsigned builds are for local testing.' : 'Run the Setup EXE to install the app and its shortcuts. The unpacked EXE requires the complete win-unpacked directory.',
+    note: platform === 'darwin' ? 'Keep the complete .app bundle. Unsigned builds are for local testing.' : platform === 'linux' ? 'Install the x64 DEB with apt on Ubuntu or Debian. Launch sheet-studio as a regular user.' : 'Run the Setup EXE to install the app and its shortcuts. The unpacked EXE requires the complete win-unpacked directory.',
   };
   await fs.writeFile(path.join(output, 'artifact-manifest.json'), JSON.stringify(result, null, 2));
   return result;

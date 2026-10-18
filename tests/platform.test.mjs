@@ -26,3 +26,11 @@ test('Mac menu routes workbook commands through the renderer and keeps system wi
   assert.ok(items.some(item=>item.role==='windowMenu'));
   assert.equal(menu.applicationMenu('win32',()=>{}),null);
 });
+
+test('Linux targets have independent executable and artifact paths',()=>{
+ assert.deepEqual(platform.buildTarget(['--linux'],'linux','x64'),{platform:'linux',arch:'x64',directory:false});
+ assert.match(platform.outputDir('/project','0.7.7','linux','x64'),/linux-x64$/);
+ assert.match(platform.packagedExecutable('/project','0.7.7','linux','x64'),/linux-unpacked[/\\]sheet-studio$/);
+ assert.throws(()=>platform.buildTarget(['--linux','--win'],'linux','x64'),/one platform/);
+ assert.throws(()=>platform.buildTarget(['--linux','--arm64'],'linux','x64'),/Supported targets/);
+});

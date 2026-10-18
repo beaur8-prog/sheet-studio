@@ -82,3 +82,5 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 원본 Microsoft 실행 파일, 리소스, 아이콘 또는 디컴파일 코드는 앱과 이 저장소에 포함하지 않았습니다. 상세 원본 분석 산출물은 로컬에 보관하며 공개 저장소에는 독립 앱 코드와 분석 요약만 포함합니다.
 
 수학·통계·공학 함수의 일부는 MIT 라이선스의 [Formula.js](https://github.com/formulajs/formulajs) 4.6.1을 사용하며, 셀 참조·공백·오류·날짜·조건 집계는 앱의 호환 계층에서 처리합니다. 배포 앱에 [오픈 소스 고지](public/THIRD-PARTY-NOTICES.txt)를 포함합니다.
+
+Linux x64 DEB는 Linux에서 `npm run package:linux`로 빌드합니다. 설치·실행 방법은 [사용자 가이드](docs/USER-GUIDE.md)를 참고하세요.
