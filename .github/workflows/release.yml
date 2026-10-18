@@ -46,6 +46,7 @@ jobs:
       - run: npm run package -- --${{ matrix.platform }} --arch=${{ matrix.arch }}
       - run: node scripts/electron-smoke.cjs --packaged
       - run: node tests/ui-sheet-lifecycle.mjs --packaged
+      - run: node tests/ui-colors.mjs --packaged
       - name: Verify Windows installation and shortcut
         if: matrix.platform == 'win'
         shell: pwsh

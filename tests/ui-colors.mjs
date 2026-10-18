@@ -1,0 +1,33 @@
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import platform from '../scripts/platform.cjs';
+import {createRequire} from 'node:module';
+import {createWorkbook} from '../src/engine.mjs';
+import fs from 'node:fs/promises';
+const root=path.resolve(import.meta.dirname,'..');
+const packaged=process.argv.includes('--packaged');
+const version=createRequire(import.meta.url)('../package.json').version;
+const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','sheet-lifecycle-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
+const page=await app.firstWindow();
+page.setDefaultTimeout(8000);const findings=[];
+const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+const load=async b=>{await page.locator('#file-input').setInputFiles({name:'review.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await page.waitForFunction(n=>sheetStudio.getWorkbook().name===n,b.name);await settle();};
+const rename=async(name)=>{await page.locator('[data-sheet].active').click({button:'right'});await page.locator('[data-action="rename-sheet"]').click();await page.locator('#prompt-value').fill(name);await page.getByRole('dialog').getByRole('button',{name:'확인',exact:true}).click();await settle();};
+try{
+await page.locator('.cell').first().waitFor();
+const b=createWorkbook();b.name='color selection';for(const k of ['A1','A2','B1','B2','C1'])b.sheets[0].cells[k]={raw:k};await load(b);
+await page.locator('#name-box').fill('A1:B2');await page.locator('#name-box').press('Enter');
+await page.locator('#text-color').click();
+await page.getByRole('dialog').getByText('A1:B2',{exact:true}).waitFor();
+await page.locator('[data-swatch="#ff0000"]').click();
+assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.A1.style?.color),undefined);
+await page.getByRole('button',{name:'적용',exact:true}).click();await settle();
+let cells=await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells);for(const k of ['A1','A2','B1','B2'])assert.equal(cells[k].style.color,'#ff0000');assert.equal(cells.C1.style?.color,undefined);
+await page.locator('#undo').click();await settle();assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.B2.style?.color),undefined);
+await page.locator('#redo').click();await settle();
+await page.locator('[role="gridcell"][aria-label="B2"]').click({button:'right'});await page.locator('.menu [data-action="text-color"]').click();await page.getByRole('dialog').getByText('A1:B2',{exact:true}).waitFor();await page.locator('[data-swatch="#0070c0"]').click();await page.getByRole('button',{name:'취소',exact:true}).click();assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.B2.style.color),'#ff0000');
+await page.locator('#fill-color').click();await page.locator('[data-swatch="#ffff00"]').click();await page.getByRole('button',{name:'적용',exact:true}).click();await settle();cells=await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells);assert.equal(cells.B2.style.background,'#ffff00');assert.equal(cells.B2.style.color,'#ff0000');assert.equal(cells.C1.style?.background,undefined);
+await page.locator('#text-color').click();await page.screenshot({path:'test-results/color-palette.png'});console.log('PASS: range-only font/fill colors, deferred apply, cancel, context menu, undo/redo');
+}finally{await app.close();}

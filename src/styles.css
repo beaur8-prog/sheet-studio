@@ -16,3 +16,6 @@
 body[data-dimension-resize="c"],body[data-dimension-resize="c"] *{cursor:col-resize!important;user-select:none!important}body[data-dimension-resize="r"],body[data-dimension-resize="r"] *{cursor:row-resize!important;user-select:none!important}.dimension-guide{position:absolute;inset:0;pointer-events:none;z-index:10;overflow:hidden}.dimension-guide[hidden]{display:none}.dimension-guide-line{position:absolute}.dimension-guide[data-axis="c"] .dimension-guide-line{border-left:1px dashed #107c41}.dimension-guide[data-axis="r"] .dimension-guide-line{border-top:1px dashed #107c41}.dimension-guide-label{position:absolute;background:#fffbe5;color:#222;border:1px solid #c9bc7c;border-radius:3px;padding:4px 8px;white-space:nowrap;box-shadow:0 2px 5px #0002;font-size:12px}
 
 .cell-editor{cursor:text;caret-color:currentColor}.cell-editor::selection{background:#b5d8ff;color:#111}
+
+.color-swatches{display:grid;grid-template-columns:repeat(6,36px);gap:8px;margin:16px 0}.color-swatches button{width:36px;height:36px;border:1px solid #999;border-radius:4px}.color-swatches button[aria-pressed="true"]{outline:3px solid #107c41;outline-offset:2px}#color-preview{padding:16px;border:1px solid #ccc;font-size:20px}#palette-color{width:100%;height:40px}
+button.color-input{border-bottom:4px solid;width:28px;height:26px;font-weight:700;font-size:15px;cursor:pointer}

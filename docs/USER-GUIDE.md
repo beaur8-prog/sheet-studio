@@ -1,8 +1,8 @@
 # Sheet Studio 사용자 가이드
 
-v0.7.5 기준 · 2026년 10월 18일
+v0.7.6 기준 · 2026년 10월 18일
 
-[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.5) · [버전별 변경 내역](CHANGELOG.md)
+[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.6) · [버전별 변경 내역](CHANGELOG.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -18,12 +18,12 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.5)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.6)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.5-macOS-arm64.dmg` 또는 `.zip` |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.5-Windows-x64-Setup.exe` |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.6-macOS-arm64.dmg` 또는 `.zip` |
+| Windows 64비트 x64 | `Sheet-Studio-0.7.6-Windows-x64-Setup.exe` |
 
 ### Mac
 
@@ -36,7 +36,7 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ### Windows
 
-1. `Sheet-Studio-0.7.5-Windows-x64-Setup.exe`를 다운로드합니다.
+1. `Sheet-Studio-0.7.6-Windows-x64-Setup.exe`를 다운로드합니다.
 2. Setup EXE를 실행해 설치합니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
@@ -73,6 +73,8 @@ Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이�
 - **보기 → 틀 고정**으로 제목 행·열을 고정합니다.
 - **홈 → 선택하여 붙여넣기**에서 값·수식·서식만 붙이거나 행과 열을 바꿉니다.
 - 시트 삭제는 실행 취소할 수 있습니다. 삭제한 시트의 수식 참조는 `#REF!`가 되며 같은 이름으로 새 시트를 만들어도 되살아나지 않습니다.
+
+셀 범위를 선택한 뒤 **홈 → 글꼴 색(A)** 또는 **우클릭 → 글꼴 색**을 엽니다. 팔레트의 대상 범위를 확인하고 색을 고른 뒤 **적용**을 누르세요. **취소**하면 기존 색을 유지합니다. 채우기 색도 같은 방식이며 실행 취소 한 번으로 되돌릴 수 있습니다.
 
 ## 5. 수식·분석 기능
 
@@ -135,7 +137,7 @@ Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 
 ```sh
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
-git checkout v0.7.5
+git checkout v0.7.6
 npm ci
 npm run runtime:install
 npm run desktop
