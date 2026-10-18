@@ -1,5 +1,7 @@
 # Sheet Studio 사용자 가이드
 
+> **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
+
 v0.7.6 기준 · 2026년 10월 18일
 
 [다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.6) · [버전별 변경 내역](CHANGELOG.md)
