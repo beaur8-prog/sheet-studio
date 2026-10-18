@@ -54,3 +54,19 @@ node tests/ui-pivot.mjs --packaged
 `SHEET_STUDIO_ADHOC=1`은 로컬 테스트용 서명이며 Apple의 Developer ID 서명·공증을 대신하지 않습니다. 이 모드에서는 hardened runtime과 공증을 사용하지 않습니다. 일반 사용자 배포 시 이 환경 변수를 제거하고 Developer ID 인증서 및 공증 자격 증명을 설정하세요. [electron-builder 26 macOS 설정](https://www.electron.build/v26/docs/mac/)과 [공증 안내](https://www.electron.build/docs/notarization/)를 따릅니다. 앱은 macOS 보안 설정을 변경하지 않습니다.
 
 이번 수정은 Windows에서 단위 테스트, Electron UI 테스트와 Windows 패키징을 검증했습니다. macOS 실제 패키징·실행·서명·공증은 아직 실행하지 않았습니다. 위 워크플로 또는 실제 Mac에서 결과를 확인해야 합니다.
+
+### 동기화 폴더의 서명 오류
+
+Documents 등에서 `resource fork, Finder information, or similar detritus not allowed` 오류가 발생하면 출력 폴더를 동기화되지 않는 위치로 지정할 수 있습니다. 빌드는 생성된 앱의 확장 메타데이터를 서명 전에 정리하지만, 동기화 도구가 다시 추가할 수 있습니다.
+
+```sh
+SHEET_STUDIO_OUTPUT_DIR="$HOME/Library/Caches/sheet-studio-build/0.7.3" SHEET_STUDIO_ADHOC=1 npm run package:dir
+```
+
+이 경우 Apple Silicon 앱은 지정한 폴더의 `mac-arm64/Sheet Studio.app`에 생성됩니다. 로컬 ad-hoc 서명이며 Apple 공증 배포본은 아닙니다.
+
+시트 이름 변경/삭제 회귀 검증은 `node tests/ui-sheet-lifecycle.mjs`로 실행합니다. 출력 위치를 바꾼 패키지를 검증하려면 다음과 같이 실행하세요.
+
+```sh
+SHEET_STUDIO_EXECUTABLE="$HOME/Library/Caches/sheet-studio-build/0.7.3/mac-arm64/Sheet Studio.app/Contents/MacOS/Sheet Studio" node tests/ui-sheet-lifecycle.mjs --packaged
+```

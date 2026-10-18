@@ -8,7 +8,7 @@ import './filters.css';
 import {applyFilters,filterActive,inferFilterRange,sortFilterRange,shiftAutoFilter} from './filters.mjs';
 import {openFilterMenu,closeFilterMenu} from './filter-ui.mjs';
 import {showFunctionLibrary,createFormulaAssistant} from './function-assist.mjs';
-import {createWorkbook,colName,colIndex,address,parseAddress,evaluateCell,createEvaluator,transformFormulaReferences,formatValue,shiftFormula,parseWorkbook,serializeWorkbook} from './engine.mjs';
+import {createWorkbook,rewriteWorkbookSheetReferences,colName,colIndex,address,parseAddress,evaluateCell,createEvaluator,transformFormulaReferences,formatValue,shiftFormula,parseWorkbook,serializeWorkbook} from './engine.mjs';
 import {readSpreadsheet,writeSpreadsheet} from './io.mjs';
 import {recordNativeStructure,nativeCachedValue} from './native-plan.mjs';
 import {chartRect} from './chart-geometry.mjs';
@@ -183,7 +183,16 @@ function applyColor(input){
  colorEdit.value=input.value;applyStyle({[property]:input.value},{recordHistory:false});
 }
 function toggleStyle(k){applyStyle({[k]:!sheet().cells[address(selection.r,selection.c)]?.style?.[k]});}
-function renderSheets(){$('#sheet-list').innerHTML=book.sheets.map(s=>`<button class="sheet-tab ${s.id===sheet().id?'active':''}" data-sheet="${esc(s.id)}">${esc(s.name)}</button>`).join('');}
+function renderSheets(){
+ const list=$('#sheet-list'),existing=new Map([...list.children].map(el=>[el.dataset.sheet,el]));
+ for(const [index,s] of book.sheets.entries()){
+  const el=existing.get(s.id)||document.createElement('button');existing.delete(s.id);
+  el.className='sheet-tab'+(s.id===sheet().id?' active':'');el.dataset.sheet=s.id;
+  if(el.textContent!==s.name)el.textContent=s.name;
+  if(list.children[index]!==el)list.insertBefore(el,list.children[index]||null);
+ }
+ for(const el of existing.values())el.remove();
+}
 function switchSheet(id){closeFilterMenu();commitEdit();book.activeSheetId=id;selection={r:0,c:0,r2:0,c2:0};filteredRows=null;filterEnabled=false;$('#grid').scrollTop=0;$('#grid').scrollLeft=0;makeLayout();renderSheets();render();changed();}
 function addSheet(){checkpoint();let n=book.sheets.length+1;while(book.sheets.some(s=>s.name===`Sheet${n}`))n++;const s={id:crypto.randomUUID(),name:`Sheet${n}`,cells:{},columnWidths:{},rowHeights:{},merges:[],charts:[]};book.sheets.push(s);switchSheet(s.id);}
 function closeMenu(){menu?.remove();menu=null;}
@@ -272,9 +281,9 @@ function action(name,event){closeFilterMenu();closeMenu();if(!['cancel-edit','co
  case 'find':return findDialog();case 'function':return functionLibrary();case 'func-average':startEdit('=AVERAGE(');return;case 'func-if':startEdit('=IF(');return;case 'func-count':startEdit('=COUNT(');return;
  case 'autosum':return startAutoSum();
  case 'show-formulas':showFormulas=!showFormulas;render();return;case 'recalculate':render();toast('수식을 다시 계산했습니다.');return;case 'add-sheet':return addSheet();case 'sheet-prev':case 'sheet-next':{const i=book.sheets.indexOf(sheet());switchSheet(book.sheets[Math.max(0,Math.min(book.sheets.length-1,i+(name==='sheet-next'?1:-1)))].id);return;}
- case 'rename-sheet':return promptText('시트 이름 바꾸기','이름',sheet().name,val=>{if(!val.trim()||val.length>31||/[\[\]:*?/\\]/.test(val)||book.sheets.some(s=>s.id!==sheet().id&&s.name.toLowerCase()===val.toLowerCase())){toast('중복되지 않는 1~31자의 유효한 이름을 입력하세요.');return false;}checkpoint();const old=sheet().name;sheet().name=val;for(const s of book.sheets)for(const cell of Object.values(s.cells))if(cell.raw?.startsWith('='))cell.raw=cell.raw.replace(/"(?:[^"]|"")*"|('(?:[^']|'')+'|[A-Za-z_가-힣][\w가-힣]*)!/g,(match,n)=>{if(match.startsWith('"'))return match;return n.replace(/^'|'$/g,'').replace(/''/g,"'").toLowerCase()===old.toLowerCase()?`'${val.replace(/'/g,"''")}'!`:match;});changed();});
+ case 'rename-sheet':return promptText('시트 이름 바꾸기','이름',sheet().name,val=>{if(!val.trim()||val.length>31||/[\[\]:*?/\\]/.test(val)||book.sheets.some(s=>s.id!==sheet().id&&s.name.toLowerCase()===val.toLowerCase())){toast('중복되지 않는 1~31자의 유효한 이름을 입력하세요.');return false;}checkpoint();const old=sheet().name;sheet().name=val;rewriteWorkbookSheetReferences(book,old,val);changed();});
  case 'duplicate-sheet':{checkpoint();const oldId=sheet().id,s=structuredClone(sheet());s.id=crypto.randomUUID();for(const ch of s.charts){ch.id=crypto.randomUUID();delete ch.nativeName;for(const series of ch.series||[])for(const key of ['nameRef','catRef','valRef','xRef','sizeRef'])if(series[key]?.sheetId===oldId)series[key].sheetId=s.id;for(const ref of ch.source?.formulas||[])if(ref.sheetId===oldId)ref.sheetId=s.id;}let n=2;const base=s.name.slice(0,25);while(book.sheets.some(x=>x.name===`${base} (${n})`))n++;s.name=`${base} (${n})`;book.sheets.push(s);switchSheet(s.id);return;}
- case 'delete-sheet':if(book.sheets.length===1)return toast('통합 문서에는 시트가 하나 이상 있어야 합니다.');return modal('시트 삭제',`<p>“${esc(sheet().name)}” 시트를 삭제할까요? 실행 취소로 복구할 수 있습니다.</p>`,[{label:'삭제',danger:true,action:el=>{checkpoint();book.sheets=book.sheets.filter(s=>s.id!==sheet().id);switchSheet(book.sheets[0].id);el.remove();}}]);
+ case 'delete-sheet':if(book.sheets.length===1)return toast('통합 문서에는 시트가 하나 이상 있어야 합니다.');return modal('시트 삭제',`<p>“${esc(sheet().name)}” 시트를 삭제할까요? 실행 취소로 복구할 수 있습니다.</p>`,[{label:'삭제',danger:true,action:el=>{checkpoint();rewriteWorkbookSheetReferences(book,sheet().name,null);book.sheets=book.sheets.filter(s=>s.id!==sheet().id);switchSheet(book.sheets[0].id);el.remove();}}]);
  case 'rename-book':return promptText('통합 문서 이름','이름',book.name,val=>{if(!val.trim())return false;checkpoint();book.name=val;changed();});case 'theme':document.body.classList.toggle('light');localStorage.setItem('sheet-studio.theme',document.body.classList.contains('light')?'light':'dark');return;case 'toggle-grid':showGrid=!showGrid;$('#grid-shell').classList.toggle('no-grid',!showGrid);return;case 'collapse':$('#ribbon').classList.toggle('collapsed');render();return;case 'zoom-in':return setZoom(zoom+10);case 'zoom-out':return setZoom(zoom-10);case 'zoom-reset':return setZoom(100);
  case 'chart-insert':return editChart();case 'chart-bar':return chart('bar');case 'chart-line':return chart('line');case 'note':return promptText('셀 메모',address(selection.r,selection.c),sheet().cells[address(selection.r,selection.c)]?.note||'',note=>{checkpoint();const k=address(selection.r,selection.c);sheet().cells[k]={raw:'',...sheet().cells[k],note};changed();});case 'commit-edit':return commitEdit();case 'cancel-edit':return cancelEdit();case 'fill-down':return fillDown();case 'demo':return demo();case 'select-all':{const u=usedBounds();selection={r:0,c:0,r2:Math.max(30,u.r),c2:Math.max(10,u.c)};render();return;}
  case 'portrait':case 'landscape':document.querySelector('#print-direction')?.remove();{const s=document.createElement('style');s.id='print-direction';s.textContent=`@page{size:A4 ${name}}`;document.head.append(s);toast(`인쇄 방향: ${name==='portrait'?'세로':'가로'}`);}return;case 'print':return printSheet();

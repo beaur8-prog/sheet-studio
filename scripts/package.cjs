@@ -28,7 +28,9 @@ async function packageApp() {
     name: manifest.name, version: manifest.version, description: manifest.description,
     author: manifest.author, main: manifest.main,
   }, null, 2));
-  const output = outputDir(root, manifest.version, target.platform, target.arch);
+  const output = process.env.SHEET_STUDIO_OUTPUT_DIR
+    ? path.resolve(process.env.SHEET_STUDIO_OUTPUT_DIR)
+    : outputDir(root, manifest.version, target.platform, target.arch);
   const mac = target.platform === 'darwin';
   let appOutDir;
   const artifacts = await build({
@@ -49,6 +51,10 @@ async function packageApp() {
       },
       afterPack: async context => {
         appOutDir = context.appOutDir;
+        // Clean Finder metadata from the generated bundle before macOS signing.
+        // Leave the installed runtime untouched.
+        if (mac) await require('node:util').promisify(require('node:child_process').execFile)(
+          '/usr/bin/xattr', ['-cr', path.join(context.appOutDir, 'Sheet Studio.app')]);
         if (!mac) await brandExecutable(path.join(context.appOutDir, 'Sheet Studio.exe'), icon, manifest.version, root);
       },
     },

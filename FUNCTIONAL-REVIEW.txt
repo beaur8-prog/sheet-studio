@@ -1,0 +1,76 @@
+수정 후 상태 (2026-10-18)
+로컬 ad-hoc 서명된 macOS arm64 앱을 /Users/swryu/Applications/Sheet Studio.app에 설치했다.
+codesign --verify --deep --strict 및 설치된 패키지의 시트 수명주기 UI 회귀 테스트가 통과했다.
+패키징은 확장 메타데이터 정리 및 SHEET_STUDIO_OUTPUT_DIR 설정을 지원하도록 보완했다.
+아래 본문은 최초 점검 당시의 기록이다. 확인한 3건은 이후 수정했다.
+- 삭제한 시트의 셀/조건부 서식 참조를 #REF!로 무효화하여 같은 이름의 시트 생성 후에도 유지한다.
+- 이름 변경 시 셀 수식과 조건부 서식 수식을 함께 갱신한다. 문자열 리터럴과 INDIRECT 문자열은 보존한다.
+- 시트 탭 DOM을 유지하여 활성/비활성 시트 더블클릭 이름 변경을 지원한다.
+- 단위 테스트 99개: 98개 통과, Windows 전용 1개 건너뜀.
+- tests/ui-sheet-lifecycle.mjs: 삭제 후 재생성, 실행 취소/다시 실행, 조건부 서식 유지, 더블클릭, 재로드를 실제 Electron에서 검증했다.
+- tests/sheet-lifecycle.test.mjs: 인용/유니코드 시트명, 문자열 보존, 범위와 반복 참조, JSON 저장 복원 회귀 테스트.
+- tests/review-boundaries.mjs는 관찰 전용에서 검증 assertion을 갖춘 tests/ui-sheet-lifecycle.mjs로 교체했다.
+
+──────────────── 최초 점검 기록 ────────────────
+
+Sheet Studio 기능 점검 보고서
+점검일: 2026-10-18 (Asia/Seoul)
+대상: https://github.com/beaur8-prog/sheet-studio
+커밋: 3a8a204 (v0.7.3)
+환경: macOS 15.7.7 / arm64 / Node.js v26.5.0 / Electron 42.11.15 / Google Chrome
+
+판정
+기본 스프레드시트 편집 기능은 폭넓게 동작한다. 다만 시트 수명주기와 참조 유지에서 실제 기능 오류 3건을 재현했다. Excel 전체 호환성을 확인한 것은 아니다.
+앱 소스와 의존성 잠금 파일은 수정하지 않았다. 점검 보고서와 재현 스크립트만 추가했다.
+
+검증 결과
+- npm ci 성공, npm run build 성공.
+- npm test: 총 96개 중 95개 통과, 1개 건너뜀, 실패 없음.
+- 건너뛴 항목은 Windows 인터넷 출처/신뢰 토큰 테스트.
+- Electron 기본 실행: 격자 렌더링, 격리된 preload bridge, CSV 파일 열기/저장, 메뉴의 붙여넣기/실행 취소/다시 실행/찾기 통과.
+- Electron 기능 8개 시나리오: 셀 직접 편집, 크기 조절, 수식 참조/자동 합계, 함수 도우미, 워크시트, 필터, 10종 XLSX 차트, 차트 이동/크기 조절 모두 통과.
+- Chrome 기능 3개 시나리오: 기본 편집/수식/저장, 복사/병합/정렬/필터/JSON 왕복, 피벗 생성/새로 고침/편집/XLSX 왕복 통과.
+- 총 12개 실행/UI 시나리오를 완료했다. 이 중 원본 Electron 테스트 5개는 화면 갱신 전에 DOM을 읽어 실패했으며, 검증 사본에 100ms 대기를 추가한 뒤 통과했다. 원본 테스트 전체가 그대로 통과한다는 의미는 아니다.
+- 브라우저 테스트는 로컬에 Edge가 없어 검증 사본에서 channel을 chrome으로 변경했다.
+
+확인된 오류
+
+[P1] 삭제된 시트 참조가 같은 이름의 새 시트에 자동 재연결됨
+위치: src/main.mjs:277
+재현: Sheet1!A1에 =Source!A1, Source!A1에 42를 넣는다. Source를 삭제하면 #REF!가 된다. 새 시트를 Source로 이름 짓고 A1에 999를 입력하면 Sheet1!A1이 999로 바뀐다.
+실제: 삭제 시 수식 문자열 =Source!A1을 그대로 보관하므로 새 시트를 과거 시트로 취급한다.
+기대: 삭제된 참조는 #REF!로 무효화되어야 하며 같은 이름의 다른 시트가 생겨도 복구되지 않아야 한다.
+영향: 사용자 개입 없이 기존 계산이 새로운 데이터에 연결되어 잘못된 결과가 정상 숫자로 표시된다.
+제안: 삭제 시 관련 셀 수식과 워크시트 기능의 참조를 일관되게 무효화하고 undo로 복원한다.
+
+[P2] 시트 이름 변경 시 조건부 서식 수식 참조를 갱신하지 않음
+위치: src/main.mjs:275
+재현: Sheet1!A1=1, A1에 수식 Sheet1!A1=1 및 빨간 배경의 조건부 서식을 만든다. 시트를 Renamed로 바꾼다.
+실제: 셀 배경이 빨강에서 흰색으로 변하고 conditionalRules[0].formulae는 Sheet1!A1=1로 남는다.
+기대: 조건부 서식 참조도 새 시트 이름으로 바뀌어 표시가 유지되어야 한다.
+제안: 셀 raw 수식에만 적용하는 이름 변경 로직을 조건부 서식 등 수식을 보유한 모델에도 적용한다.
+
+[P2] 시트 탭 더블클릭으로 이름 변경 창이 열리지 않음
+위치: src/main.mjs:186-187, 289 (보고서상 범위 표기)
+재현: 활성 시트 탭을 더블클릭한다. Chrome에서 3회 반복했지만 이름 변경 입력창 수는 모두 0이었다.
+기대: 화면 하단 안내대로 이름 변경 창이 열려야 한다.
+분석: 클릭 시 switchSheet/renderSheets가 탭 DOM을 교체하며 더블클릭 이벤트의 타깃이 유지되지 않는 것으로 보인다. 이 원인 설명은 코드에 근거한 분석이며, 창이 열리지 않는 현상 자체는 실행으로 확인했다.
+우회: 시트 탭 우클릭 → 이름 바꾸기는 정상 동작한다.
+
+테스트 신뢰성 개선
+ui-cell-editing, ui-formulas, ui-worksheet, ui-filters, ui-charts는 requestAnimationFrame으로 갱신되는 DOM을 즉시 검사한다. 고정 대기 대신 expect.poll, waitForFunction 또는 명확한 렌더 완료 조건을 적용하는 것이 좋다.
+
+지원 범위 및 미검증
+- Windows Excel/VBA 실제 실행, 배포 DMG/EXE, 설치/코드 서명, 인쇄/PDF, 큰 실제 업무 파일 및 성능 한계는 이번 점검 대상 실행에 포함하지 않았다.
+- XLSX 왕복은 앱 자체 읽기/쓰기 및 저장소 테스트로 검증했다. Microsoft Excel에서 출력 파일을 실제로 열어 대조하지 않았다.
+- README에 동적 배열, 전체 열 수식 A:A, Power Query, 공동 편집 등 미지원이 명시되어 있다. 이를 새 결함으로 집계하지 않았다.
+- npm ci는 moderate 의존성 취약점 10건을 보고했다. 이는 설치 도구의 집계이며 악용 가능성 분석은 수행하지 않았다.
+
+산출물 및 재현
+- tests/review-boundaries.mjs: 확인한 3개 오류를 UI로 재현하여 관측 결과를 저장하는 스크립트. npm run dev 이후 node tests/review-boundaries.mjs 실행. Chrome 필요.
+- test-results/review/boundaries.json 및 boundaries.log: 실제 관측값.
+- test-results/review/unit.log: 단위 테스트 원본 로그.
+- test-results/review/*-settled.log: 렌더 대기를 추가한 Electron 재검증 결과.
+- test-results/review/*-paced.log: 입력 간격 조정 결과 및 Chrome 시나리오 결과.
+- test-results/review/review-ui-*.mjs: 실행했던 검증 사본. 재실행하려면 tests/에 복사해 사용한다. 앱 소스에는 변경 없음.
+- test-results/desktop.png 및 기능별 PNG: 실행 화면.

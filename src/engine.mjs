@@ -825,6 +825,44 @@ export function transformFormulaReferences(formula, { axis, index, delta, target
   return result;
 }
 
+// Rewrite explicit sheet references, leaving strings (including INDIRECT text) untouched.
+// A null newName permanently invalidates references to a deleted worksheet.
+export function rewriteSheetReferences(formula, oldName, newName) {
+  const offset = formula.startsWith('=') ? 1 : 0;
+  let tokens;
+  try { tokens = tokenize(formula.slice(offset)); } catch { return formula; }
+  const patches = [], target = oldName.toLowerCase();
+  for (let i = 0; i < tokens.length - 2; i++) {
+    const token = tokens[i];
+    if (!['word', 'sheet'].includes(token.type) || tokens[i + 1].value !== '!' || token.value.toLowerCase() !== target) continue;
+    if (newName !== null) {
+      patches.push({start: token.start, end: token.end, value: "'" + newName.replaceAll("'", "''") + "'"});
+      continue;
+    }
+    let end = i + 2;
+    // Consume an inherited range endpoint as part of the invalid reference.
+    if (tokens[end + 1]?.value === ':') {
+      if (tokens[end + 3]?.value === '!' && tokens[end + 2].value.toLowerCase() === target && parseAddress(tokens[end + 4]?.value)) end += 4;
+      else if (parseAddress(tokens[end + 2]?.value) && tokens[end + 3]?.value !== '!') end += 2;
+    }
+    patches.push({start: token.start, end: tokens[end].end, value: '#REF!'});
+    i = end;
+  }
+  for (const patch of patches.reverse()) formula = formula.slice(0, patch.start + offset) + patch.value + formula.slice(patch.end + offset);
+  return formula;
+}
+
+export function rewriteWorkbookSheetReferences(workbook, oldName, newName) {
+  for (const sheet of workbook.sheets) {
+    for (const cell of Object.values(sheet.cells)) {
+      if (cell.raw?.startsWith('=')) cell.raw = rewriteSheetReferences(cell.raw, oldName, newName);
+    }
+    for (const rule of sheet.conditionalRules || []) {
+      if (rule.formulae) rule.formulae = rule.formulae.map(formula => rewriteSheetReferences(formula, oldName, newName));
+    }
+  }
+}
+
 export function shiftFormula(formula, dr, dc) {
   if (typeof formula !== 'string' || !formula.startsWith('=') || (!dr && !dc)) return formula;
   if (!Number.isInteger(dr) || !Number.isInteger(dc)) return formula;
