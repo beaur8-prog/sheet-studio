@@ -7,7 +7,7 @@ export const referenceColors=['#2463d3','#c23b33','#8b47ad','#168153','#b16b08',
 // Consume strings and identifiers as whole tokens so A1 inside text or LOG10() is not a reference.
 export function formulaReferences(formula){
   if(!formula.startsWith('='))return [];
-  const tokens=[],pattern=/"(?:[^"]|"")*(?:"|$)|'(?:[^']|'')*(?:'|$)|[\p{L}_$\\][\p{L}\p{N}_.$\\]*|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|\S/gu;
+  const tokens=[],pattern=/"(?:[^"]|"")*(?:"|$)|'(?:[^']|'')*(?:'|$)|[\p{L}\p{N}_.$\\]+(?=!)|[\p{L}_$\\][\p{L}\p{N}_.$\\]*|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|\S/gu;
   for(const m of formula.matchAll(pattern))tokens.push({text:m[0],start:m.index,end:m.index+m[0].length});
   const result=[];
   const read=(i,inherited)=>{
@@ -21,7 +21,7 @@ export function formulaReferences(formula){
     if(['[',']',':','!'].includes(tokens[i-1]?.text)){i++;continue;}
     const a=read(i);if(!a){i++;continue;}
     const b=tokens[a.next]?.text===':'?read(a.next+1,a.sheet):null;
-    if(b&&b.sheet!==a.sheet){i=b.next;continue;}
+    if(b&&String(b.sheet||'').toLowerCase()!==String(a.sheet||'').toLowerCase()){i=b.next;continue;}
     result.push({start:a.start,end:b?.end??a.end,sheet:a.sheet,r1:Math.min(a.pos.r,b?.pos.r??a.pos.r),r2:Math.max(a.pos.r,b?.pos.r??a.pos.r),c1:Math.min(a.pos.c,b?.pos.c??a.pos.c),c2:Math.max(a.pos.c,b?.pos.c??a.pos.c),text:formula.slice(a.start,b?.end??a.end)});i=b?.next??a.next;
   }
   return result;

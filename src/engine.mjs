@@ -32,7 +32,7 @@ const checked = value => {
 };
 const numeric = value => {
   value = checked(value);
-  if (value === BLANK || value === '') return 0;
+  if (value === BLANK) return 0;
   if (typeof value === 'boolean') return Number(value);
   if (typeof value === 'number') return finite(value);
   if (typeof value === 'string' && value.trim() !== '' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) return finite(Number(value));
@@ -47,7 +47,7 @@ const textual = value => {
 };
 const logical = value => {
   value = checked(value);
-  if (value === BLANK || value === '') return false;
+  if (value === BLANK) return false;
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value !== 0;
   if (/^true$/i.test(value)) return true;
@@ -114,6 +114,8 @@ function tokenize(input) {
     const rest = input.slice(at);
     const error = /^(#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|CYCLE!|SPILL!))/i.exec(rest);
     if (error) { at += error[0].length; push('error', error[0].toUpperCase(), start, at); continue; }
+    const sheetName=/^[\p{L}\p{N}_.$\\]+(?=!)/u.exec(rest);
+    if(sheetName){at+=sheetName[0].length;push('word',sheetName[0],start,at);continue;}
     const number = /^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(rest);
     if (number) { at += number[0].length; push('number', Number(number[0]), start, at); continue; }
     const word = /^[\p{L}_$\\][\p{L}\p{N}_.$\\]*/u.exec(rest);
@@ -179,13 +181,26 @@ class Parser {
       ops.push(this.tokens[this.at++].value);
       if (ops.length > MAX_DEPTH) fail('#VALUE!');
     }
-    let node = this.primary();
+    let node = this.referenceExpression();
     while (this.accept('%')) node = { type: 'unary', op: '%', node };
     for (let i = ops.length - 1; i >= 0; i--) node = { type: 'unary', op: ops[i], node };
     return node;
   }
+  referenceRange(){
+    let node=this.primary();
+    while(this.accept(':')){const right=this.primary();if(node.sheet&&right.type==='ref'&&!right.sheet)right.sheet=node.sheet;node={type:'referenceOp',op:':',left:node,right};}
+    return node;
+  }
+  referenceExpression() {
+    let node=this.referenceRange();
+    while(true){
+      const previous=this.tokens[this.at-1],next=this.tokens[this.at];
+      if((['word','sheet','error'].includes(next.type)||this.peek('('))&&next.start>previous.end){node={type:'referenceOp',op:' ',left:node,right:this.referenceRange()};continue;}
+      return node;
+    }
+  }
   primary() {
-    if (this.accept('(')) { const value = this.expression(); this.expect(')'); return value; }
+    if (this.accept('(')) { let value=this.expression();while(this.accept(','))value={type:'referenceOp',op:',',left:value,right:this.expression()};this.expect(')');return value; }
     if (this.accept('{')) {
       const values=[],widths=[];let width=0;
       const constant=node=>node.type==='literal'||node.type==='error'||node.type==='unary'&&constant(node.node);
@@ -207,7 +222,7 @@ class Parser {
       const args = [];
       if (!this.accept(')')) {
         do {
-          args.push(this.peek(',') || this.peek(';') || this.peek(')') ? { type: 'literal', value: BLANK } : this.expression());
+          args.push(this.peek(',') || this.peek(';') || this.peek(')') ? { type: 'literal', value: 0, omitted:true } : this.expression());
         } while (this.accept(',') || this.accept(';'));
         this.expect(')');
       }
@@ -228,16 +243,6 @@ class Parser {
       return { type: 'error', value: '#NAME?' };
     }
     const first = { type: 'ref', sheet, pos };
-    if (this.accept(':')) {
-      const lastToken = this.tokens[this.at++];
-      if (lastToken.type === 'error') return { type: 'error', value: lastToken.value };
-      if (lastToken.type !== 'word' && lastToken.type !== 'sheet') fail('#REF!');
-      let lastSheet = sheet, lastAddress = lastToken.value;
-      if (this.accept('!')) { lastSheet = lastAddress; lastAddress = this.tokens[this.at++].value; }
-      const end = parseAddress(lastAddress);
-      if (!end || (sheet && lastSheet && sheet.toLowerCase() !== lastSheet.toLowerCase())) fail('#REF!');
-      return { type: 'range', sheet: sheet || lastSheet, start: pos, end };
-    }
     return first;
   }
 }
@@ -317,8 +322,18 @@ function evaluateNode(node, ctx, depth) {
     const rows = Math.abs(node.start.r - node.end.r) + 1, cols = Math.abs(node.start.c - node.end.c) + 1;
     return getRange(ctx,sheet,top,left,rows,cols);
   }
+  if(node.type==='referenceOp'){
+    // Evaluate error endpoints first so malformed references preserve #REF!.
+    const a=asRange(evaluate(node.left)),b=asRange(evaluate(node.right));
+    if(node.op===',')return {kind:'range',rows:a.values.length+b.values.length,cols:1,values:[...a.values,...b.values]};
+    if(!a.sheet||!b.sheet||a.sheet.id!==b.sheet.id)fail('#REF!');
+    const intersection=node.op===' ',top=(intersection?Math.max:Math.min)(a.top,b.top),left=(intersection?Math.max:Math.min)(a.left,b.left);
+    const bottom=(intersection?Math.min:Math.max)(a.top+a.rows-1,b.top+b.rows-1),right=(intersection?Math.min:Math.max)(a.left+a.cols-1,b.left+b.cols-1);
+    if(bottom<top||right<left)fail('#NULL!');
+    return getRange(ctx,a.sheet,top,left,bottom-top+1,right-left+1);
+  }
   if (node.type === 'unary') {
-    const source=evaluate(node.node),apply=v=>{const value=numeric(v);return finite(node.op==='%'?value/100:node.op==='-'?-value:value);};
+    const source=evaluate(node.node),apply=v=>{if(node.op==='+')return checked(v);const value=numeric(v);return finite(node.op==='%'?value/100:node.op==='-'?-value:value);};
     if(isRange(source))return {...source,sheet:undefined,values:source.values.map(v=>{try{return apply(v);}catch(e){if(e instanceof FormulaError)return e;throw e;}})};
     return apply(source);
   }
@@ -391,9 +406,13 @@ function criterion(test) {
       const matches = typeof value === 'string' && wildcard.test(value);
       return op === '=' ? matches : !matches;
     }
-    if (typeof target === 'number' && typeof value === 'string') {
-      if (value.trim() && Number.isFinite(Number(value))) value = Number(value);
-      else return op === '<>';
+    if(test==='=')return value===BLANK;
+    if(test==='<>')return value!==BLANK;
+    if(value===BLANK)return target===''&&op==='=';
+    if(value==='')return target===''?(op==='='||op==='>='||op==='<='):op==='<>';
+    if(typeof target!==typeof value){
+      if(typeof target==='number'&&typeof value==='string'&&['=','<>'].includes(op)&&value.trim()&&Number.isFinite(Number(value)))value=Number(value);
+      else return op==='<>';
     }
     const order = compare(value, target);
     return ({ '=': order === 0, '<>': order !== 0, '<': order < 0, '>': order > 0, '<=': order <= 0, '>=': order >= 0 })[op];
@@ -402,10 +421,9 @@ function criterion(test) {
 
 function dateSerial(year, month, day) {
   const date = new Date(0);
-  date.setUTCHours(0, 0, 0, 0);
-  date.setUTCFullYear(year, month - 1, day);
-  const difference = Math.round((date.getTime() - Date.UTC(1899, 11, 31)) / DAY_MS);
-  const serial = difference + (difference >= 60 ? 1 : 0);
+  date.setUTCHours(0,0,0,0);date.setUTCFullYear(year,month-1,1);
+  const difference=Math.round((date.getTime()-Date.UTC(1899,11,31))/DAY_MS);
+  const serial=difference+(difference>=60?1:0)+day-1;
   if (!Number.isFinite(serial) || serial < 0 || serial > 2958465) fail('#NUM!');
   return serial;
 }
@@ -446,6 +464,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
   // Metadata functions must not read the referenced cell (ROW(A1) in A1 is not a cycle).
   const metadata=node=>{
     if(node.type==='ref')return {sheet:resolveSheet(ctx,node.sheet),top:node.pos.r,left:node.pos.c,rows:1,cols:1};
+    if(node.type==='referenceOp'&&node.op!==','){const a=metadata(node.left),b=metadata(node.right);if(!a.sheet||a.sheet.id!==b.sheet?.id)fail('#REF!');const intersection=node.op===' ',top=(intersection?Math.max:Math.min)(a.top,b.top),left=(intersection?Math.max:Math.min)(a.left,b.left),bottom=(intersection?Math.min:Math.max)(a.top+a.rows-1,b.top+b.rows-1),right=(intersection?Math.min:Math.max)(a.left+a.cols-1,b.left+b.cols-1);if(bottom<top||right<left)fail('#NULL!');return {sheet:a.sheet,top,left,rows:bottom-top+1,cols:right-left+1};}
     if(node.type==='range')return {sheet:resolveSheet(ctx,node.sheet),top:Math.min(node.start.r,node.end.r),left:Math.min(node.start.c,node.end.c),rows:Math.abs(node.start.r-node.end.r)+1,cols:Math.abs(node.start.c-node.end.c)+1};
     const value=evaluate(node);if(isRef(value)||isRange(value))return value;return fail('#VALUE!');
   };
@@ -477,7 +496,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
       const split=text.lastIndexOf('!');text=text.slice(0,split+1)+text.slice(split+1).split(':').map(convert).join(':');
     }
     let node;try{node=new Parser(text).parse();}catch{fail('#REF!');}
-    if(!['ref','range'].includes(node.type))fail('#REF!');return evaluate(node);
+    if(!['ref','range','referenceOp'].includes(node.type))fail('#REF!');return evaluate(node);
   }
   if(name==='OFFSET'){
     const ref=metadata(nodes[0]);if(!ref.sheet)fail('#VALUE!');
@@ -513,7 +532,7 @@ function callFunction(name, nodes, evaluate, ctx) {
   }
   if (name === 'IFERROR') {
     arity(2);
-    try { return checked(evaluate(nodes[0])); } catch (error) {
+    try { const value=evaluate(nodes[0]);if(isRange(value))return {...value,values:value.values.map(v=>v instanceof FormulaError?checked(evaluate(nodes[1])):v)};return checked(value); } catch (error) {
       if (!(error instanceof FormulaError)) throw error;
       return evaluate(nodes[1]);
     }
@@ -523,7 +542,7 @@ function callFunction(name, nodes, evaluate, ctx) {
     referenceFunction:(name,nodes,evaluate)=>referenceFunction(ctx,name,nodes,evaluate),
     getRange:(sheet,top,left,rows,cols)=>getRange(ctx,sheet,top,left,rows,cols),
   });
-  const args = nodes.map((node, index) => name === 'XLOOKUP' && index === 3 ? BLANK : evaluate(node));
+  const args = nodes.map((node, index) => {if(name==='XLOOKUP'&&index===3)return BLANK;try{return evaluate(node);}catch(error){if(['COUNT','COUNTA'].includes(name)&&error instanceof FormulaError)return error;throw error;}});
   const num = index => numeric(args[index]);
   const text = index => textual(args[index]);
   const bool = index => logical(args[index]);
@@ -532,7 +551,7 @@ function callFunction(name, nodes, evaluate, ctx) {
     if (name === 'COUNTA') return flatten(args).filter(({ value }) => value !== BLANK).length;
     if (name === 'COUNT') return flatten(args).filter(({ value, reference }) => {
       if (typeof value === 'number') return true;
-      if (value === BLANK || value === '' || value instanceof FormulaError || reference) return false;
+      if (value === BLANK || value instanceof FormulaError || reference) return false;
       try { numeric(value); return true; } catch { return false; }
     }).length;
     const numbers = numericItems(args);
@@ -585,7 +604,8 @@ function callFunction(name, nodes, evaluate, ctx) {
     arity(2, name === 'SUMIF' ? 3 : 2);
     const range = asRange(args[0]), matches = criterion(args[1]);
     if (name === 'COUNTIF') return range.values.filter(matches).length;
-    const sumRange = args.length > 2 ? asRange(args[2]) : range;
+    let sumRange = args.length > 2 ? asRange(args[2]) : range;
+    if(sumRange.sheet)sumRange=getRange(ctx,sumRange.sheet,sumRange.top,sumRange.left,range.rows,range.cols);
     if (sumRange.rows !== range.rows || sumRange.cols !== range.cols) fail('#VALUE!');
     let total = 0;
     range.values.forEach((value, i) => {
@@ -606,7 +626,7 @@ function callFunction(name, nodes, evaluate, ctx) {
     let selected = -1;
     for (let r = 0; r < range.rows; r++) {
       const value = range.values[r * range.cols];
-      if (value instanceof FormulaError) continue;
+      if (value instanceof FormulaError||value===BLANK||typeof value!==typeof lookup) continue;
       if (!approximate && exactMatch(value)) { selected = r; break; }
       if (approximate && compare(value, lookup) <= 0) selected = r;
     }
@@ -626,14 +646,14 @@ function callFunction(name, nodes, evaluate, ctx) {
     if (search < 0) indexes.reverse();
     for (const i of indexes) {
       const value = range.values[i];
-      if (value instanceof FormulaError) continue;
+      if (value instanceof FormulaError||value===BLANK||typeof value!==typeof lookup) continue;
       const order = compare(value, lookup);
       if (mode === 2 ? typeof lookup === 'string' && typeof value === 'string' && wildcardRegex(lookup).test(value) : order === 0) { selected = i; break; }
       if ((mode === -1 && order < 0) || (mode === 1 && order > 0)) {
         if (best === undefined || (mode === -1 ? compare(value, best) > 0 : compare(value, best) < 0)) { selected = i; best = value; }
       }
     }
-    if (selected < 0) return args.length > 3 ? checked(evaluate(nodes[3])) : fail('#N/A');
+    if (selected < 0) return args.length > 3&&!nodes[3].omitted ? checked(evaluate(nodes[3])) : fail('#N/A');
     const value = checked(result.values[selected]);
     return value === BLANK ? 0 : value;
   }
@@ -708,7 +728,8 @@ function formatDateValue(value, pattern) {
   const seconds = Math.round(fraction * 86400) % 86400;
   const hour = Math.floor(seconds / 3600), minute = Math.floor(seconds / 60) % 60, second = seconds % 60;
   const pad = number => String(number).padStart(2, '0');
-  const date = new Date(Date.UTC(year, month - 1, Math.max(1, day)));
+  const date = new Date(Date.UTC(year,month-1,1));
+  const weekday=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][((Math.floor(value)+6)%7+7)%7];
   const hasAmPm = /AM\/PM|A\/P/i.test(pattern);
   const tokens = [...pattern.matchAll(/"[^"]*"|\\.|\[[^\]]*\]|AM\/PM|A\/P|yyyy|yy|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s|./gi)];
   let previousTimeUnit = '';
@@ -732,7 +753,7 @@ function formatDateValue(value, pattern) {
       previousTimeUnit = isMinute ? 'minute' : 'month';
       return lower === 'mm' ? pad(isMinute ? minute : month) : String(isMinute ? minute : month);
     }
-    if (lower === 'dddd' || lower === 'ddd') return date.toLocaleString('en-US', { weekday: lower === 'dddd' ? 'long' : 'short', timeZone: 'UTC' });
+    if (lower === 'dddd' || lower === 'ddd') return lower==='dddd'?weekday:weekday.slice(0,3);
     if (lower === 'dd' || lower === 'd') { previousTimeUnit = 'd'; return lower === 'dd' ? pad(day) : String(day); }
     if (lower === 'hh' || lower === 'h') { previousTimeUnit = 'h'; const displayHour = hasAmPm ? hour % 12 || 12 : hour; return lower === 'hh' ? pad(displayHour) : String(displayHour); }
     if (lower === 'ss' || lower === 's') { previousTimeUnit = 's'; return lower === 'ss' ? pad(second) : String(second); }
@@ -853,6 +874,7 @@ export function rewriteSheetReferences(formula, oldName, newName) {
 }
 
 export function rewriteWorkbookSheetReferences(workbook, oldName, newName) {
+  for(const named of workbook.chartNames||[])named.formula=rewriteSheetReferences(named.formula,oldName,newName);
   for (const sheet of workbook.sheets) {
     for (const cell of Object.values(sheet.cells)) {
       if (cell.raw?.startsWith('=')) cell.raw = rewriteSheetReferences(cell.raw, oldName, newName);
@@ -883,6 +905,72 @@ export function shiftFormula(formula, dr, dc) {
   let result = formula;
   for (const patch of patches.reverse()) result = result.slice(0, patch.start) + patch.replacement + result.slice(patch.end);
   return result;
+}
+
+export function formulaForEditing(formula){
+  let tokens;try{tokens=tokenize(formula);}catch{return formula;}
+  for(let i=tokens.length-2;i>=0;i--){const t=tokens[i];if(t.type==='word'&&tokens[i+1]?.value==='('){const name=t.value.replace(/_(?:xlfn|xlws)\./gi,'');if(name!==t.value)formula=formula.slice(0,t.start)+name+formula.slice(t.end);}}
+  return formula;
+}
+export function transposeFormula(formula,source,destination){
+  if(!formula?.startsWith('='))return formula;
+  let tokens;try{tokens=tokenize(formula.slice(1));}catch{return formula;}
+  const patches=[];
+  for(let i=0;i<tokens.length;i++){
+    const t=tokens[i],m=/^(\$?)([A-Za-z]{1,3})(\$?)([1-9]\d*)$/.exec(t.value);
+    if(t.type!=='word'||!m||['!','('].includes(tokens[i+1]?.value))continue;
+    const p=parseAddress(t.value);if(!p)continue;
+    if(m[1]&&m[3])continue;
+    const r=m[1]?p.c:destination.r+p.c-source.c,c=m[3]?p.r:destination.c+p.r-source.r;
+    patches.push({start:t.start+1,end:t.end+1,value:validPosition(r,c)?`${m[3]}${colName(c)}${m[1]}${r+1}`:'#REF!'});
+  }
+  for(const p of patches.reverse())formula=formula.slice(0,p.start)+p.value+formula.slice(p.end);
+  return formula;
+}
+export function moveFormulaReferences(formula,{sourceSheet,targetSheet,ownerSheet,range,dr,dc,originSheet}){
+  if(typeof formula!=='string')return formula;
+  const offset=formula.startsWith('=')?1:0;let tokens;try{tokens=tokenize(formula.slice(offset));}catch{return formula;}
+  const patches=[],quote=name=>"'"+name.replaceAll("'","''")+"'!";
+  const read=(i,inherited)=>{
+    const first=tokens[i];let token=first,explicit=null;
+    if(['word','sheet'].includes(token?.type)&&tokens[i+1]?.value==='!'){explicit=token.value;token=tokens[i+2];i+=2;}
+    const pos=token?.type==='word'&&tokens[i+1]?.value!=='('?parseAddress(token.value):null;if(!pos)return null;
+    const m=/^(\$?)[A-Za-z]+(\$?)/.exec(token.value);
+    return {pos,token,start:first.start,end:token.end,next:i+1,sheet:explicit||inherited||originSheet||ownerSheet,explicit,colLock:m[1],rowLock:m[2]};
+  };
+  const point=(r,c,ref)=>`${ref.colLock}${colName(c)}${ref.rowLock}${r+1}`;
+  const inside=p=>p.r>=range.r1&&p.r<=range.r2&&p.c>=range.c1&&p.c<=range.c2;
+  for(let i=0;i<tokens.length;){
+    const a=read(i);if(!a){i++;continue;}const z=tokens[a.next]?.value===':'?read(a.next+1,a.sheet):null;
+    const prefix=name=>name.toLowerCase()!==ownerSheet.toLowerCase()||a.explicit||originSheet?quote(name):'';
+    let value;
+    if(a.sheet.toLowerCase()===sourceSheet.toLowerCase()&&(!z||z.sheet.toLowerCase()===sourceSheet.toLowerCase())){
+      if(!z&&inside(a.pos))value=prefix(targetSheet)+point(a.pos.r+dr,a.pos.c+dc,a);
+      if(z){
+        const box={r1:Math.min(a.pos.r,z.pos.r),c1:Math.min(a.pos.c,z.pos.c),r2:Math.max(a.pos.r,z.pos.r),c2:Math.max(a.pos.c,z.pos.c)};
+        const cut={r1:Math.max(box.r1,range.r1),c1:Math.max(box.c1,range.c1),r2:Math.min(box.r2,range.r2),c2:Math.min(box.c2,range.c2)};
+        if(cut.r1<=cut.r2&&cut.c1<=cut.c2){
+          if(inside(a.pos)&&inside(z.pos))value=prefix(targetSheet)+point(a.pos.r+dr,a.pos.c+dc,a)+':'+point(z.pos.r+dr,z.pos.c+dc,z);
+          else{
+            const subtract=(box,cut)=>{
+              const r1=Math.max(box.r1,cut.r1),r2=Math.min(box.r2,cut.r2),c1=Math.max(box.c1,cut.c1),c2=Math.min(box.c2,cut.c2);
+              if(r1>r2||c1>c2)return [box];
+              return [{...box,r2:r1-1},{...box,r1:r2+1},{r1,r2,c1:box.c1,c2:c1-1},{r1,r2,c1:c2+1,c2:box.c2}].filter(b=>b.r1<=b.r2&&b.c1<=b.c2);
+            };
+            const moved={r1:cut.r1+dr,r2:cut.r2+dr,c1:cut.c1+dc,c2:cut.c2+dc};
+            let remaining=subtract(box,cut);if(sourceSheet.toLowerCase()===targetSheet.toLowerCase())remaining=remaining.flatMap(b=>subtract(b,moved));
+            const rect=(b,name)=>prefix(name)+point(b.r1,b.c1,a)+':'+point(b.r2,b.c2,z);
+            value='('+[...remaining.map(b=>rect(b,sourceSheet)),rect(moved,targetSheet)].join(',')+')';
+          }
+        }
+      }
+    }
+    if(value===undefined&&originSheet&&!a.explicit)value=quote(a.sheet)+formula.slice(a.token.start+offset,(z?.end??a.end)+offset);
+    if(value!==undefined)patches.push({start:a.start,end:z?.end??a.end,value});
+    i=z?.next??a.next;
+  }
+  for(const p of patches.reverse())formula=formula.slice(0,p.start+offset)+p.value+formula.slice(p.end+offset);
+  return formula;
 }
 
 export function parseCSV(text) {

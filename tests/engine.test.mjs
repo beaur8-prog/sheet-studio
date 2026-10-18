@@ -111,7 +111,7 @@ test('conditional aggregates handle comparisons, wildcard escaping, and case ins
   assert.equal(calc('=SUMIF(B1:B4,">=20")', cells), 90);
   assert.equal(calc('=COUNTIF(B1:B4,">"&B1)', cells), 3);
   assert.equal(calc('=COUNTIF(A1:A4,">0")', cells), 0);
-  assert.equal(calc('=SUMIF(A1:A4,"*",B1:B2)', cells), '#VALUE!');
+  assert.equal(calc('=SUMIF(A1:A4,"*",B1:B2)', cells), 100);
 });
 
 test('lookup functions find exact, approximate, reverse, and fallback matches', () => {

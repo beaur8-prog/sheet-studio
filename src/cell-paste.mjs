@@ -1,4 +1,4 @@
-import {address,shiftFormula} from './engine.mjs';
+import {address,parseAddress,shiftFormula,transposeFormula} from './engine.mjs';
 export function scalarRaw(value) {
   if(value===null||value===undefined)return '';
   if(typeof value==='boolean')return value?'TRUE':'FALSE';
@@ -15,16 +15,24 @@ export function pastePlan(sheet, clip, start, options={}) {
   let height=h,width=w;
   if(selection){const rh=selection.r2-selection.r1+1,rw=selection.c2-selection.c1+1;if(rh>=h&&rw>=w&&rh%h===0&&rw%w===0&&!clip.cut){height=rh;width=rw;}}
   if(height*width>100000||start.r+height>1048576||start.c+width>16384)throw Error('붙여넣기 범위가 시트 또는 100,000개 셀 제한을 초과합니다.');
+  const targetRows=[],targetCols=[];
+  for(let r=start.r;targetRows.length<height&&r<1048576;r++)if(!options.hiddenRow?.(r))targetRows.push(r);
+  for(let c=start.c;targetCols.length<width&&c<16384;c++)if(!options.hiddenCol?.(c))targetCols.push(c);
+  if(targetRows.length<height||targetCols.length<width)throw Error('가시 셀 붙여넣기 범위가 시트 경계를 초과합니다.');
+  if(clip.cut&&(targetRows.some((r,i)=>r!==start.r+i)||targetCols.some((c,i)=>c!==start.c+i)))throw Error('숨김 셀을 가로지르는 범위로 잘라내어 이동할 수 없습니다. 숨김을 해제하세요.');
+  const rect={r1:start.r,c1:start.c,r2:targetRows.at(-1),c2:targetCols.at(-1)};
+  const merges=(sheet.merges||[]).filter(m=>{const [a,b]=m.split(':').map(parseAddress),overlap=a.r<=rect.r2&&b.r>=rect.r1&&a.c<=rect.c2&&b.c>=rect.c1;if(overlap&&(a.r<rect.r1||b.r>rect.r2||a.c<rect.c1||b.c>rect.c2))throw Error('병합 셀 일부에 붙여넣을 수 없습니다. 병합 전체를 선택하거나 병합을 해제하세요.');return !overlap;});
+  for(const m of clip.merges||[]){const [a,b]=m.split(':').map(parseAddress);if(transpose||targetRows.some((r,i)=>r!==start.r+i)||targetCols.some((c,i)=>c!==start.c+i))throw Error('병합 셀은 연속된 범위에 원래 방향으로 붙여넣으세요.');for(let r=0;r<height;r+=h)for(let c=0;c<width;c+=w)merges.push(address(start.r+r+a.r-clip.r,start.c+c+a.c-clip.c)+':'+address(start.r+r+b.r-clip.r,start.c+c+b.c-clip.c));}
   const updates=[];
   for(let r=0;r<height;r++)for(let c=0;c<width;c++){
     const sr=transpose?c%w:r%h,sc=transpose?r%h:c%w,source=clip.data[sr]?.[sc]||{raw:''};
     if(skipBlanks&&source.raw==='')continue;
-    const key=address(start.r+r,start.c+c),old=sheet.cells[key]||{raw:''};let cell;
+    const key=address(targetRows[r],targetCols[c]),old=sheet.cells[key]||{raw:''};let cell;
     if(mode==='formats')cell={...structuredClone(old),style:structuredClone(source.style||{})};
     else {
       cell=mode==='all'?structuredClone(source):structuredClone(old);
       let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw):source.raw;
-      if(mode!=='values'&&!clip.cut&&raw.startsWith('='))raw=shiftFormula(raw,start.r+r-(clip.sourceRows?.[sr]??clip.r+sr),start.c+c-(clip.c+sc));
+      if(mode!=='values'&&!clip.cut&&raw.startsWith('=')){const origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]};raw=transpose?transposeFormula(raw,origin,dest):shiftFormula(raw,dest.r-origin.r,dest.c-origin.c);}
       if(operation!=='none'){
         const a=options.evaluate?.(key)??Number(old.raw||0),b=clip.values?.[sr]?.[sc]??Number(source.raw||0);
         if(typeof a!=='number'||typeof b!=='number')throw Error('연산 붙여넣기는 숫자 셀에 사용하세요.');
@@ -34,5 +42,5 @@ export function pastePlan(sheet, clip, start, options={}) {
     }
     updates.push({key,cell});
   }
-  return {updates,height,width};
+  return {updates,height:rect.r2-start.r+1,width:rect.c2-start.c+1,merges};
 }

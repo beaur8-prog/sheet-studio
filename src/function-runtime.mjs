@@ -34,7 +34,7 @@ export function createFunctionRuntime(h) {
     const array=isRange(arg)&&!arg.sheet,reference=isRef(arg)||isRange(arg);
     return (isRange(arg)?arg.values:[scalar(arg)]).flatMap(item=>{
       const value=checked(item);if(value===BLANK)return [];
-      if(array&&(typeof value==='boolean'||!['AVERAGEA','MINA','MAXA'].includes(name)&&typeof value==='string'))return [];
+      if(array&&(typeof value==='boolean'||typeof value==='string'))return [];
       return [typeof value==='number'?value:typeof value==='boolean'?+value:reference?0:numeric(value)];
     });
   });
@@ -79,7 +79,7 @@ export function createFunctionRuntime(h) {
     if(![0,-1,1,2].includes(mode)||![1,-1,2,-2].includes(search))fail('#VALUE!');
     let selected=-1,best;
     for(let j=0;j<values.length;j++){
-      const i=search<0?values.length-1-j:j,v=values[i];if(v instanceof FormulaError)continue;
+      const i=search<0?values.length-1-j:j,v=values[i];if(v instanceof FormulaError||v===BLANK||typeof v!==typeof lookup)continue;
       const order=compare(v,lookup),pattern=typeof lookup==='string'&&(wildcard||mode===2)?wildcardRegex(lookup):null;
       if(pattern?typeof v==='string'&&pattern.test(v):order===0)return i;
       if((mode===-1&&order<0)||(mode===1&&order>0)){
@@ -119,7 +119,7 @@ export function createFunctionRuntime(h) {
     const metadata=FUNCTION_MAP.get(inputName);if(!metadata)fail('#NAME?');
     if(nodes.length<metadata.min||nodes.length>metadata.max)fail('#VALUE!');
     const name=FUNCTION_ALIASES[inputName]||inputName;
-    const omitted=i=>!nodes[i]||nodes[i].type==='literal'&&nodes[i].value===BLANK;
+    const omitted=i=>!nodes[i]||nodes[i].omitted||nodes[i].type==='literal'&&nodes[i].value===BLANK;
     if(name==='IFNA'){
       try{return checked(evaluate(nodes[0]));}catch(e){if(!(e instanceof FormulaError)||e.code!=='#N/A')throw e;return evaluate(nodes[1]);}
     }

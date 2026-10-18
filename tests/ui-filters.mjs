@@ -14,12 +14,12 @@ const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#
 const model=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);
 const hidden=async()=> (await model()).autoFilter.hiddenRows;
 const value=a=>page.evaluate(a=>sheetStudio.evaluate(a),a);
-const arrow=c=>page.locator(`[data-filter-column="${c}"]`),ok=()=>page.locator('#filter-ok').click();
+const arrow=c=>page.locator(`[data-filter-column="${c}"]`),ok=async()=>{await page.locator('#filter-ok').click();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));};
 try{
   await page.locator('.cell').first().waitFor();await page.locator('#file-input').setInputFiles({name:'filters.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(book))});
   await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.B3?.raw==='지역');
   await page.getByRole('button',{name:'데이터',exact:true}).click();await go('C6');await page.getByRole('button',{name:'필터',exact:true}).click();
-  assert.deepEqual((await model()).autoFilter.range,{r1:2,r2:11,c1:1,c2:3});assert.equal(await page.locator('.filter-arrow').count(),3);assert.equal(await page.locator('.filter-popup').count(),0);
+  assert.deepEqual((await model()).autoFilter.range,{r1:2,r2:11,c1:1,c2:3});await page.locator('.filter-arrow').first().waitFor();assert.equal(await page.locator('.filter-arrow').count(),3);assert.equal(await page.locator('.filter-popup').count(),0);
   await arrow(1).click();await page.locator('#filter-all').uncheck();assert.equal(await page.locator('#filter-ok').isDisabled(),true);
   await page.getByRole('checkbox',{name:'서울',exact:true}).check();await page.locator('#filter-cancel').click();assert.deepEqual(await hidden(),[]);
   await arrow(1).click();await page.locator('#filter-search').fill('서울');await ok();assert.deepEqual(await hidden(),[4,6,7,10,11]);assert.equal(await value('D15'),100);
@@ -28,7 +28,7 @@ try{
   // Isolate OS clipboard permissions while exercising the real copy/paste handlers.
   await page.evaluate(()=>{let text='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async v=>{text=v;},readText:async()=>text}});});
   await go('B4:D12');await page.keyboard.press(modifier+'+c');
-  let copied='';for(let i=0;i<20;i++){copied=await page.evaluate(()=>navigator.clipboard.readText());if(copied.startsWith('서울')&&copied.split('\n').length===4)break;await page.waitForTimeout(50);}assert.equal(copied.split('\n').length,4);assert.ok(!copied.includes('부산'));await go('F3');await page.getByRole('button',{name:'홈',exact:true}).click();await page.getByRole('button',{name:'붙여넣기',exact:true}).click();await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.F6?.raw==='서울');assert.equal(await value('G5'),60);await page.getByRole('button',{name:'데이터',exact:true}).click();
+  let copied='';for(let i=0;i<20;i++){copied=await page.evaluate(()=>navigator.clipboard.readText());if(copied.startsWith('서울')&&copied.split('\n').length===4)break;await page.waitForTimeout(50);}assert.equal(copied.split('\n').length,4);assert.ok(!copied.includes('부산'));await go('F3');await page.getByRole('button',{name:'홈',exact:true}).click();await page.getByRole('button',{name:'붙여넣기',exact:true}).click();await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.F6?.raw==='서울');assert.equal(await value('G5'),'');assert.equal(await value('G6'),60);await page.getByRole('button',{name:'데이터',exact:true}).click();
   await go('B4');await page.keyboard.press('ArrowDown');await page.waitForFunction(()=>document.querySelector('#name-box').value==='B6');
   await arrow(2).click();assert.equal(await page.getByRole('checkbox',{name:'20',exact:true}).count(),0);
   await page.locator('.filter-condition-menu summary').click();await page.locator('[data-condition="greaterThan"]').click();await page.locator('#filter-value-0').fill('20');await ok();
@@ -37,11 +37,11 @@ try{
   await page.keyboard.press(modifier+'+z');assert.deepEqual(await hidden(),[4,6,7,10,11]);await page.keyboard.press(modifier+'+Shift+z');assert.deepEqual(await hidden(),[3,4,6,7,9,10,11]);
   await arrow(2).click();await page.locator('#filter-clear').click();assert.deepEqual(await hidden(),[4,6,7,10,11]);
   await arrow(1).click();await page.locator('#filter-search').fill('부산');await page.locator('#filter-add').check();await ok();assert.deepEqual(await hidden(),[6,11]);
-  await page.getByRole('button',{name:'지우기',exact:true}).click();assert.deepEqual(await hidden(),[]);assert.equal(await page.locator('.filter-arrow').count(),3);
+  await page.getByRole('button',{name:'지우기',exact:true}).click();assert.deepEqual(await hidden(),[]);await page.locator('.filter-arrow').first().waitFor();assert.equal(await page.locator('.filter-arrow').count(),3);
   await arrow(1).click();await page.locator('#filter-search').fill('없음');assert.equal(await page.locator('#filter-ok').isDisabled(),true);await page.keyboard.press('Escape');
   await arrow(2).click();await page.locator('[data-sort="desc"]').click();assert.equal((await model()).cells.C4.raw,'90');assert.equal((await model()).cells.B3.raw,'지역');
   await arrow(1).click();await page.locator('#filter-search').fill('서울');await ok();
-  await page.getByRole('button',{name:'새 시트',exact:true}).click();assert.equal(await page.locator('.filter-arrow').count(),0);await page.locator('.sheet-tab').filter({hasText:/^Sheet1$/}).click();assert.equal(await page.locator('.filter-arrow').count(),3);
+  await page.getByRole('button',{name:'새 시트',exact:true}).click();assert.equal(await page.locator('.filter-arrow').count(),0);await page.locator('.sheet-tab').filter({hasText:/^Sheet1$/}).click();await page.locator('.filter-arrow').first().waitFor();assert.equal(await page.locator('.filter-arrow').count(),3);
   await page.reload();await arrow(1).waitFor();assert.ok((await hidden()).length>0);assert.equal(await value('D15'),100);
   await page.getByRole('button',{name:'데이터',exact:true}).click();await go('C6');await page.keyboard.press('F2');await page.locator('#editor').fill('999');await page.locator('#editor').press('Enter');
   await arrow(2).click();await page.locator('.filter-condition-menu summary').click();await page.locator('[data-condition="greaterThan"]').click();await page.locator('#filter-value-0').fill('500');await ok();

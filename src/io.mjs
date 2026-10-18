@@ -2,10 +2,10 @@ import {restoreWorksheetParts,addWorksheetParts} from './worksheet-xlsx.mjs';
 import {importConditional,exportConditional,shiftWorksheetFeatures} from './conditional.mjs';
 import {addFilterParts,restoreFilterParts} from './filter-xlsx.mjs';
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
-import { createEvaluator,transformFormulaReferences,formulaForXlsx } from './engine.mjs';
+import { createEvaluator,transformFormulaReferences,formulaForXlsx,formulaForEditing } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
 import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
-import {applyPivot} from './pivot.mjs';
+import {applyPivot,sourceData} from './pivot.mjs';
 import {restoreChartParts,addChartParts} from './chart-xlsx.mjs';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -128,7 +128,7 @@ function readDelimited(data, filename) {
     if (!value) return;
     if (c >= 16384 || r >= 1048576) throw new Error('Excel의 최대 행 또는 열 수를 초과했습니다.');
     // CSV has no type metadata. Keep leading-zero IDs as text, ordinary numbers as numbers.
-    const raw = /^[=+@]/.test(value) || /^0\d+/.test(value) || value.startsWith("'") ? "'" + value : value;
+    const raw = value.startsWith("'") ? value : /^[=+@\t\r]/.test(value)||/^-/.test(value)&&!numeric.test(value)||/^0\d+/.test(value) ? "'"+value : value;
     sheet.cells[address(c, r)] = { raw, style: {} };
   }));
   return { name: fileName(filename), activeSheetId: sheet.id, sheets: [sheet] };
@@ -154,8 +154,8 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
         const style = readStyle(cell);
         let raw = '';
         const value = cell.value;
-        if (cell.formula) raw = '=' + cell.formula;
-        else if (value instanceof Date) { raw = String(value.getTime() / DAY + 25569); style.format = 'date'; }
+        if (cell.formula) raw = '='+formulaForEditing(cell.formula);
+        else if (value instanceof Date) { raw = String(Math.round((value.getTime()/DAY+25569-(value.getTime()<Date.UTC(1900,2,1)?1:0))*1e8)/1e8); style.format = 'date'; }
         else if (typeof value === 'number') raw = String(value);
         else if (typeof value === 'boolean') raw = String(value).toUpperCase();
         else if (typeof value === 'string') raw = stringRaw(value);
@@ -283,7 +283,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     return { data: new TextEncoder().encode('\uFEFF' + rows.join('\r\n')), mime: kind === 'csv' ? 'text/csv;charset=utf-8' : 'text/tab-separated-values;charset=utf-8', extension: kind };
   }
   // Export a consistent snapshot: cached result cells and native pivot cache use the same source.
-  if(workbook.sheets.some(s=>s.pivot)){workbook=structuredClone(workbook);for(const s of workbook.sheets)if(s.pivot)applyPivot(workbook,s,s.pivot);}
+  if(workbook.sheets.some(s=>s.pivot)){workbook=structuredClone(workbook);for(const s of workbook.sheets)if(s.pivot){try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
   const book = new ExcelJS.Workbook();
   book.creator = 'Sheet Studio';
   book.created = new Date(); book.modified = new Date();
@@ -320,11 +320,11 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, (height===0?sheet.hiddenSizes?.rows?.[index]||25:Number(height)) * 3 / 4);
     }
     for(const [c,width] of Object.entries(sheet.columnWidths||{}))if(width===0)target.getColumn(+c+1).hidden=true;
-    for(const r of sheet.autoFilter?.hiddenRows||[])target.getRow(r+1).hidden=true;
-    for(const [r,height] of Object.entries(sheet.rowHeights||{}))if(height===0)target.getRow(+r+1).hidden=true;
+    for(const r of sheet.autoFilter?.hiddenRows||[])target.getRow(r+1+(pageFilters.length?pageFilters.length+1:0)).hidden=true;
+    for(const [r,height] of Object.entries(sheet.rowHeights||{}))if(height===0)target.getRow(+r+1+(pageFilters.length?pageFilters.length+1:0)).hidden=true;
     for (const merge of sheet.merges || []) {
       if (typeof merge !== 'string' || !/^[A-Z]+\d+:[A-Z]+\d+$/i.test(merge)) continue;
-      target.mergeCells(merge);
+      let shifted=merge;for(let i=0;i<(pageFilters.length?pageFilters.length+1:0);i++)shifted=transformFormulaReferences(shifted,{axis:'r',index:0,delta:1,targetSheet:sheet.name,ownerSheet:sheet.name});target.mergeCells(shifted);
     }
   }
   const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);

@@ -12,7 +12,7 @@ const page=await app.firstWindow(),errors=[],mod=process.platform==='darwin'?'Me
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');};
 const model=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);
 const cell=a=>page.getByRole('gridcell',{name:a,exact:true});
-const act=a=>page.locator(`[data-action="${a}"]`).last().click();
+const act=async a=>{await page.locator(`[data-action="${a}"]`).last().click();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));};
 const edit=async(a,text,key='Enter')=>{await go(a);await page.keyboard.press('F2');await page.locator('#editor').fill(text);await page.locator('#editor').press(key);};
 try{
   await page.locator('.cell').first().waitFor();await page.locator('#file-input').setInputFiles({name:'worksheet.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(worksheetFixture()))});

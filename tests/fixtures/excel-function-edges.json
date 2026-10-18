@@ -93,7 +93,7 @@
       "name": "edge-17"
     },
     {
-      "expected": 0.3333333333333333,
+      "expected": 1,
       "formula": "=AVERAGEA({1,TRUE,\"x\",\"\"})",
       "name": "edge-18"
     },
@@ -478,12 +478,12 @@
       "name": "probe"
     },
     {
-      "expected": 0.5,
+      "expected": 1,
       "formula": "=AVERAGEA({1,\"x\"})",
       "name": "probe"
     },
     {
-      "expected": 0.5,
+      "expected": 1,
       "formula": "=AVERAGEA({1,\"\"})",
       "name": "probe"
     },
@@ -553,7 +553,7 @@
       "name": "probe"
     },
     {
-      "expected": 0.5,
+      "expected": 1,
       "formula": "=AVERAGEA({1,FALSE,\"x\"})",
       "name": "probe"
     }

@@ -19,7 +19,7 @@ test('paste special preserves text types, target style and relative formulas thr
   const book=createWorkbook(),s=book.sheets[0];s.cells.D4={raw:'99',style:{bold:true},note:'keep'};
   const clip={r:0,c:0,data:[[{raw:'=B1',style:{background:'#ff0000'}},{raw:"'001"}],[{raw:'3'},{raw:''}]],values:[[8,'001'],[3,'']]};
   let p=pastePlan(s,clip,{r:3,c:3},{mode:'values',skipBlanks:true});assert.equal(p.updates.length,3);assert.equal(p.updates[0].cell.raw,'8');assert.equal(p.updates[0].cell.style.bold,true);assert.equal(p.updates[1].cell.raw,"'001");
-  p=pastePlan(s,clip,{r:3,c:3},{mode:'formulas',transpose:true});assert.equal(p.updates[0].cell.raw,'=E4');assert.equal(p.updates[1].cell.raw,'3');assert.equal(p.updates[0].cell.note,'keep');
+  p=pastePlan(s,clip,{r:3,c:3},{mode:'formulas',transpose:true});assert.equal(p.updates[0].cell.raw,'=D5');assert.equal(p.updates[1].cell.raw,'3');assert.equal(p.updates[0].cell.note,'keep');
   p=pastePlan(s,clip,{r:3,c:3},{mode:'formats'});assert.equal(p.updates[0].cell.raw,'99');assert.equal(p.updates[0].cell.style.background,'#ff0000');
   p=pastePlan(s,clip,{r:3,c:3},{selection:{r1:3,c1:3,r2:6,c2:6}});assert.equal(p.updates.length,16);assert.equal(p.updates.find(v=>v.key==='F6').cell.raw,'=G6');
   assert.equal(scalarRaw('=literal'),"'=literal");assert.equal(scalarRaw(true),'TRUE');

@@ -34,7 +34,7 @@ export function refValues(ref,workbook,{limit=10000}={}){
 export function referenceSize(ref){const [a,b]=ref?.range?.split(':').map(parseAddress)||[];return a&&b?(Math.abs(a.r-b.r)+1)*(Math.abs(a.c-b.c)+1):ref?.cache?.length||0;}
 export function chartSeries(chart,sheet,workbook){
   if(chart.series?.length)return chart.series;
-  const [a,b]=String(chart.range).split(':').map(parseAddress);if(!a||!b)return [];
+  const [a,b]=String(chart.range).split(':').map(parseAddress);if(!a||!b||a.r>=b.r||a.c>=b.c)return [];
   const ref=(c,r1=a.r+1,r2=b.r)=>chartRef(sheet.id,address(r1,c)+':'+address(r2,c));
   const result=[];
   for(let c=a.c+1;c<=b.c&&result.length<32;c+=chart.type==='bubble'?2:1){

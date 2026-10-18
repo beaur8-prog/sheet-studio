@@ -11,7 +11,7 @@ export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoun
     const g=gesture,column=g.axis==='c',position=getBoundary(g.axis,g.index);
     guide.dataset.axis=g.axis;guide.hidden=false;
     line.style.cssText=column?`left:${position}px;top:0;bottom:0`:`top:${position}px;left:0;right:0`;
-    label.textContent=`${column?'열 너비':'행 높이'}: ${g.value}px`;
+    label.textContent=`${column?'열 너비':'행 높이'}: ${g.value}px${getZoom()===100?'':` (화면 ${Math.round(g.value*getZoom()/100)}px · ${getZoom()}%)`}`;
     label.style.left=`${column?Math.max(42,Math.min(position+8,host.clientWidth-150)):45}px`;
     label.style.top=`${column?28:Math.max(28,Math.min(position+8,host.clientHeight-28))}px`;
   }

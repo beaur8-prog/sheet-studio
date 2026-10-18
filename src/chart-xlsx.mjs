@@ -163,7 +163,7 @@ export async function addChartParts(bytes,workbook,names){
     }
     const drawing=`xl/drawings/sheetStudioDrawing${index+1}.xml`,sheetPart=`xl/worksheets/sheet${index+1}.xml`;
     zip.file(drawing,`${DECL}<xdr:wsDr xmlns:xdr="${D}" xmlns:a="${A}" xmlns:r="${R}">${anchors}</xdr:wsDr>`);zip.file(relPath(drawing),relationships(drawingRelations));content(drawing,DRAWING_TYPE);
-    const doc=xml(await zip.file(sheetPart).async('string')),node=doc.createElementNS(doc.documentElement.namespaceURI,'drawing');node.setAttributeNS(R,'r:id','rIdSheetStudioDrawing');const before=child(doc.documentElement,'legacyDrawing')||child(doc.documentElement,'extLst');doc.documentElement.insertBefore(node,before||null);zip.file(sheetPart,stringify(doc));
+    const doc=xml(await zip.file(sheetPart).async('string')),node=doc.createElementNS(doc.documentElement.namespaceURI,'drawing');node.setAttributeNS(R,'r:id','rIdSheetStudioDrawing');const before=children(doc.documentElement).find(n=>['legacyDrawing','legacyDrawingHF','picture','oleObjects','controls','webPublishItems','tableParts','extLst'].includes(n.localName));doc.documentElement.insertBefore(node,before||null);zip.file(sheetPart,stringify(doc));
     const rels=zip.file(relPath(sheetPart))?xml(await zip.file(relPath(sheetPart)).async('string')):xml(relationships('')),r=xml(relationships(relationship('rIdSheetStudioDrawing',R+'/drawing','/'+drawing))).documentElement.firstChild;rels.documentElement.appendChild(rels.importNode(r,true));zip.file(relPath(sheetPart),stringify(rels));
   }
   if(workbook.chartTheme)zip.file('xl/theme/theme1.xml',workbook.chartTheme);

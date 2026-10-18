@@ -55,13 +55,15 @@ export function createConditionalEvaluator(book,sheet,evaluate=createEvaluator(b
     return style;
   };
 }
-export function shiftWorksheetFeatures(sheet,axis,index,delta) {
-  if(sheet.hiddenSizes){const key=axis==='r'?'rows':'cols',sizes={};for(const [keyIndex,size] of Object.entries(sheet.hiddenSizes[key]||{})){let n=+keyIndex;if(delta<0&&n===index)continue;if(n>=index)n+=delta;if(n>=0&&n<(axis==='r'?1048576:16384))sizes[n]=size;}sheet.hiddenSizes[key]=sizes;}
-  if(sheet.freeze){const key=axis==='r'?'rows':'cols';if(index<sheet.freeze[key])sheet.freeze[key]=Math.max(0,sheet.freeze[key]+delta);}
+export function shiftWorksheetFeatures(sheet,axis,index,delta,targetSheet=sheet.name) {
+  const local=targetSheet.toLowerCase()===sheet.name.toLowerCase();
+  if(local&&sheet.hiddenSizes){const key=axis==='r'?'rows':'cols',sizes={};for(const [keyIndex,size] of Object.entries(sheet.hiddenSizes[key]||{})){let n=+keyIndex;if(delta<0&&n===index)continue;if(n>=index)n+=delta;if(n>=0&&n<(axis==='r'?1048576:16384))sizes[n]=size;}sheet.hiddenSizes[key]=sizes;}
+  if(local&&sheet.freeze){const key=axis==='r'?'rows':'cols';if(index<sheet.freeze[key])sheet.freeze[key]=Math.max(0,sheet.freeze[key]+delta);}
   sheet.conditionalRules=(sheet.conditionalRules||[]).flatMap(rule=>{
-    const range=transformFormulaReferences(rule.range,{axis,index,delta,targetSheet:sheet.name,ownerSheet:sheet.name});
+    const range=local?transformFormulaReferences(rule.range,{axis,index,delta,targetSheet,ownerSheet:sheet.name}):rule.range;
     if(range.includes('#REF!'))return [];
-    const formulae=rule.formulae.map(f=>transformFormulaReferences(f,{axis,index,delta,targetSheet:sheet.name,ownerSheet:sheet.name}));
+    const anchor=ruleBounds(rule),rebase=local&&delta<0&&index===(axis==='r'?anchor.r1:anchor.c1);
+    const formulae=rule.formulae.map(f=>{const rebased=rebase?shiftFormula('='+f.replace(/^=/,''),axis==='r'?1:0,axis==='c'?1:0).replace(/^=/,f.startsWith('=')?'=':''):f;return transformFormulaReferences(rebased,{axis,index,delta,targetSheet,ownerSheet:sheet.name});});
     return [{...rule,range,formulae}];
   });
 }
@@ -72,6 +74,7 @@ export function importConditional(source,sheet) {
     const r={id:crypto.randomUUID(),range:ref.includes(':')?ref:ref+':'+ref,type:original.type,formulae:(original.formulae||[]).map(String),style:{},stopIfTrue:!!original.stopIfTrue,_priority:original.priority||1};
     for(const k of ['operator','text','rank','percent','bottom','aboveAverage'])if(original[k]!==undefined)r[k]=original[k];
     if(original.type==='containsText'&&original.operator&&original.operator!=='containsText'){r.type='expression';delete r.operator;}
+    const origin=parseAddress(group.ref.split(/\s+/)[0].split(':')[0]),anchor=parseAddress(ref.split(':')[0]);if(origin&&anchor)r.formulae=r.formulae.map(f=>shiftFormula('='+f.replace(/^=/,''),anchor.r-origin.r,anchor.c-origin.c).slice(1));
     const s=original.style||{};if(rgb(s.fill?.bgColor)||rgb(s.fill?.fgColor))r.style.background=rgb(s.fill?.bgColor)||rgb(s.fill.fgColor);if(rgb(s.font?.color))r.style.color=rgb(s.font.color);
     for(const k of ['bold','italic'])if(s.font?.[k]!==undefined)r.style[k]=s.font[k];
     try{validateConditionalRules([r]);ruleBounds(r);rules.push(r);}catch{unsupported++;}

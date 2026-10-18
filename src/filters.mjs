@@ -129,7 +129,7 @@ export function shiftAutoFilter(sheet,axis,index,delta){
   if(delta<0&&index===b.r1&&axis==='r'){delete sheet.autoFilter;return;}
   if(index<b[lo]||delta>0&&index===b[lo]){b[lo]+=delta;b[hi]+=delta;}else if(index<=b[hi])b[hi]+=delta;
   b[hi]=Math.min(b[hi],axis==='r'?1048575:16383);
-  if(b[hi]<b[lo]){delete sheet.autoFilter;return;}
+  if(b[hi]<b[lo]||b.r1===b.r2){delete sheet.autoFilter;return;}
   if(axis==='c'){
     f.columns=Object.fromEntries(Object.entries(f.columns).filter(([c])=>!(delta<0&&+c===index)).map(([c,v])=>[+c>=index?+c+delta:+c,v]));
     f.columns=Object.fromEntries(Object.entries(f.columns).filter(([c])=>+c<=b.c2));

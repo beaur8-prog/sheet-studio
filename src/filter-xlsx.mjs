@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import {address,parseAddress,createEvaluator,formatValue} from './engine.mjs';
-import {filterValue,dateNumber,filterDateParts} from './filters.mjs';
+import {filterValue,dateNumber,filterDateParts,applyFilters} from './filters.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
 import {xml,stringify,child,children,all,attr,readRelationships,resolvePart,xmlEscape as esc} from './chart-xml.mjs';
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -48,6 +48,7 @@ export async function addFilterParts(bytes,book,names){
     const following=children(root).find(n=>['sortState','dataConsolidate','customSheetViews','mergeCells','phoneticPr','conditionalFormatting','dataValidations','hyperlinks','printOptions','pageMargins','pageSetup','headerFooter','rowBreaks','colBreaks','customProperties','cellWatches','ignoredErrors','smartTags','drawing','legacyDrawing','legacyDrawingHF','picture','oleObjects','controls','webPublishItems','tableParts','extLst'].includes(n.localName));
     root.insertBefore(doc.importNode(node,true),following||null);
     let pr=child(root,'sheetPr');if(!pr){pr=doc.createElementNS(NS,'sheetPr');root.insertBefore(pr,root.firstChild);}pr.setAttribute('filterMode',Object.keys(s.autoFilter.columns).length?'1':'0');
+    const meta=doc.createElementNS('urn:sheet-studio:filter','ss:manualHiddenRows');meta.setAttribute('rows',Object.entries(s.rowHeights||{}).filter(([,h])=>h===0).map(([r])=>r).join(','));const extNS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';let extLst=child(root,'extLst');if(!extLst){extLst=doc.createElementNS(extNS,'extLst');root.appendChild(extLst);}const ext=doc.createElementNS(extNS,'ext');ext.setAttribute('uri','{84840430-696E-4AD8-A772-03A637580A33}');ext.appendChild(meta);extLst.appendChild(ext);
     zip.file(path,stringify(doc));
   }return zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
 }
@@ -79,9 +80,12 @@ export async function restoreFilterParts(bytes,book){
       else unsupported.push(c);
     }
     const hiddenRows=all(child(root,'sheetData'),'row').filter(n=>attr(n,'hidden')==='1').map(n=>Number(attr(n,'r'))-1).filter(r=>r>range.r1&&r<=range.r2);
+    const saved=all(root,'manualHiddenRows')[0],manual=new Set(saved?attr(saved,'rows').split(',').filter(Boolean).map(Number):[]);
     s.autoFilter={range,columns,hiddenRows,...(unsupported.length?{unsupported}:{} )};
     const rowNodes=new Map(all(child(root,'sheetData'),'row').map(n=>[Number(attr(n,'r'))-1,n]));
-    for(const r of hiddenRows){const height=Number(attr(rowNodes.get(r),'ht'));if(height)s.rowHeights[r]=height*4/3;else delete s.rowHeights[r];}
+    if(!unsupported.length){applyFilters(book,s);if(!saved)for(const r of hiddenRows)if(!s.autoFilter.hiddenRows.includes(r))manual.add(r);}
+    else s.autoFilter.hiddenRows=hiddenRows.filter(r=>!manual.has(r));
+    for(const r of hiddenRows){if(manual.has(r)){s.rowHeights[r]=0;continue;}const height=Number(attr(rowNodes.get(r),'ht'));if(height)s.rowHeights[r]=height*4/3;else delete s.rowHeights[r];}
     const sort=child(child(f,'sortState'),'sortCondition');if(sort){const p=parseAddress(attr(sort,'ref').split(':')[0]);if(p)s.autoFilter.sort={column:p.c,desc:attr(sort,'descending')==='1'};}
     validateAutoFilter(s.autoFilter);
   }
