@@ -1,5 +1,7 @@
 # Sheet Studio
 
+**[Mac·Windows 다운로드](https://github.com/beaur8-prog/sheet-studio/releases/latest)** · [설치·사용자 가이드](docs/USER-GUIDE.md) · [버전별 수정 내역](docs/CHANGELOG.md)
+
 설치된 Microsoft Excel의 네이티브 실행 파일과 한국어 UI를 분석하고, 익숙한 작업 흐름을 독립적으로 구현한 Windows·macOS 스프레드시트 앱입니다. Microsoft Excel의 원본 코드 복원이나 전체 기능의 동일성을 주장하지 않습니다.
 
 ## 실행
@@ -13,9 +15,9 @@ npm ci
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.3/win-x64/Sheet-Studio-0.7.3-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.4/win-x64/Sheet-Studio-0.7.4-Windows-x64.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
-**Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon) 또는 `--arch=x64`(Intel)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS 실제 실행 검증은 아직 하지 않았습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
+**Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon) 또는 `--arch=x64`(Intel)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS arm64의 실제 실행과 시트 수명주기 회귀 테스트를 확인했습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 
 로컬 브라우저에서는 `npm run dev` 후 `http://127.0.0.1:5192`로 접속하세요.
 

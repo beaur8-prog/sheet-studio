@@ -22,8 +22,8 @@ SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=x64
 
 결과:
 
-- Apple Silicon: `release/0.7.3/mac-arm64/Sheet-Studio-0.7.3-macOS-arm64.dmg` 및 `.zip`
-- Intel: `release/0.7.3/mac-x64/Sheet-Studio-0.7.3-macOS-x64.dmg` 및 `.zip`
+- Apple Silicon: `release/0.7.4/mac-arm64/Sheet-Studio-0.7.4-macOS-arm64.dmg` 및 `.zip`
+- Intel: `release/0.7.4/mac-x64/Sheet-Studio-0.7.4-macOS-x64.dmg` 및 `.zip`
 - 각 폴더의 `artifact-manifest.json`: 결과 파일의 크기 및 SHA-256
 
 배포 앱을 실행해서 확인하려면 빌드한 아키텍처와 같은 Mac에서 다음을 실행합니다.
@@ -60,7 +60,7 @@ node tests/ui-pivot.mjs --packaged
 Documents 등에서 `resource fork, Finder information, or similar detritus not allowed` 오류가 발생하면 출력 폴더를 동기화되지 않는 위치로 지정할 수 있습니다. 빌드는 생성된 앱의 확장 메타데이터를 서명 전에 정리하지만, 동기화 도구가 다시 추가할 수 있습니다.
 
 ```sh
-SHEET_STUDIO_OUTPUT_DIR="$HOME/Library/Caches/sheet-studio-build/0.7.3" SHEET_STUDIO_ADHOC=1 npm run package:dir
+SHEET_STUDIO_OUTPUT_DIR="$HOME/Library/Caches/sheet-studio-build/0.7.4" SHEET_STUDIO_ADHOC=1 npm run package:dir
 ```
 
 이 경우 Apple Silicon 앱은 지정한 폴더의 `mac-arm64/Sheet Studio.app`에 생성됩니다. 로컬 ad-hoc 서명이며 Apple 공증 배포본은 아닙니다.
@@ -68,5 +68,5 @@ SHEET_STUDIO_OUTPUT_DIR="$HOME/Library/Caches/sheet-studio-build/0.7.3" SHEET_ST
 시트 이름 변경/삭제 회귀 검증은 `node tests/ui-sheet-lifecycle.mjs`로 실행합니다. 출력 위치를 바꾼 패키지를 검증하려면 다음과 같이 실행하세요.
 
 ```sh
-SHEET_STUDIO_EXECUTABLE="$HOME/Library/Caches/sheet-studio-build/0.7.3/mac-arm64/Sheet Studio.app/Contents/MacOS/Sheet Studio" node tests/ui-sheet-lifecycle.mjs --packaged
+SHEET_STUDIO_EXECUTABLE="$HOME/Library/Caches/sheet-studio-build/0.7.4/mac-arm64/Sheet Studio.app/Contents/MacOS/Sheet Studio" node tests/ui-sheet-lifecycle.mjs --packaged
 ```
