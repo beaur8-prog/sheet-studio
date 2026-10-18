@@ -35,9 +35,10 @@ async function packageApp() {
   let appOutDir;
   const artifacts = await build({
     projectDir: stage,
+    publish: 'never',
     targets: (mac ? Platform.MAC : Platform.WINDOWS).createTarget(target.directory ? 'dir' : mac ? ['dmg', 'zip'] : 'portable', Arch[target.arch]),
     config: {
-      appId: 'local.lattice.sheetstudio', productName: 'Sheet Studio',
+      appId: 'local.lattice.sheetstudio', productName: 'Sheet Studio', publish: null,
       electronVersion: runtime.version, ...(reuseRuntime ? { electronDist: path.join(electronRoot, 'dist') } : {}),
       npmRebuild: false, asar: true,
       directories: { output },
