@@ -137,6 +137,7 @@ git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
 git checkout v0.7.4
 npm ci
+npm run runtime:install
 npm run desktop
 ```
 

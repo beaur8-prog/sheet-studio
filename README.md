@@ -12,6 +12,7 @@ Windows 또는 macOS와 Node.js 22.12 이상이 필요합니다.
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
 npm ci
+npm run runtime:install
 npm run desktop
 ```
 

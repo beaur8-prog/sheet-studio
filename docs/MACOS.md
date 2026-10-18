@@ -4,6 +4,7 @@ Mac에서 Node.js 22.12 이상을 설치한 뒤 저장소 루트에서 실행합
 
 ```sh
 npm ci
+npm run runtime:install
 npm test
 npm run desktop
 ```
