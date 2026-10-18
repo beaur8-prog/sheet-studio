@@ -17,9 +17,6 @@ jobs:
           - runner: macos-15
             platform: mac
             arch: arm64
-          - runner: macos-15-intel
-            platform: mac
-            arch: x64
           - runner: windows-latest
             platform: win
             arch: x64
@@ -49,6 +46,10 @@ jobs:
       - run: npm run package -- --${{ matrix.platform }} --arch=${{ matrix.arch }}
       - run: node scripts/electron-smoke.cjs --packaged
       - run: node tests/ui-sheet-lifecycle.mjs --packaged
+      - name: Verify Windows installation and shortcut
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: ./scripts/check-windows-install.ps1
       - name: Prepare download assets
         shell: bash
         env:

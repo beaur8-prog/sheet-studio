@@ -20,7 +20,7 @@ async function generateManifest({ output, appOutDir, files = [], platform, arch 
   const result = {
     product: 'Sheet Studio', version, platform, architecture: arch,
     createdAt: new Date().toISOString(), artifacts,
-    note: platform === 'darwin' ? 'Keep the complete .app bundle. Unsigned builds are for local testing.' : 'The portable EXE is self contained. The unpacked EXE requires the complete win-unpacked directory.',
+    note: platform === 'darwin' ? 'Keep the complete .app bundle. Unsigned builds are for local testing.' : 'Run the Setup EXE to install the app and its shortcuts. The unpacked EXE requires the complete win-unpacked directory.',
   };
   await fs.writeFile(path.join(output, 'artifact-manifest.json'), JSON.stringify(result, null, 2));
   return result;

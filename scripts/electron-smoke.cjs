@@ -15,7 +15,7 @@ async function smoke() {
   delete environment.ELECTRON_RUN_AS_NODE;
   const usingPackage = process.argv.includes('--packaged');
   const application = await _electron.launch({
-    executablePath: usingPackage ? packaged : runtime,
+    executablePath: process.env.SHEET_STUDIO_EXECUTABLE || (usingPackage ? packaged : runtime),
     args: usingPackage ? [] : [root], env: environment,
   });
   try {

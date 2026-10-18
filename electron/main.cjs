@@ -18,6 +18,8 @@ let win;
 const rendererPath = path.join(__dirname, '../dist/index.html');
 const rendererURL = pathToFileURL(rendererPath).href;
 app.setName('Sheet Studio');
+// Match the installer shortcut identity so Windows can group and pin this app.
+if (process.platform === 'win32') app.setAppUserModelId('local.lattice.sheetstudio');
 if (process.env.SHEET_STUDIO_DATA) app.setPath('userData', path.resolve(process.env.SHEET_STUDIO_DATA));
 
 function trusted(event) {

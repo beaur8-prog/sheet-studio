@@ -1,8 +1,8 @@
 # Sheet Studio 사용자 가이드
 
-v0.7.4 기준 · 2026년 10월 18일
+v0.7.5 기준 · 2026년 10월 18일
 
-[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.4) · [버전별 변경 내역](CHANGELOG.md)
+[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.5) · [버전별 변경 내역](CHANGELOG.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -18,13 +18,12 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.4)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.5)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.4-macOS-arm64.dmg` 또는 `.zip` |
-| Mac Intel | `Sheet-Studio-0.7.4-macOS-x64.dmg` 또는 `.zip` |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.4-Windows-x64.exe` |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.5-macOS-arm64.dmg` 또는 `.zip` |
+| Windows 64비트 x64 | `Sheet-Studio-0.7.5-Windows-x64-Setup.exe` |
 
 ### Mac
 
@@ -37,15 +36,16 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ### Windows
 
-1. `Sheet-Studio-0.7.4-Windows-x64.exe`를 다운로드합니다.
-2. 원하는 폴더에 보관하고 더블클릭합니다. **설치 마법사 없이 실행되는 포터블 패키지**입니다.
-3. 자주 쓴다면 파일의 바로가기를 바탕화면에 만듭니다. 실행 중 EXE 파일을 이동하거나 삭제하지 마세요.
+1. `Sheet-Studio-0.7.5-Windows-x64-Setup.exe`를 다운로드합니다.
+2. Setup EXE를 실행해 설치합니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
+3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
+4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
 
 Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이나 조직 보안 정책이 경고 또는 차단할 수 있습니다. 배포 저장소와 파일명을 확인하고 조직 정책을 따르세요. 기본 표 편집에는 Microsoft Excel 설치가 필요하지 않습니다. VBA 연결에만 Windows 데스크톱 Excel이 필요합니다.
 
 ### 업데이트
 
-작업 문서를 먼저 `.sheet.json` 또는 `.xlsx`로 저장하고 앱을 종료합니다. 새 Mac 앱으로 기존 앱을 교체하거나 새 Windows EXE를 실행합니다. 자동 저장은 파일 백업을 대신하지 않습니다. 기존 버전은 아래 변경 내역의 소스 이력이며, 모든 버전의 실행 파일이 공개된 것은 아닙니다.
+작업 문서를 먼저 `.sheet.json` 또는 `.xlsx`로 저장하고 앱을 종료합니다. 새 Mac 앱으로 기존 앱을 교체하거나 새 Windows Setup EXE를 실행해 업데이트합니다. 자동 저장은 파일 백업을 대신하지 않습니다. 기존 버전은 아래 변경 내역의 소스 이력이며, 모든 버전의 실행 파일이 공개된 것은 아닙니다.
 
 ## 3. 처음 실행하고 표 만들기
 
@@ -135,7 +135,7 @@ Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 
 ```sh
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
-git checkout v0.7.4
+git checkout v0.7.5
 npm ci
 npm run runtime:install
 npm run desktop

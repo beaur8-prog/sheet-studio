@@ -36,15 +36,20 @@ async function packageApp() {
   const artifacts = await build({
     projectDir: stage,
     publish: 'never',
-    targets: (mac ? Platform.MAC : Platform.WINDOWS).createTarget(target.directory ? 'dir' : mac ? ['dmg', 'zip'] : 'portable', Arch[target.arch]),
+    targets: (mac ? Platform.MAC : Platform.WINDOWS).createTarget(target.directory ? 'dir' : mac ? ['dmg', 'zip'] : 'nsis', Arch[target.arch]),
     config: {
       appId: 'local.lattice.sheetstudio', productName: 'Sheet Studio', publish: null,
       electronVersion: runtime.version, ...(reuseRuntime ? { electronDist: path.join(electronRoot, 'dist') } : {}),
       npmRebuild: false, asar: true,
       directories: { output },
       files: ['dist/**/*', 'electron/**/*', 'package.json'],
-      win: { target: 'portable', signAndEditExecutable: false, icon },
-      portable: { artifactName: 'Sheet-Studio-${version}-Windows-${arch}.exe' },
+      win: { target: 'nsis', signAndEditExecutable: false, icon },
+      nsis: {
+        artifactName: 'Sheet-Studio-${version}-Windows-${arch}-Setup.exe',
+        oneClick: true, perMachine: false,
+        createDesktopShortcut: true, createStartMenuShortcut: true,
+        shortcutName: 'Sheet Studio', deleteAppDataOnUninstall: false,
+      },
       mac: {
         category: 'public.app-category.productivity', icon: path.join(stage, 'electron/app.png'),
         artifactName: 'Sheet-Studio-${version}-macOS-${arch}.${ext}',
