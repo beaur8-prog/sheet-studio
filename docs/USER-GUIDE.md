@@ -26,7 +26,7 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 | --- | --- |
 | Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.7-macOS-arm64.dmg` 또는 `.zip` |
 | Windows 64비트 x64 | `Sheet-Studio-0.7.7-Windows-x64-Setup.exe` |
-| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.7-Linux-x64.deb` |
+| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.7-Linux-amd64.deb` |
 
 ### Mac
 
@@ -48,10 +48,10 @@ Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이�
 
 ### Linux (Ubuntu·Debian 계열 x64)
 
-`Sheet-Studio-0.7.7-Linux-x64.deb`를 다운로드한 폴더에서 설치합니다.
+`Sheet-Studio-0.7.7-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
 
 ```sh
-sudo apt install ./Sheet-Studio-0.7.7-Linux-x64.deb
+sudo apt install ./Sheet-Studio-0.7.7-Linux-amd64.deb
 sheet-studio
 ```
 
