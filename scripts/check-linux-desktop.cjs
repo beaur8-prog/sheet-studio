@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const os=require('node:os');
-const {spawn,execFileSync}=require('node:child_process');
+const {execFileSync}=require('node:child_process');
 const {_electron}=require('playwright');
 const manifest=require('../package.json');
 
@@ -15,13 +15,17 @@ async function check(){
   const profile=await fs.mkdtemp(path.join(os.tmpdir(),'sheet-desktop-'));
   const output=path.resolve('test-results/linux-desktop');await fs.mkdir(output,{recursive:true});
   const env={...process.env,SHEET_STUDIO_DATA:profile};delete env.ELECTRON_RUN_AS_NODE;
-  let app,child;
+  let app;
   try{
     if(process.argv.includes('--wayland')){
       assert.ok(env.WAYLAND_DISPLAY,'A disposable Wayland compositor is required');
       let log='',exited=false;
-      child=spawn(executable,['--ozone-platform=wayland'],{env:{...env,WAYLAND_DEBUG:'1'},stdio:['ignore','pipe','pipe']});
-      child.stdout.on('data',b=>{log+=b;});child.stderr.on('data',b=>{log+=b;});child.on('exit',()=>{exited=true;});
+      app=await _electron.launch({executablePath:executable,args:['--ozone-platform=wayland','--disable-gpu'],env:{...env,WAYLAND_DEBUG:'1'}});
+      app.process().stdout.on('data',b=>{log+=b;});app.process().stderr.on('data',b=>{log+=b;});app.process().on('exit',()=>{exited=true;});
+      await app.firstWindow();
+      // A headless compositor can defer the first hidden-window paint. Map the
+      // actual packaged window explicitly; do not alter its application ID.
+      await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show());
       const deadline=Date.now()+20000;
       while(!exited&&!/set_app_id\("[^"]+"\)/.test(log)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
       await fs.writeFile(path.join(output,'wayland-protocol.log'),log);
@@ -70,7 +74,6 @@ print(json.dumps(icons))
     console.log('PASS: installed desktop entry, themed icons at common sizes, and actual X11 WM_CLASS:',wmClass);
   }finally{
     if(app)await app.close();
-    if(child&&child.exitCode===null){child.kill('SIGTERM');await new Promise(resolve=>{const timer=setTimeout(()=>{child.kill('SIGKILL');resolve();},5000);child.once('exit',()=>{clearTimeout(timer);resolve();});});}
     await fs.rm(profile,{recursive:true,force:true});
   }
 }

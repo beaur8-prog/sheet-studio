@@ -39,7 +39,7 @@ jobs:
           export XDG_RUNTIME_DIR="$RUNNER_TEMP/sheet-wayland"
           mkdir -m 700 "$XDG_RUNTIME_DIR"
           export WAYLAND_DISPLAY=wayland-sheet-test
-          weston --backend=headless-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --width=1280 --height=960 > "$RUNNER_TEMP/sheet-weston.log" 2>&1 &
+          weston --backend=headless-backend.so --use-pixman --socket="$WAYLAND_DISPLAY" --idle-time=0 --width=1280 --height=960 > "$RUNNER_TEMP/sheet-weston.log" 2>&1 &
           weston_pid=$!
           trap 'kill "$weston_pid" || true' EXIT
           for attempt in {1..50}; do
@@ -47,7 +47,11 @@ jobs:
             sleep 0.1
           done
           test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
-          node scripts/check-linux-desktop.cjs --wayland
+          if ! node scripts/check-linux-desktop.cjs --wayland; then
+            cat "$RUNNER_TEMP/sheet-weston.log"
+            tail -80 test-results/linux-desktop/wayland-protocol.log || true
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
