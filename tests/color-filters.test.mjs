@@ -7,6 +7,7 @@ import {parseWorkbook,serializeWorkbook} from '../src/engine.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
 import {nativeFilterPlan} from '../src/filter-native.mjs';
 import {createColorResolver} from '../src/spreadsheet-colors.mjs';
+import {xml,child,children,stringify} from '../src/chart-xml.mjs';
 const rule=(target,color)=>({type:'color',target,color});
 const visible=s=>Array.from({length:7},(_,i)=>i+1).filter(r=>!s.autoFilter.hiddenRows.includes(r));
 
@@ -42,7 +43,12 @@ test('Excel color import resolves actual theme, tint and indexed values consiste
 test('Windows native plans use OLE RGB and the corresponding fill/font operators',()=>{
  const b=colorFixture(),s=b.sheets[0];for(const [target,color,operator,criteria1] of [['background','#123456',8,0x563412],['color','#123456',9,0x563412],['background',null,12,undefined],['color',null,13,undefined]]){s.autoFilter.columns={0:rule(target,color)};const p=nativeFilterPlan(s.autoFilter).filters[0];assert.equal(p.field,1);assert.equal(p.operator,operator);assert.equal(p.criteria1,criteria1);}
 });
-test('unknown color style references preserve the saved hidden rows and block destructive reapply',async()=>{
- const b=colorFixture(),s=b.sheets[0];s.autoFilter.columns={0:rule('background','#ff0000')};applyFilters(b,s);const zip=await JSZip.loadAsync((await writeSpreadsheet(b)).data);zip.file('xl/worksheets/sheet1.xml',(await zip.file('xl/worksheets/sheet1.xml').async('string')).replace(/<colorFilter dxfId="\d+"/,'<colorFilter dxfId="99999"'));
- const loaded=await readSpreadsheet(await zip.generateAsync({type:'uint8array'}),'unknown-color.xlsx'),sheet=loaded.sheets[0];assert.deepEqual(sheet.autoFilter.unsupported,[0]);assert.deepEqual(visible(sheet),[1,3,6,7]);assert.throws(()=>applyFilters(loaded,sheet),/미지원/);await assert.rejects(()=>writeSpreadsheet(loaded),/미지원/);
+test('unknown color style references and gradient criteria preserve saved hidden rows and block destructive reapply',async()=>{
+ const b=colorFixture(),s=b.sheets[0];s.autoFilter.columns={0:rule('background','#ff0000')};applyFilters(b,s);const bytes=(await writeSpreadsheet(b)).data;
+ for(const invalid of ['missing','gradient']){
+  const zip=await JSZip.loadAsync(bytes);
+  if(invalid==='missing')zip.file('xl/worksheets/sheet1.xml',(await zip.file('xl/worksheets/sheet1.xml').async('string')).replace(/<colorFilter dxfId="\d+"/,'<colorFilter dxfId="99999"'));
+  else {const doc=xml(await zip.file('xl/styles.xml').async('string')),dxf=children(child(doc.documentElement,'dxfs'),'dxf')[1];dxf.replaceChild(doc.importNode(xml('<fill xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><gradientFill degree="0"><stop position="0"><color rgb="FFFF0000"/></stop></gradientFill></fill>').documentElement,true),child(dxf,'fill'));zip.file('xl/styles.xml',stringify(doc));}
+  const loaded=await readSpreadsheet(await zip.generateAsync({type:'uint8array'}),'unknown-color.xlsx'),sheet=loaded.sheets[0];assert.deepEqual(sheet.autoFilter.unsupported,[0],invalid);assert.deepEqual(visible(sheet),[1,3,6,7]);assert.throws(()=>applyFilters(loaded,sheet),/미지원/);await assert.rejects(()=>writeSpreadsheet(loaded),/미지원/);
+ }
 });
