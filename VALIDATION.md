@@ -1,5 +1,12 @@
 # 검증 기록
 
+## 2026-10-19 · 0.7.10 Studio 표 교환 (소스·로컬, 미배포)
+
+- 단위 시험 **117개 통과**, Windows 전용 1개 건너뜀. 빌드와 실제 OS 클립보드 UI 시험 통과. 외부 표 HTML의 10 MB 수신 한도는 UTF-8 바이트로 검사하며, Sheet·Slide의 공유 모듈은 같은 파일로 유지합니다.
+- 격리한 Sheet 0.7.10·Word 1.2.11·Slide 1.6.1에서 **Sheet↔Word, Sheet↔Slide, Word↔Slide 여섯 방향**을 소스 앱과 패키징한 Mac 앱으로 검사했습니다. Word의 표 전체 선택·복사, Slide의 홈 복사, 세 앱의 홈 붙여넣기를 사용합니다. HTML과 같은 선택 범위의 TSV, 병합·색·줄바꿈·표시값 및 Word의 한 번 실행 취소를 확인했습니다.
+- 클립보드 UI 시험의 복구도 표준 텍스트·HTML·RTF·이미지를 한 번의 `clipboard.write()`로 되돌립니다. 단일 형식을 반복 써서 다른 형식을 지우던 복구 경로를 제거했습니다. 사용자 문서 대신 격리 프로필과 합성 파일을 사용합니다.
+- 결과: `.package/studio-clipboard-unit-final.log`, `.package/studio-clipboard-native-final.log`, `.package/studio-clipboard-six-directions-source.log`, `.package/studio-clipboard-six-directions-packaged.log`, `test-results/suite-clipboard-*.png`. Windows·Linux와 실제 Microsoft Office 앱 간 교환은 재실행하지 않았습니다. 공개 릴리즈·리토스 갱신은 배포 요청 때 진행합니다.
+
 검증일: 2026-10-18 (Asia/Seoul).
 
 ## 0.7.3 — 셀 안 커서와 직접 편집

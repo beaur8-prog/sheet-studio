@@ -27,7 +27,7 @@
 | 셀 내부의 서로 다른 글자 서식 | Word 내부에서는 유지하지만 Sheet·Slide로 표를 가져오면 셀의 첫 텍스트 구간 서식으로 단순화합니다. |
 | 기타 | 메모·매크로·외부 연결·차트·그림·대각선 테두리·테마 정의는 이 표 교환에 포함되지 않습니다. 외부 앱으로 잘라내기 이동을 완료하는 기능은 제공하지 않습니다. |
 
-HTML 전송은 최대 10 MB, Sheet는 최대 100,000셀입니다. Slide는 100행·50열, 셀당 2,000자·표 전체 50,000자 제한을 적용합니다. 제한 초과나 잘못된 병합·서식은 문서를 변경하기 전에 거부합니다. Word의 페이지 너비보다 넓은 표는 수신 후 열 너비를 줄이세요.
+수신하는 표 HTML은 UTF-8 기준 최대 10 MB입니다. 세 앱 모두 한글의 글자 수와 바이트 수를 구별해 검사합니다. Sheet와 Word는 최대 100,000셀입니다. Slide는 100행·50열, 셀당 2,000자·표 전체 50,000자 제한을 적용합니다. 제한 초과나 잘못된 병합 범위는 문서를 변경하기 전에 거부합니다. Word의 페이지 너비보다 넓은 표는 수신 후 열 너비를 줄이세요.
 
 ## 클립보드 계약 v1
 
@@ -46,13 +46,13 @@ Sheet의 `src/table-exchange.mjs`가 셀 값·서식·병합을 교환용 표로
 
 Electron에서는 `electron/preload.cjs`의 제한된 `writeClipboard({text, html})`를 호출합니다. `electron/main.cjs`는 송신 창과 메인 프레임, 자료 타입과 크기를 확인한 후 `clipboard.write({text, html})`를 한 번 호출합니다. 웹에서는 `ClipboardItem`에 두 MIME 형식을 넣습니다. 일반 텍스트만 덮어 쓰면 표 서식은 전달되지 않습니다.
 
-Word는 ProseMirror의 기본 셀/문서 선택 복사가 표 HTML을 생성하므로 별도 송신 프로토콜이 필요하지 않습니다. Slide의 `src/table-exchange.ts`와 `copyStudioTable()`은 표 개체·선택 셀을 같은 HTML로 내보냅니다. 기존 Slide 내부 개체 식별자는 함께 유지합니다.
+Word는 ProseMirror의 기본 셀/문서 선택 복사가 표 HTML을 생성합니다. 표만 선택해 복사할 때 `src/clipboard.ts`의 `tableClipboardText()`가 병합의 빈 칸과 인용된 줄바꿈을 포함한 TSV를 함께 만듭니다. 일반 글·혼합 선택의 텍스트 복사는 기존 직렬화를 따릅니다. Slide의 `src/table-exchange.ts`와 `copyStudioTable()`은 표 개체·선택 셀을 같은 HTML로 내보냅니다. 기존 Slide 내부 개체 식별자는 함께 유지합니다.
 
 ## 수신 쪽 구현
 
 ### Word Studio
 
-`src/App.tsx`의 홈 붙여넣기를 수정했습니다. 데스크톱에서는 기존 `wordDesktop.paste()` → `webContents.paste()` → 편집기의 정상 paste 이벤트 경로를 사용합니다. 브라우저에서는 HTML을 우선 읽고 `sanitizeImportedHtml()`를 거친 뒤 `editor.view.pasteHTML()`을 호출하며, HTML이 없으면 `pasteText()`를 씁니다. 비동기 읽기 중 문서나 삽입 위치가 바뀌면 적용하지 않습니다. 키보드 붙여넣기는 기존 `transformPastedHTML`과 표 확장을 그대로 사용합니다.
+홈과 표 메뉴는 `src/clipboard.ts`의 공통 붙여넣기를 사용합니다. 데스크톱에서는 기존 `wordDesktop.paste()` → `webContents.paste()` → 편집기의 정상 paste 이벤트 경로를 사용합니다. 브라우저에서는 같은 `ClipboardItem`의 HTML을 우선 읽고 `sanitizeImportedHtml()`를 거친 뒤 `editor.view.pasteHTML()`을 호출하며, HTML이 없으면 `pasteText()`를 씁니다. 비동기 읽기 중 문서·선택·포커스나 편집 상태가 바뀌면 적용하지 않습니다. 선택을 옮겼다가 같은 위치로 돌아온 경우도 취소합니다. 키보드 및 데스크톱 붙여넣기는 DOM paste 이벤트에서 크기·병합을 먼저 검사하고 기존 `transformPastedHTML`과 표 확장을 사용합니다. 잘못된 병합을 ProseMirror가 고치면서 기존 선택 본문을 바꾸지 않도록 파싱 전에 거부합니다.
 
 셀 스타일은 `src/table-format.ts`, 병합과 열 너비는 Tiptap Table 확장이 처리합니다. `colwidth`와 `<col width>`가 필요하며 `data-colwidth`만 보내면 이 Tiptap 버전에서 열 너비가 사라질 수 있습니다.
 
@@ -82,4 +82,4 @@ work/
 - Slide: `npm run build`, `npx playwright test tests/studio-clipboard.spec.ts tests/priority-safety.spec.ts tests/native-files.spec.ts tests/office-shell.spec.ts`
 - 세 앱을 빌드한 후 Sheet 저장소에서 `node scripts/studio-clipboard-smoke.mjs`
 
-통합 검사는 격리한 앱 프로필을 사용해 실제 OS 클립보드로 Sheet→Word·Slide, Word→Sheet·Slide, Slide→Sheet를 확인합니다. 사용자 문서를 열지 않으며 종료 시 클립보드의 표준 텍스트·HTML·RTF·이미지를 복원합니다. 패키지 검사 시 `SHEET_STUDIO_EXECUTABLE`, `WORD_STUDIO_EXECUTABLE`, `SLIDE_STUDIO_EXECUTABLE`에 각 앱 실행 파일을 지정하면 같은 검사를 설치 번들로 수행합니다. 검증 스크린샷은 `sheet-studio/test-results/suite-clipboard-*.png`입니다. Mac에서 검증했으며 실제 Windows·Linux 앱 간 클립보드 실행 검증은 수행하지 않았습니다. 실제 Microsoft Office와의 호환성 검증을 뜻하지 않습니다.
+통합 검사는 격리한 앱 프로필을 사용해 실제 OS 클립보드로 **Sheet↔Word, Sheet↔Slide, Word↔Slide 여섯 방향**을 확인합니다. Word의 실제 표 전체 선택·홈 복사, Slide의 홈 복사, 각 앱의 홈 붙여넣기를 사용합니다. 사용자 문서를 열지 않으며 종료 시 클립보드의 표준 텍스트·HTML·RTF·이미지를 한 번의 `clipboard.write()`로 복원합니다. 패키지 검사 시 `SHEET_STUDIO_EXECUTABLE`, `WORD_STUDIO_EXECUTABLE`, `SLIDE_STUDIO_EXECUTABLE`에 각 앱 실행 파일을 지정하면 같은 검사를 설치 번들로 수행합니다. 검증 스크린샷은 `sheet-studio/test-results/suite-clipboard-*.png`이며 Slide→Word 결과는 `suite-clipboard-slide-to-word.png`입니다. Mac에서 검증했으며 실제 Windows·Linux 앱 간 클립보드 실행 검증은 수행하지 않았습니다. 실제 Microsoft Office와의 호환성 검증을 뜻하지 않습니다.
