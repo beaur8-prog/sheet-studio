@@ -35,6 +35,7 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
       if(!retained)Object.assign(patch,{range:selected,...layout,series:undefined,source:undefined,rebuilt:true,previewNote:undefined,unsupportedReason:undefined});
       onApply(patch);el.remove();
     }}]);
+  el.querySelector('.modal').classList.add('chart-modal');
   el.querySelector('#chart-series-by').value=current.seriesBy||'auto';
   const candidate=()=>{const type=el.querySelector('#chart-type').value,range=normalize(el.querySelector('#chart-range').value.toUpperCase().replace(/\$/g,'').trim()),direction=el.querySelector('#chart-series-by').value;return {type,range,...(direction==='auto'?{}:{seriesBy:direction})};};
   const syncControls=()=>{

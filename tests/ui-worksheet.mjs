@@ -12,14 +12,17 @@ const page=await app.firstWindow(),errors=[],mod=process.platform==='darwin'?'Me
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');};
 const model=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);
 const cell=a=>page.getByRole('gridcell',{name:a,exact:true});
+const settle=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+// Read an attached element in one renderer task; renderGrid replaces nodes.
+const rect=a=>cell(a).evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y};});
 const act=async a=>{await page.locator(`[data-action="${a}"]`).last().click();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));};
 const edit=async(a,text,key='Enter')=>{await go(a);await page.keyboard.press('F2');await page.locator('#editor').fill(text);await page.locator('#editor').press(key);};
 try{
   await page.locator('.cell').first().waitFor();await page.locator('#file-input').setInputFiles({name:'worksheet.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(worksheetFixture()))});
-  await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.A1?.raw==='상품');
-  const before=await cell('A1').boundingBox();await page.locator('#grid').evaluate(el=>{el.scrollTop=500;el.scrollLeft=500;});await page.waitForTimeout(100);
-  const after=await cell('A1').boundingBox();assert.equal(after.x,before.x);assert.equal(after.y,before.y);assert.equal(await cell('F1').count(),0);assert.equal(await cell('A9').count(),0);
-  await go('B3');assert.equal((await cell('B3').boundingBox()).x>=before.x+130,true);await cell('A1').click();await page.waitForFunction(()=>document.querySelector('#name-box').value==='A1');
+  await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.A1?.raw==='상품'&&document.querySelector('.cell[aria-label="A1"]')?.textContent==='상품');await settle();
+  const before=await rect('A1');await page.locator('#grid').evaluate(el=>{el.scrollTop=500;el.scrollLeft=500;});await page.waitForFunction(()=>{const g=document.querySelector('#grid');return g.scrollTop===500&&g.scrollLeft===500;});await settle();
+  const after=await rect('A1');assert.equal(after.x,before.x);assert.equal(after.y,before.y);assert.equal(await cell('F1').count(),0);assert.equal(await cell('A9').count(),0);
+  await go('B3');assert.equal((await rect('B3')).x>=before.x+130,true);await cell('A1').click();await page.waitForFunction(()=>document.querySelector('#name-box').value==='A1');
   await page.getByRole('button',{name:'보기',exact:true}).click();await act('freeze-menu');await act('freeze-none');assert.deepEqual((await model()).freeze,{rows:0,cols:0});
   await go('C3');await act('freeze-menu');await act('freeze-selection');assert.deepEqual((await model()).freeze,{rows:2,cols:2});await page.locator('#grid').evaluate(el=>{el.scrollTop=250;el.scrollLeft=250;});await page.waitForTimeout(100);assert.ok(await cell('B2').isVisible());
   await act('freeze-menu');await act('freeze-first-row');assert.deepEqual((await model()).freeze,{rows:1,cols:0});

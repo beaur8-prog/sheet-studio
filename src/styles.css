@@ -24,3 +24,5 @@ button.color-input{border-bottom:4px solid;width:28px;height:26px;font-weight:70
 
 /* The idle cell input stays focused for native IME without showing an editing caret. */
 .cell-editor.entry-ready{opacity:0;pointer-events:none;caret-color:transparent}
+
+.chart-modal{display:flex;flex-direction:column;max-height:calc(100dvh - 32px)}.chart-modal>h2,.chart-modal>.modal-actions{flex-shrink:0}.chart-modal>.modal-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:4px}
