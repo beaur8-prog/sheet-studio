@@ -65,6 +65,8 @@ jobs:
             xvfb-run -a node scripts/check-linux-desktop.cjs
             xvfb-run -a node scripts/electron-smoke.cjs --packaged
             xvfb-run -a node tests/ui-chart-selection.mjs --packaged
+            xvfb-run -a node tests/ui-chart-legend.mjs --packaged
+            xvfb-run -a node tests/ui-ime-entry.mjs --packaged
             xvfb-run -a node tests/ui-border-width.mjs --packaged
             xvfb-run -a node tests/ui-entry-navigation.mjs --packaged
             xvfb-run -a node tests/ui-cell-editing.mjs --packaged
@@ -77,6 +79,8 @@ jobs:
           else
             node scripts/electron-smoke.cjs --packaged
             node tests/ui-chart-selection.mjs --packaged
+            node tests/ui-chart-legend.mjs --packaged
+            node tests/ui-ime-entry.mjs --packaged
             node tests/ui-border-width.mjs --packaged
             node tests/ui-entry-navigation.mjs --packaged
             node tests/ui-cell-editing.mjs --packaged

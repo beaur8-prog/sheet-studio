@@ -21,3 +21,6 @@ body[data-dimension-resize="c"],body[data-dimension-resize="c"] *{cursor:col-res
 button.color-input{border-bottom:4px solid;width:28px;height:26px;font-weight:700;font-size:15px;cursor:pointer}
 
 #formula-ranges{right:0;bottom:0}button.color-input{border-bottom:4px solid}
+
+/* The idle cell input stays focused for native IME without showing an editing caret. */
+.cell-editor.entry-ready{opacity:0;pointer-events:none;caret-color:transparent}

@@ -1,0 +1,42 @@
+name: Cell IME and chart legend regression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  editing:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install Linux virtual display and Korean fonts
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb fonts-noto-cjk
+      - run: npm ci
+      - run: npm run runtime:install
+      - run: npm test
+      - run: npm run build
+      - name: Check native composition and existing editing behavior
+        shell: bash
+        run: |
+          for spec in ime-entry chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit; do
+            if [ "$RUNNER_OS" = Linux ]; then
+              xvfb-run -a node "tests/ui-$spec.mjs"
+            else
+              node "tests/ui-$spec.mjs"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: editing-validation-${{ matrix.os }}
+          path: test-results/*.png
+          if-no-files-found: ignore

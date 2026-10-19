@@ -6,6 +6,24 @@ const text=(x,y,value,extra='')=>`<text x="${x}" y="${y}" font-size="10" fill="#
 const line=(x,y,x2,y2,extra='')=>`<line x1="${x}" y1="${y}" x2="${x2}" y2="${y2}" stroke="#e3e6e9" ${extra}/>`;
 const poly=(points,color,fill='none',extra='')=>`<polyline points="${points.map(p=>p.join(',')).join(' ')}" stroke="${color}" fill="${fill}" stroke-width="2" ${extra}/>`;
 
+const legendSVG=(items,cols,rows,w,h,marker=9,baseline=8)=>Array.from({length:rows},(_,row)=>`<g class="chart-legend-row" data-legend-width="${w}" transform="translate(0 ${h-baseline-(rows-1-row)*17})">${items.slice(row*cols,(row+1)*cols).map(item=>`<g class="chart-legend-item" aria-label="${esc(item.name)}"><title>${esc(item.name)}</title><rect x="0" y="-8" width="${marker}" height="${marker}" fill="${item.color}"/>${text(14,0,item.name)}</g>`).join('')}</g>`).join('');
+
+// SVG text widths depend on the actual font (including Korean fallback fonts).
+// Measure after insertion so each row's painted bounds, rather than fixed slots,
+// are centered. Re-run when charts are redrawn after resizing or zooming.
+export function layoutChartLegends(root){
+ for(const row of root.querySelectorAll('.chart-legend-row')){
+  const items=[...row.querySelectorAll('.chart-legend-item')],w=+row.dataset.legendWidth,gap=16,maxWidth=(w-gap*(items.length-1))/items.length;
+  const boxes=items.map(item=>{
+   const label=item.querySelector('text'),full=item.getAttribute('aria-label');label.textContent=full;
+   if(label.getComputedTextLength()>maxWidth-14){const chars=Array.from(full);let low=0,high=chars.length;while(low<high){const mid=Math.ceil((low+high)/2);label.textContent=chars.slice(0,mid).join('')+'…';if(label.getComputedTextLength()<=maxWidth-14)low=mid;else high=mid-1;}label.textContent=chars.slice(0,low).join('')+'…';}
+   return item.getBBox();
+  });
+  let x=(w-boxes.reduce((sum,b)=>sum+b.width,0)-gap*(items.length-1))/2;
+  items.forEach((item,i)=>{item.setAttribute('transform',`translate(${x-boxes[i].x} 0)`);x+=boxes[i].width+gap;});
+ }
+}
+
 export function renderChartSVG(chart,sheet,workbook){
   const {width,height}=chartRect(chart),w=width-36,h=height-70,data=chartData(chart,sheet,workbook);
   if(chart.type==='unsupported')return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'Excel 원본 차트 보존','text-anchor="middle"')+text(w/2,h/2+20,chart.unsupportedReason||'이 유형의 미리 보기는 아직 지원하지 않습니다.','text-anchor="middle"')};
@@ -24,7 +42,7 @@ export function renderChartSVG(chart,sheet,workbook){
         if(chart.labels){const [x,y]=p((outer+inner)/2,start+angle/2);svg.push(text(x,y,Math.round(v/sum*100)+'%','text-anchor="middle"'));}start=end;
       });
     });
-    if(chart.legend!==false)labels.slice(0,Math.floor(w/95)).forEach((label,i)=>{svg.push(`<rect x="${i*95}" y="${h-13}" width="8" height="8" fill="${chartColors[i%chartColors.length]}"/>`+text(i*95+12,h-5,label.slice(0,10)));});
+    if(chart.legend!==false){const items=labels.slice(0,Math.max(1,Math.floor(w/95))).map((name,i)=>({name,color:chartColors[i%chartColors.length]}));svg.push(legendSVG(items,items.length,1,w,h,8,5));}
   }else if(chart.type==='radar'){
     const cx=(left+right)/2,cy=(top+bottom)/2,r=Math.min(pw,ph)/2-16,max=Math.max(1,...data.flatMap(s=>s.values.map(v=>v||0))),n=Math.max(3,count),pos=(i,v)=>[cx+Math.sin(i/n*2*Math.PI)*r*v,cy-Math.cos(i/n*2*Math.PI)*r*v];
     for(let tick=1;tick<=4;tick++)svg.push(poly(Array.from({length:n+1},(_,i)=>pos(i%n,tick/4)),'#ddd'));
@@ -54,7 +72,7 @@ export function renderChartSVG(chart,sheet,workbook){
       if(points.length){let segment=[],base=[];const flush=()=>{if(!segment.length)return;if(s.type==='area')svg.push(`<polygon points="${[...segment,...base.reverse()].map(p=>p.join(',')).join(' ')}" fill="${s.color}" fill-opacity=".5"/>`);svg.push(poly(segment,s.color));if(s.type==='line')segment.forEach(p=>svg.push(`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="${s.color}"/>`));segment=[];base=[];};points.forEach((p,i)=>{if(!p){flush();return;}segment.push(p);base.push(basePoints[i]);});flush();}
     });
   }
-  if(legend&&!['pie','doughnut'].includes(chart.type)){const cols=Math.max(1,Math.floor(w/130));data.slice(0,cols*legendRows).forEach((s,i)=>{const x=(i%cols)*130,y=h-8-(legendRows-1-Math.floor(i/cols))*17;svg.push(`<rect x="${x}" y="${y-8}" width="9" height="9" fill="${s.color}"/>`+text(x+14,y,i===cols*legendRows-1&&data.length>i+1?'외 '+(data.length-i)+'개 계열':s.name.slice(0,15)));});}
+  if(legend&&!['pie','doughnut'].includes(chart.type)){const cols=Math.max(1,Math.floor(w/130)),items=data.slice(0,cols*legendRows).map((s,i)=>({...s,name:i===cols*legendRows-1&&data.length>i+1?'외 '+(data.length-i)+'개 계열':s.name}));svg.push(legendSVG(items,cols,legendRows,w,h));}
   if(data.some(s=>s.values.length>=1000))svg.push(text(w-4,10,'미리 보기: 계열당 최대 1,000개','text-anchor="end"'));
   if(chart.xTitle)svg.push(text((left+right)/2,h-legendRows*17-20,chart.xTitle,'text-anchor="middle"'));
   if(chart.yTitle)svg.push(text(10,(top+bottom)/2,chart.yTitle,`text-anchor="middle" transform="rotate(-90 10 ${(top+bottom)/2})"`));

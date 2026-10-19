@@ -19,9 +19,10 @@ const raw=ref=>page.evaluate(ref=>sheetStudio.getWorkbook().sheets[0].cells[ref]
 const entered=async(ref,text,key,target)=>{
  await go(ref);await page.keyboard.type(text);await editor.press(key);
  assert.equal(await raw(ref),text,`${key} must commit the entry`);
- assert.equal(await editor.isVisible(),false,`${key} must leave entry mode`);
+ assert.equal(await editor.evaluate(el=>getComputedStyle(el).opacity),'0',`${key} must leave entry mode`);
+ assert.equal(await editor.inputValue(),'');
  assert.equal(await name.inputValue(),target,`${key} must select ${target}`);
- assert.equal(await page.evaluate(()=>document.activeElement.id),'grid');
+ assert.equal(await page.evaluate(()=>document.activeElement.id),'editor');
 };
 try{
  await page.locator('.cell').first().waitFor();const book=createWorkbook();book.name='Entry navigation regression';

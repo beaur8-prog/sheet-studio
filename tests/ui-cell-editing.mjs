@@ -31,7 +31,7 @@ try{
   const editorBox=await page.locator('#editor').boundingBox(),cellBox=await cell('A1').boundingBox();assert.deepEqual(editorBox,cellBox);
   await page.keyboard.type('!');assert.equal(await page.locator('#editor').inputValue(),'Hello world'.slice(0,offset)+'!'+'Hello world'.slice(offset));assert.equal(await raw('A1'),'Hello world');
   await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/cell-inline-caret.png'),caret:'initial'});
-  await page.locator('#editor').press('Enter');assert.equal(await page.locator('#editor').isVisible(),false);assert.equal(await page.locator('#name-box').inputValue(),'A2');
+  await page.locator('#editor').press('Enter');assert.equal(await page.locator('#editor').evaluate(el=>getComputedStyle(el).opacity),'0');assert.equal(await page.locator('#name-box').inputValue(),'A2');
   await page.locator('#undo').click();assert.equal(await raw('A1'),'Hello world');await page.locator('#redo').click();assert.ok((await raw('A1')).includes('!'));
   await doubleClick('B2');assert.equal(await page.locator('#editor').evaluate(el=>getComputedStyle(el).textAlign),'right');await page.locator('#editor').fill('999');await page.locator('#editor').press('Escape');assert.equal(await raw('B2'),'12345');
   await go('B2');await page.keyboard.press('F2');assert.equal(await page.locator('#editor').inputValue(),'12345');await page.keyboard.press('End');await page.keyboard.type('6');await page.locator('#editor').press('Tab');assert.equal(await raw('B2'),'123456');assert.equal(await page.locator('#name-box').inputValue(),'C2');
