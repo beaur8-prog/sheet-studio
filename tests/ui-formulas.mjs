@@ -8,7 +8,7 @@ import {createWorkbook} from '../src/engine.mjs';
 const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes('--packaged'),version=createRequire(import.meta.url)('../package.json').version;
 const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package/formulas-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
-const page=await app.firstWindow(),errors=[],modifier=process.platform==='darwin'?'Meta':'Control';page.on('pageerror',e=>errors.push(e.message));
+const page=await app.firstWindow(),errors=[],modifier=process.platform==='darwin'?'Meta':'Control';await page.setViewportSize({width:1280,height:900});page.on('pageerror',e=>errors.push(e.message));
 const book=createWorkbook();book.sheets[0].cells=Object.fromEntries(Object.entries({B1:'매출',B2:10,B3:20,B4:30,C2:1,C3:2,C4:3,D2:2,E2:3,H2:4,H3:5,I2:6,I3:7}).map(([k,v])=>[k,{raw:String(v)}]));
 book.sheets.push({id:'other',name:"다른 '시트'",cells:{A1:{raw:'7'},A2:{raw:'8'}},columnWidths:{},rowHeights:{},merges:[],charts:[]});
 // A render replaces the reference SVGs on the next frame; read only attached, settled geometry.
