@@ -2,15 +2,13 @@
 
 **[Mac·Windows·Linux 다운로드](https://github.com/beaur8-prog/sheet-studio/releases/latest)** · [설치·사용자 가이드](docs/USER-GUIDE.md) · [버전별 수정 내역](docs/CHANGELOG.md)
 
-현재 배포 버전은 **0.7.13**입니다. 가로·세로 숫자 연속 자동 채우기, 차트 범례 가운데 정렬과 셀 이동 직후 한글 조합 입력 수정을 포함합니다. Windows 설치 마법사·Ubuntu 아이콘과 기존 셀 입력·테두리·차트 수정도 포함합니다.
-
-개발 버전 **0.7.16(미배포)**에서는 셀 채우기색·글자색·채우기 없음으로 필터링하고, 지원되는 조건부 서식의 표시색과 XLSX 색 조건 저장을 지원합니다. 0.7.14~0.7.15의 모든 차트 점검과 세로 막대형 표시 정리도 포함합니다. 공개 다운로드는 0.7.13을 유지합니다.
+현재 배포 버전은 **0.7.16**입니다. 색 기준 필터(셀 채우기색·글자색·채우기 없음), 가로로 선택한 값의 차트 누락 수정, 세로 막대형의 항목명·색·간격 정리를 포함합니다. 숫자 연속 자동 채우기, 범례 가운데 정렬과 첫 한글 조합 입력 수정도 포함합니다. [이번 릴리즈 안내](docs/releases/v0.7.16.md)를 확인하세요.
 
 설치된 Microsoft Excel의 네이티브 실행 파일과 한국어 UI를 분석하고, 익숙한 작업 흐름을 독립적으로 구현한 Windows·macOS 스프레드시트 앱입니다. Microsoft Excel의 원본 코드 복원이나 전체 기능의 동일성을 주장하지 않습니다.
 
 ## 실행
 
-Windows 또는 macOS와 Node.js 22.12 이상이 필요합니다.
+Windows·macOS·Linux와 Node.js 22.12 이상이 필요합니다.
 
 ```powershell
 git clone https://github.com/beaur8-prog/sheet-studio.git
@@ -20,9 +18,9 @@ npm run runtime:install
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.5/win-x64/Sheet-Studio-0.7.5-Windows-x64-Setup.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.16/win-x64/Sheet-Studio-0.7.16-Windows-x64-Setup.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
-**Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon) 또는 `--arch=x64`(Intel)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS arm64의 실제 실행과 시트 수명주기 회귀 테스트를 확인했습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
+**Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS arm64의 실제 실행과 시트 수명주기 회귀 테스트를 확인했습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 
 로컬 브라우저에서는 `npm run dev` 후 `http://127.0.0.1:5192`로 접속하세요.
 

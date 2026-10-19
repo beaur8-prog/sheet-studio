@@ -2,11 +2,11 @@
 
 > **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
 
-v0.7.13 기준 · 2026년 10월 19일
+v0.7.16 기준 · 2026년 10월 20일
 
-0.7.13에는 가로·세로 숫자 연속 자동 채우기, 차트 범례 가운데 정렬과 셀 이동 직후 첫 한글 조합 입력 수정이 포함됩니다. Windows 설치 마법사·Ubuntu 아이콘·기존 셀 입력·테두리·차트 수정도 포함합니다.
+0.7.16에는 셀 채우기색·글자색 필터, 가로 선택값의 차트 누락 수정, 세로 막대형의 항목명·색·간격 정리를 포함합니다. 숫자 연속 자동 채우기, 범례 가운데 정렬·첫 한글 조합 입력, Windows 설치 마법사·Ubuntu 아이콘 수정도 포함합니다.
 
-[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.13) · [버전별 변경 내역](CHANGELOG.md)
+[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.16) · [버전별 변경 내역](CHANGELOG.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -22,13 +22,13 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.13)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.16)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.13-macOS-arm64.dmg` 또는 `.zip` |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.13-Windows-x64-Setup.exe` |
-| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.13-Linux-amd64.deb` |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.16-macOS-arm64.dmg` 또는 `.zip` |
+| Windows 64비트 x64 | `Sheet-Studio-0.7.16-Windows-x64-Setup.exe` |
+| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.16-Linux-amd64.deb` |
 
 ### Mac
 
@@ -41,7 +41,7 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ### Windows
 
-1. `Sheet-Studio-0.7.13-Windows-x64-Setup.exe`를 다운로드합니다.
+1. `Sheet-Studio-0.7.16-Windows-x64-Setup.exe`를 다운로드합니다.
 2. Setup EXE를 실행하고 한국어 또는 영어를 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 기본 경로는 `%LOCALAPPDATA%\Programs\Sheet Studio`입니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
@@ -56,10 +56,10 @@ Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이�
 
 ### Linux (Ubuntu·Debian 계열 x64)
 
-`Sheet-Studio-0.7.13-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
+`Sheet-Studio-0.7.16-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
 
 ```sh
-sudo apt install ./Sheet-Studio-0.7.13-Linux-amd64.deb
+sudo apt install ./Sheet-Studio-0.7.16-Linux-amd64.deb
 sheet-studio
 ```
 
@@ -121,11 +121,13 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 
 ### 정렬·필터·조건부 서식
 
-제목 행을 포함한 범위를 선택한 뒤 **데이터 → 필터**를 켭니다. 머리글 화살표에서 검색·체크박스·조건을 지정합니다. 데이터 변경 후에는 **다시 적용**을 사용합니다. 조건부 서식은 홈에서 규칙을 만들며 지원하는 규칙은 값이나 수식 변화에 따라 갱신됩니다.
+제목 행을 포함한 범위를 선택한 뒤 **데이터 → 필터**를 켭니다. 머리글 화살표에서 검색·체크박스·조건을 지정합니다. 머리글의 **색 기준 필터**에서는 셀 채우기색·글자색·채우기 없음·자동 글자색을 선택한 뒤 **확인**을 누릅니다. 지원하는 조건부 서식의 표시색과 색이 지정된 빈 셀도 포함하며, 다른 열의 숫자·값 조건과 함께 사용할 수 있습니다. 데이터나 색 변경 후에는 **다시 적용**을 사용합니다. 조건부 서식은 홈에서 규칙을 만들며 지원하는 규칙은 값이나 수식 변화에 따라 갱신됩니다.
 
 ### 차트
 
 표 범위를 선택하고 **삽입**에서 차트를 만듭니다. 0.7.11부터 숫자로 된 첫 행·첫 열은 데이터에 포함하며, 문자 제목과 항목명은 자동으로 구분합니다. 숫자 한 열도 선택할 수 있습니다. 연도·번호를 항목명으로 쓰려면 차트 설정의 **첫 열을 항목 이름으로 사용**, 숫자 제목을 쓰려면 **첫 행을 계열 이름으로 사용**을 켜세요. 차트 설정에서 유형·범례·레이블을 바꾸고 테두리 조절점으로 크기를 바꿉니다. XLSX와 앱 문서에 저장할 수 있습니다. 범례는 각 줄을 차트 가운데에 배치하며 차트 크기를 바꾸면 다시 맞춥니다. 긴 이름은 말줄임하고 전체 이름은 마우스를 올려 확인합니다.
+
+가로 한 줄 `A1:D1`의 숫자 네 개도 한 계열의 값 네 개로 읽습니다. 원형·도넛형은 네 조각을 표시합니다. 차트 설정에서 **데이터 계열 방향 → 자동/행/열**을 선택할 수 있습니다. 제목 행과 값 한 행이 있는 표는 자동으로 항목별 값 한 계열로 해석합니다. 한 계열의 세로 막대형은 항목명을 막대 아래에 표시하고 같은 색을 쓰며 중복 범례를 생략합니다. 여러 계열은 색과 범례를 유지합니다. 긴 항목명은 두 줄·말줄임과 전체 이름 툴팁을 제공합니다. 분산형 한 줄은 X값을 1부터 자동 지정하며 거품형은 X·Y·크기 자료가 필요합니다.
 
 ### 피벗테이블
 
@@ -181,7 +183,7 @@ Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 
 ```sh
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
-git checkout v0.7.13
+git checkout v0.7.16
 npm ci
 npm run runtime:install
 npm run desktop
