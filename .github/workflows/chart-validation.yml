@@ -1,0 +1,52 @@
+name: Chart source selection regression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chart-selection:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install Linux virtual display and fonts
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb fonts-noto-cjk
+      - run: npm ci
+      - run: npm run runtime:install
+      - run: npm test
+      - run: npm run build
+      - name: Check Windows Excel worker syntax without starting Excel
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $parseTokens = $null
+          $parseIssues = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'electron/excel-worker.ps1'), [ref]$parseTokens, [ref]$parseIssues) | Out-Null
+          if ($parseIssues.Count) { $parseIssues | Format-List; throw 'Excel worker PowerShell syntax check failed' }
+      - name: Verify selection and existing chart behavior
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a node tests/ui-chart-selection.mjs
+            xvfb-run -a node tests/ui-excel-charts.mjs
+            xvfb-run -a node tests/ui-charts.mjs --desktop
+          else
+            node tests/ui-chart-selection.mjs
+            node tests/ui-excel-charts.mjs
+            node tests/ui-charts.mjs --desktop
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chart-validation-${{ matrix.os }}
+          path: test-results/*.png
+          if-no-files-found: ignore

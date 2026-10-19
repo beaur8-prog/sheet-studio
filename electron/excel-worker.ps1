@@ -96,6 +96,24 @@ function Set-Chart($sheet,$patch) {
     $chart=$object.Chart
     if(Has-Field $patch 'range'){$chart.SetSourceData($sheet.Range([string]$patch.range),2)}
     if(Has-Field $patch 'chartType'){$chart.ChartType=[int]$patch.chartType}
+    if(Has-Field $patch 'series'){
+      $collection=$chart.SeriesCollection()
+      try {
+        while($collection.Count -gt 0){$oldSeries=$collection.Item(1);try{[void]$oldSeries.Delete()}finally{Release-Com $oldSeries}}
+        $index=0
+        foreach($spec in $patch.series){
+          $item=$collection.NewSeries();$values=$null;$categories=$null;$nameRange=$null;$sizes=$null
+          try {
+            $values=$sheet.Range([string]$spec.valuesRange);$item.Values=$values
+            if(Has-Field $spec 'categoriesRange'){$categories=$sheet.Range([string]$spec.categoriesRange);$item.XValues=$categories}else{$item.XValues=[object[]](1..([int]$values.Count))}
+            $prefix="='"+([string]$sheet.Name).Replace("'","''")+"'!"
+            if(Has-Field $spec 'nameRange'){$nameRange=$sheet.Range([string]$spec.nameRange);$item.Name=$prefix+'R'+$nameRange.Row+'C'+$nameRange.Column}else{$item.Name='계열 '+($index+1)}
+            if(Has-Field $spec 'sizesRange'){$sizes=$sheet.Range([string]$spec.sizesRange);$item.BubbleSizes=$prefix+$sizes.Address($true,$true,-4150)}
+          }finally{Release-Com $sizes;Release-Com $nameRange;Release-Com $categories;Release-Com $values;Release-Com $item}
+          $index++
+        }
+      }finally{Release-Com $collection}
+    }
     if($patch.combo){$series=$chart.SeriesCollection();if($series.Count -gt 1){$last=$series.Item($series.Count);$last.ChartType=4;if($patch.secondaryAxis){$last.AxisGroup=2};Release-Com $last};Release-Com $series}
     foreach($key in @('x','y','width','height')){if(Has-Field $patch $key){$value=[double]$patch.$key*0.75;switch($key){'x'{$object.Left=$value}'y'{$object.Top=$value}'width'{$object.Width=$value}'height'{$object.Height=$value}}}}
     if(Has-Field $patch 'title'){$chart.HasTitle=[bool]$patch.title;if($patch.title){$chart.ChartTitle.Text=[string]$patch.title}}

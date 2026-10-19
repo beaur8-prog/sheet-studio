@@ -60,6 +60,16 @@ function validatePayload(payload){
           if(['x','y','width','height'].includes(key)){if(!Number.isFinite(value)||value<0||value>100000000||['width','height'].includes(key)&&(value<100||value>10000))throw Error('차트 크기가 올바르지 않습니다.');}
           else if(['title','xTitle','yTitle'].includes(key)){if(typeof value!=='string'||value.length>4000)throw Error('차트 제목이 올바르지 않습니다.');}
           else if(['legend','labels','combo','secondaryAxis'].includes(key)){if(typeof value!=='boolean')throw Error('차트 표시 설정이 올바르지 않습니다.');}
+          else if(key==='series'){
+            if(!Array.isArray(value)||value.length>32||!c.range||c.chartType===undefined)throw Error('차트 계열 계획이 올바르지 않습니다.');
+            const size=range=>{if(!rangeOK(range))throw Error('차트 계열 범위가 올바르지 않습니다.');const [a,b]=range.split(':');if(a.match(/[A-Z]+/)[0]!==b.match(/[A-Z]+/)[0])throw Error('차트 계열은 하나의 열이어야 합니다.');const n=Number(b.match(/\d+/)[0])-Number(a.match(/\d+/)[0])+1;if(n<1||n>10000)throw Error('차트 계열 범위가 너무 큽니다.');return n;};
+            for(const series of value){
+              if(!series||typeof series!=='object'||Array.isArray(series)||Object.keys(series).some(k=>!['valuesRange','nameRange','categoriesRange','sizesRange'].includes(k)))throw Error('차트 계열 계획이 올바르지 않습니다.');
+              const count=size(series.valuesRange);
+              for(const key of ['categoriesRange','sizesRange'])if(series[key]!==undefined&&size(series[key])!==count)throw Error('차트 계열의 항목 수가 다릅니다.');
+              if(series.nameRange!==undefined&&size(series.nameRange)!==1)throw Error('차트 계열 이름은 하나의 셀이어야 합니다.');
+            }
+          }
           else if(key==='range'){if(!rangeOK(value))throw Error('차트 원본 범위가 올바르지 않습니다.');}
           else if(key==='chartType'){if(![51,52,53,57,58,59,4,63,64,1,76,77,5,-4120,-4169,15,-4151].includes(value))throw Error('지원되지 않는 차트 유형입니다.');}
           else throw Error('허용되지 않는 차트 속성입니다.');

@@ -32,13 +32,46 @@ export function refValues(ref,workbook,{limit=10000}={}){
   return out;
 }
 export function referenceSize(ref){const [a,b]=ref?.range?.split(':').map(parseAddress)||[];return a&&b?(Math.abs(a.r-b.r)+1)*(Math.abs(a.c-b.c)+1):ref?.cache?.length||0;}
+// Infer labels only from cell types, never by dropping the first row/column
+// unconditionally. New charts persist these choices so later edits cannot change
+// the meaning of the source range. Imported explicit series bypass this path.
+export function chartLayout(chart,sheet,workbook){
+  const [a,b]=String(chart.range).split(':').map(parseAddress);
+  if(!a||!b||b.r<a.r||b.c<a.c||b.r-a.r>10000||b.c-a.c>32)return {firstRowAsHeader:false,firstColumnAsLabels:false};
+  const evaluate=createEvaluator(workbook,sheet.id),numeric=v=>typeof v==='number'&&Number.isFinite(v);
+  const value=(r,c)=>{const key=address(r,c),cell=sheet.cells[key];if(!cell||cell.raw==='')return null;const v=evaluate(key);return typeof v==='string'&&v.startsWith('#')&&cell.cachedValue!==undefined?cell.cachedValue:v;};
+  const xy=['scatter','bubble'].includes(chart.type);
+  let numericFirstColumn=false;
+  for(let r=a.r;r<=b.r;r++)if(numeric(value(r,a.c))){numericFirstColumn=true;break;}
+  const firstColumnAsLabels=chart.firstColumnAsLabels??(a.c<b.c&&!numericFirstColumn);
+  const start=a.c+(xy||firstColumnAsLabels?1:0),firstRow=[];
+  for(let c=start;c<=b.c;c++)firstRow.push(value(a.r,c));
+  const firstRowAsHeader=chart.firstRowAsHeader??(firstRow.some(v=>typeof v==='string'&&v.trim()!==''&&!v.startsWith('#'))&&!firstRow.some(numeric));
+  return {firstRowAsHeader,firstColumnAsLabels};
+}
+export function chartRangeError(chart,sheet,workbook){
+  const parts=String(chart.range).split(':'),[a,b]=parts.map(parseAddress);
+  if(parts.length!==2||!a||!b||b.r<a.r||b.c<a.c)return '올바른 셀 범위를 입력하세요. 예: A1:C5';
+  const limit='차트에는 최대 10,000개 데이터 행·32개 값 열을 사용하세요.';
+  if(b.r-a.r>10000||b.c-a.c>32)return limit;
+  const {firstRowAsHeader,firstColumnAsLabels}=chartLayout(chart,sheet,workbook),xy=['scatter','bubble'].includes(chart.type);
+  const rows=b.r-a.r+1-Number(firstRowAsHeader),cols=b.c-a.c+1-Number(xy||firstColumnAsLabels);
+  if(rows<1||cols<1)return '값으로 사용할 행과 열이 필요합니다. 첫 행·첫 열 사용 설정을 확인하세요.';
+  if(rows>10000||cols>32)return limit;
+  if(chart.type==='bubble'&&cols<2)return '거품형에는 X값, Y값, 크기 열이 필요합니다.';
+  return null;
+}
 export function chartSeries(chart,sheet,workbook){
   if(chart.series?.length)return chart.series;
-  const [a,b]=String(chart.range).split(':').map(parseAddress);if(!a||!b||a.r>=b.r||a.c>=b.c)return [];
-  const ref=(c,r1=a.r+1,r2=b.r)=>chartRef(sheet.id,address(r1,c)+':'+address(r2,c));
-  const result=[];
-  for(let c=a.c+1;c<=b.c&&result.length<32;c+=chart.type==='bubble'?2:1){
-    const i=result.length;result.push({nameRef:ref(c,a.r,a.r),catRef:ref(a.c),valRef:ref(c),...(chart.type==='scatter'||chart.type==='bubble'?{xRef:ref(a.c)}:{}),...(chart.type==='bubble'?{sizeRef:c+1<=b.c?ref(c+1):{cache:[]}}:{}),color:chartColors[i%chartColors.length],type:chart.type==='combo'?(c===b.c?'line':'bar'):chart.type,secondary:chart.type==='combo'&&c===b.c&&chart.secondaryAxis!==false});
+  const [a,b]=String(chart.range).split(':').map(parseAddress);if(!a||!b||a.r>b.r||a.c>b.c||b.r-a.r>10000||b.c-a.c>32)return [];
+  const {firstRowAsHeader,firstColumnAsLabels}=chartLayout(chart,sheet,workbook),xy=['scatter','bubble'].includes(chart.type),r1=a.r+Number(firstRowAsHeader),c1=a.c+Number(xy||firstColumnAsLabels);
+  if(r1>b.r||c1>b.c||b.r-r1>=10000||b.c-c1>=32)return [];
+  let populated=false;for(let r=r1;r<=b.r&&!populated;r++)for(let c=c1;c<=b.c;c++)if(sheet.cells[address(r,c)]?.raw){populated=true;break;}
+  if(!populated)return [];
+  const ref=(c,from=r1,to=b.r)=>chartRef(sheet.id,address(from,c)+':'+address(to,c));
+  const categories=xy||firstColumnAsLabels?ref(a.c):{cache:Array.from({length:b.r-r1+1},(_,i)=>String(i+1))},result=[];
+  for(let c=c1;c<=b.c&&result.length<32;c+=chart.type==='bubble'?2:1){
+    const i=result.length;result.push({...(firstRowAsHeader?{nameRef:ref(c,a.r,a.r)}:{name:`계열 ${i+1}`}),catRef:categories,valRef:ref(c),...(xy?{xRef:ref(a.c)}:{}),...(chart.type==='bubble'?{sizeRef:c+1<=b.c?ref(c+1):{cache:[]}}:{}),color:chartColors[i%chartColors.length],type:chart.type==='combo'?(c===b.c?'line':'bar'):chart.type,secondary:chart.type==='combo'&&c===b.c&&chart.secondaryAxis!==false});
   }
   return result;
 }

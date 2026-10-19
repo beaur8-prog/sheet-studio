@@ -10,7 +10,7 @@ const packaged=process.argv.includes('--packaged'),desktop=packaged||process.arg
 let application,browser,page;
 if(desktop){
   const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','chart-smoke-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
-  application=await _electron.launch({executablePath:packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:packaged?[]:[root],env});
+  application=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
   page=await application.firstWindow();
 }else{browser=await chromium.launch({headless:true,channel:'msedge'});page=await browser.newPage({viewport:{width:1540,height:970}});}
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -35,7 +35,7 @@ try{
   await page.locator('#file-input').setInputFiles({name:'차트.csv',mimeType:'text/csv',buffer:Buffer.from('상품,매출\n커피,40\n차,25\n주스,-10')});
   await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.A1?.raw==='상품');
   await go('A1:B4');await page.locator('[data-tab="삽입"]').click();await page.locator('[data-action="chart-bar"]').click();
-  assert.equal(await page.locator('[data-chart-resize]').count(),8);
+  await page.locator('[data-chart-resize]').first().waitFor();assert.equal(await page.locator('[data-chart-resize]').count(),8);
   const initial=await chart();assert.equal(initial.width,500);
   await drag('se',150,90);assert.equal((await chart()).width,650);assert.equal((await chart()).height,390);
   const svg=await page.locator('.chart-card svg').getAttribute('viewBox');assert.equal(svg,'0 0 614 320');

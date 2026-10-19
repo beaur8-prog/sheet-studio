@@ -9,7 +9,7 @@ import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
 import {chartFixture,addChart} from './fixtures/charts.mjs';
 const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes('--packaged'),version=createRequire(import.meta.url)('../package.json').version;
 const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','excel-charts-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:packaged?[]:[root],env});
+const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 const go=async range=>{await page.locator('#name-box').fill(range);await page.locator('#name-box').press('Enter');};
 const get=()=>page.evaluate(()=>sheetStudio.getWorkbook());
@@ -37,7 +37,7 @@ try{
  await page.locator('#file-input').setInputFiles(destination);await page.waitForFunction(()=>!!sheetStudio.getWorkbook().sheets[0].charts[0]?.source);
  await page.locator('[data-edit-chart]').click();assert.ok(await page.locator('#chart-secondary').isDisabled());await page.locator('#chart-title').fill('보존된 혼합 차트');await page.locator('#chart-legend').uncheck();await page.getByRole('dialog').getByRole('button',{name:'적용',exact:true}).click();
  assert.equal((await get()).sheets[0].charts[0].title,'보존된 혼합 차트');assert.ok((await get()).sheets[0].charts[0].source);
- await go('B2');await page.keyboard.press('F2');await page.locator('#editor').fill('99');await page.locator('#editor').press('Enter');assert.ok((await page.locator('.chart-card>svg').innerHTML()).includes('99'));
+ await go('B2');await page.keyboard.press('F2');await page.locator('#editor').fill('99');await page.locator('#editor').press('Enter');await page.waitForFunction(()=>document.querySelector('.chart-card>svg')?.innerHTML.includes('99'));assert.ok((await page.locator('.chart-card>svg').innerHTML()).includes('99'));
  await page.locator('[data-edit-chart]').click();await page.locator('#chart-type').selectOption('area');await page.getByRole('dialog').getByRole('button',{name:'적용',exact:true}).click();assert.ok((await page.locator('#chart-error').innerText()).includes('변환'));
  await page.locator('#chart-convert').check();await page.locator('#chart-range').fill('A1:C5');await page.getByRole('dialog').getByRole('button',{name:'적용',exact:true}).click();assert.equal((await get()).sheets[0].charts[0].source,undefined);assert.equal((await get()).sheets[0].charts[0].type,'area');
  await page.locator('#grid').focus();await page.keyboard.press((process.platform==='darwin'?'Meta':'Control')+'+z');assert.ok((await get()).sheets[0].charts[0].source);
