@@ -1,6 +1,15 @@
 # 검증 기록
 
-## 2026-10-19 · 0.7.10 Studio 표 교환 (소스·로컬, 미배포)
+## 2026-10-19 · 0.7.10 공개 배포 검증
+
+- [GitHub Actions 39189920681](https://github.com/beaur8-prog/sheet-studio/actions/runs/39189920681): Mac arm64·Windows x64·Ubuntu 22.04 x64 빌드와 배포 앱 검사 모두 통과. Windows 단위 시험 118개, Mac·Linux 각각 117개 통과(Windows 전용 1개 건너뜀).
+- 세 플랫폼에서 기본 실행·시트 수명주기·색상·셀 서식·OS 클립보드·parity 감사 UI 회귀를 통과했습니다. Windows 설치 및 시작 메뉴 바로가기의 실제 실행 경로·앱 식별자와 설치 앱 실행, Linux DEB 설치 후 실행도 확인했습니다.
+- 좁은 창에서 홈 버튼으로 이동하며 발생한 지연 스크롤이 새 메뉴를 닫던 문제를 수정했습니다. 1024×768 창에서 메뉴 유지와 실제 스크롤 후 닫힘을 검사했습니다. 클립보드 배포 검사는 실제 패키지 실행 파일을 선택하도록 수정했습니다.
+- 공개 Mac ZIP을 다시 내려받아 체크섬·압축 CRC·ad-hoc 서명 무결성을 확인하고 추출한 앱으로 Sheet↔Word, Sheet↔Slide, Word↔Slide 여섯 방향을 재검사했습니다. 병합·색·테두리·표시값·줄바꿈·Word 실행 취소 모두 통과했습니다. 상대 앱은 Word 1.2.11·Slide 1.6.1의 검증된 Mac 패키지이며 사용자 문서는 열지 않았습니다.
+- 공개 설치 파일(DMG·Windows Setup·Linux DEB)과 Mac ZIP을 SHA-256 검증했습니다. 릴리즈에 플랫폼별 매니페스트·런타임 출처와 통합 SHA256SUMS.txt를 제공합니다.
+- Windows/Linux에서 세 앱을 동시에 실행하는 여섯 방향 시험, 실제 Windows Excel/VBA 실행과 Microsoft Excel 파일 왕복은 이번 배포에서 수행하지 않았습니다. Mac은 Developer ID 미서명·미공증이며 Windows도 Authenticode 미서명입니다.
+
+## 2026-10-19 · 0.7.10 Studio 표 교환 (앞선 소스·로컬 검증)
 
 - 단위 시험 **117개 통과**, Windows 전용 1개 건너뜀. 빌드와 실제 OS 클립보드 UI 시험 통과. 외부 표 HTML의 10 MB 수신 한도는 UTF-8 바이트로 검사하며, Sheet·Slide의 공유 모듈은 같은 파일로 유지합니다.
 - 격리한 Sheet 0.7.10·Word 1.2.11·Slide 1.6.1에서 **Sheet↔Word, Sheet↔Slide, Word↔Slide 여섯 방향**을 소스 앱과 패키징한 Mac 앱으로 검사했습니다. Word의 표 전체 선택·복사, Slide의 홈 복사, 세 앱의 홈 붙여넣기를 사용합니다. HTML과 같은 선택 범위의 TSV, 병합·색·줄바꿈·표시값 및 Word의 한 번 실행 취소를 확인했습니다.
