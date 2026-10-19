@@ -1,8 +1,14 @@
 name: Validate Linux desktop and cell entry
 on:
   workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Optional earlier validation run with identical app code (verified after installation)
+        required: false
+        type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   installed-app:
     strategy:
@@ -23,6 +29,17 @@ jobs:
       - run: npm run runtime:install
       - run: npm test
       - run: npm run package:linux
+        if: inputs.candidate_run_id == ''
+      - name: Reuse a candidate when only the test harness changed
+        if: inputs.candidate_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]
+          gh run download "$CANDIDATE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name 'linux-validation-${{ matrix.os }}' --dir candidate
+          cp -R candidate/release ./release
+          npm run build
       - name: Install the candidate DEB
         run: |
           sudo apt-get install -y ./release/*/linux-x64/*.deb

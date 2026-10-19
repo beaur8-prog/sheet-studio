@@ -6,6 +6,7 @@ const path=require('node:path');
 const os=require('node:os');
 const {execFileSync}=require('node:child_process');
 const {_electron}=require('playwright');
+const asar=require('@electron/asar');
 const manifest=require('../package.json');
 
 async function check(){
@@ -19,17 +20,20 @@ async function check(){
   try{
     if(process.argv.includes('--wayland')){
       assert.ok(env.WAYLAND_DISPLAY,'A disposable Wayland compositor is required');
-      let log='',exited=false;
-      app=await _electron.launch({executablePath:executable,args:['--ozone-platform=wayland','--disable-gpu'],env:{...env,WAYLAND_DEBUG:'1'}});
-      app.process().stdout.on('data',b=>{log+=b;});app.process().stderr.on('data',b=>{log+=b;});app.process().on('exit',()=>{exited=true;});
-      await app.firstWindow();
+      const logFile=path.join(output,'wayland-protocol.log'),wrapper=path.join(profile,'launch-wayland');
+      const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
+      // Capture stderr from process start, including messages before Playwright connects.
+      await fs.writeFile(wrapper,`#!/bin/bash\nexec ${quote(executable)} "$@" 2> >(tee ${quote(logFile)} >&2)\n`,{mode:0o700});
+      app=await _electron.launch({executablePath:wrapper,args:['--ozone-platform=wayland','--disable-gpu'],env:{...env,WAYLAND_DEBUG:'1'},timeout:15000});
+      console.log('Wayland: connected to the installed Electron app');
       // A headless compositor can defer the first hidden-window paint. Map the
       // actual packaged window explicitly; do not alter its application ID.
+      const createdDeadline=Date.now()+10000;
+      while(!await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().length)&&Date.now()<createdDeadline)await new Promise(r=>setTimeout(r,100));
       await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show());
-      const deadline=Date.now()+20000;
-      while(!exited&&!/set_app_id\("[^"]+"\)/.test(log)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
-      await fs.writeFile(path.join(output,'wayland-protocol.log'),log);
-      assert.equal(exited,false,'The Wayland app must remain running');
+      let log='';const deadline=Date.now()+10000;
+      while(!/set_app_id\("[^"]+"\)/.test(log)&&Date.now()<deadline){log=await fs.readFile(logFile,'utf8');if(!/set_app_id\("[^"]+"\)/.test(log))await new Promise(r=>setTimeout(r,100));}
+      assert.equal(app.process().exitCode,null,'The Wayland app must remain running');
       const ids=[...log.matchAll(/set_app_id\("([^"]+)"\)/g)].map(m=>m[1]);
       assert.ok(ids.length,'The real Wayland window must announce an app_id');
       assert.ok(ids.every(id=>id===manifest.desktopName),JSON.stringify(ids));
@@ -38,6 +42,14 @@ async function check(){
       return;
     }
     const desktopFile=`/usr/share/applications/${manifest.desktopName}.desktop`;
+    const archive=path.join(path.dirname(executable),'resources/app.asar');
+    const packaged=JSON.parse(asar.extractFile(archive,'package.json'));
+    assert.equal(packaged.version,manifest.version);assert.equal(packaged.desktopName,manifest.desktopName);
+    for(const entry of asar.listPackage(archive)){
+      const name=entry.replace(/^\//,'');if(!/^(dist|electron)\//.test(name))continue;
+      const source=path.resolve(name),stat=await fs.stat(source).catch(()=>null);if(!stat?.isFile())continue;
+      assert.ok((await fs.readFile(source)).equals(asar.extractFile(archive,name)),`Candidate differs from current source: ${name}`);
+    }
     execFileSync('desktop-file-validate',[desktopFile]);
     const desktop=await fs.readFile(desktopFile,'utf8');
     const entries=Object.fromEntries(desktop.split('\n').filter(line=>line.includes('=')).map(line=>[line.slice(0,line.indexOf('=')),line.slice(line.indexOf('=')+1)]));
@@ -73,7 +85,12 @@ print(json.dumps(icons))
     await fs.writeFile(path.join(output,'x11.json'),JSON.stringify({version:manifest.version,desktopFile,entries,wmClass,icons},null,2)+'\n');
     console.log('PASS: installed desktop entry, themed icons at common sizes, and actual X11 WM_CLASS:',wmClass);
   }finally{
-    if(app)await app.close();
+    if(app&&process.argv.includes('--wayland')){
+      // This app has a disposable profile. Bound cleanup even if its hidden
+      // renderer never completes a paint on the headless test compositor.
+      const child=app.process();child.kill('SIGTERM');
+      if(child.exitCode===null)await new Promise(resolve=>{const timer=setTimeout(()=>{child.kill('SIGKILL');resolve();},3000);child.once('exit',()=>{clearTimeout(timer);resolve();});});
+    }else if(app)await app.close();
     await fs.rm(profile,{recursive:true,force:true});
   }
 }
