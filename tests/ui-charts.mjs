@@ -11,7 +11,7 @@ let application,browser,page;
 if(desktop){
   const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','chart-smoke-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
   application=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
-  page=await application.firstWindow();
+  page=await application.firstWindow();await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1024,768));
 }else{browser=await chromium.launch({headless:true,channel:'msedge'});page=await browser.newPage({viewport:{width:1540,height:970}});}
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const go=async address=>{await page.locator('#name-box').fill(address);await page.locator('#name-box').press('Enter');};
@@ -23,7 +23,10 @@ const zoom=async value=>{await page.locator('#zoom').evaluate((el,value)=>{el.va
 async function drag(edge,dx,dy,{cancel=false}={}){
   // Scrolling/zoom rebuilds chart DOM on animation frames. Measure after that render.
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  const handle=page.locator('[data-chart-resize="'+edge+'"]').first(),rect=await handle.boundingBox();
+  const handle=page.locator('[data-chart-resize="'+edge+'"]').first();
+  await handle.scrollIntoViewIfNeeded();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const rect=await handle.boundingBox();
   assert.ok(rect,'Chart resize handle is visible after rendering');
   await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.down();
   await page.mouse.move(rect.x+rect.width/2+dx,rect.y+rect.height/2+dy,{steps:8});
