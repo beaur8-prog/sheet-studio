@@ -112,7 +112,7 @@ export function newChartXML(chart,sheet,workbook,names,offsets){
   }
   let axes='';const xy=['scatter','bubble'].includes(chart.type),horizontal=chart.type==='bar-horizontal';
   if(needsAxes){axes=axis(100,200,xy?'valAx':'catAx',horizontal?'l':'b',chart.xTitle)+axis(200,100,'valAx',horizontal?'b':'l',chart.yTitle,false,chart.grouping==='percentStacked');if(secondary)axes+=axis(300,400,'catAx','b','',true)+axis(400,300,'valAx','r','',true);}
-  return `${DECL}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="ko-KR"/><c:chart>${chart.title?richTitle(chart.title):''}<c:autoTitleDeleted val="${chart.title?0:1}"/><c:plotArea><c:layout/>${groupsXML}${axes}</c:plotArea>${chart.legend!==false?'<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>':''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart></c:chartSpace>`;
+  return `${DECL}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="ko-KR"/><c:chart>${chart.title?richTitle(chart.title):''}<c:autoTitleDeleted val="${chart.title?0:1}"/><c:plotArea><c:layout/>${groupsXML}${axes}</c:plotArea>${chart.legend!==false&&(chart.type!=='bar'||series.length>1)?'<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>':''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart></c:chartSpace>`;
 }
 
 function updateOriginalXML(chart,workbook,names,offsets){

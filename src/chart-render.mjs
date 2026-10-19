@@ -24,12 +24,24 @@ export function layoutChartLegends(root){
  }
 }
 
+export function layoutChartCategories(root){
+ for(const group of root.querySelectorAll('.chart-category')){
+  const label=group.querySelector('text'),full=group.getAttribute('aria-label').replace(/\s+/g,' ').trim(),width=+group.dataset.labelWidth,x=label.getAttribute('x');
+  label.textContent=full;if(label.getComputedTextLength()<=width)continue;
+  const chars=Array.from(full),fit=(text,suffix='')=>{let lo=0,hi=text.length;while(lo<hi){const mid=Math.ceil((lo+hi)/2);label.textContent=text.slice(0,mid).join('')+suffix;if(label.getComputedTextLength()<=width)lo=mid;else hi=mid-1;}return lo;};
+  const first=fit(chars),rest=chars.slice(first),second=fit(rest),clipped=second<rest.length;
+  const lines=[chars.slice(0,first).join(''),clipped?rest.slice(0,fit(rest,'…')).join('')+'…':rest.join('')];
+  label.replaceChildren(...lines.map((value,i)=>{const span=document.createElementNS('http://www.w3.org/2000/svg','tspan');span.setAttribute('x',x);span.setAttribute('dy',i?'14':'0');span.textContent=value;return span;}));
+ }
+}
+
 export function renderChartSVG(chart,sheet,workbook){
   const {width,height}=chartRect(chart),w=width-36,h=height-70,data=chartData(chart,sheet,workbook);
   if(chart.type==='unsupported')return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'Excel 원본 차트 보존','text-anchor="middle"')+text(w/2,h/2+20,chart.unsupportedReason||'이 유형의 미리 보기는 아직 지원하지 않습니다.','text-anchor="middle"')};
   if(!data.length||!data.some(s=>s.values.some(Number.isFinite)))return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'표시할 숫자 데이터가 없습니다.','text-anchor="middle"')+text(w/2,h/2+20,'범위와 첫 행·첫 열 설정을 확인하세요.','text-anchor="middle"')};
   const circular=['pie','doughnut'].includes(chart.type),legend=chart.legend!==false&&(circular||data.length>1),legendCols=Math.max(1,Math.floor(w/(circular?95:130))),legendCount=circular?data[0].values.length:data.length,legendRows=legend?Math.min(3,Math.ceil(legendCount/legendCols)):0;
-  const left=chart.type==='bar-horizontal'?75:55,right=w-(data.some(s=>s.secondary)?52:20),top=18,bottom=Math.max(top+35,h-35-legendRows*17),pw=right-left,ph=bottom-top;
+  const categorySpace=chart.type==='bar'?(chart.xTitle?64:44):35;
+  const left=chart.type==='bar-horizontal'?75:55,right=w-(data.some(s=>s.secondary)?52:20),top=18,bottom=Math.max(top+35,h-categorySpace-legendRows*17),pw=right-left,ph=bottom-top;
   const svg=[],count=Math.max(1,...data.map(s=>s.values.length)),labels=data.find(s=>s.labels.length)?.labels||Array.from({length:count},(_,i)=>String(i+1));
   const pointLabel=(x,y,value)=>{if(chart.labels&&Number.isFinite(value))svg.push(text(x,y,fmt(value),'text-anchor="middle"'));};
   if(['pie','doughnut'].includes(chart.type)){
@@ -62,11 +74,11 @@ export function renderChartSVG(chart,sheet,workbook){
     const bounds=[extents(false),extents(true)],coord=(v,secondary=false)=>{const [min,max]=bounds[+secondary];return horizontal?left+(v-min)/(max-min)*pw:bottom-(v-min)/(max-min)*ph;};
     for(let i=0;i<=4;i++){const [min,max]=bounds[0],val=min+i/4*(max-min),p=coord(val);svg.push(horizontal?line(p,top,p,bottom):line(left,p,right,p));svg.push(horizontal?text(p,bottom+16,fmt(val)+(percent?'%':''),'text-anchor="middle"'):text(left-6,p+3,fmt(val)+(percent?'%':''),'text-anchor="end"'));if(data.some(s=>s.secondary)&&!horizontal){const [mn,mx]=bounds[1];svg.push(text(right+6,p+3,fmt(mn+i/4*(mx-mn))));}}
     const step=(horizontal?ph:pw)/count,barIndices=data.map((s,i)=>['bar','bar-horizontal','combo'].includes(s.type)?i:-1).filter(i=>i>=0),positions=Array.from({length:count},()=>({positive:0,negative:0}));
-    labels.forEach((label,i)=>{if(count>16&&i%Math.ceil(count/12)!==0)return;svg.push(horizontal?text(left-7,top+step*(i+.5)+3,label.slice(0,10),'text-anchor="end"'):text(left+step*(i+.5),bottom+16,label.slice(0,10),'text-anchor="middle"'));});
+    labels.forEach((label,i)=>{if(count>16&&i%Math.ceil(count/12)!==0)return;const x=left+step*(i+.5);svg.push(chart.type==='bar'?`<g class="chart-category" aria-label="${esc(label)}" data-label-width="${Math.max(12,step-10)}"><title>${esc(label)}</title><text x="${x}" y="${bottom+18}" text-anchor="middle" font-size="11" fill="#56616f">${esc(label)}</text></g>`:horizontal?text(left-7,top+step*(i+.5)+3,label.slice(0,10),'text-anchor="end"'):text(x,bottom+16,label.slice(0,10),'text-anchor="middle"'));});
     data.forEach((s,si)=>{const points=[],basePoints=[];values[si].forEach((v,i)=>{if(v===null){points.push(null);basePoints.push(null);return;}const side=v>=0?'positive':'negative',base=stack?positions[i][side]:0,topValue=base+v;if(stack)positions[i][side]=topValue;
         const p=coord(topValue,!!s.secondary),baseP=coord(base,!!s.secondary),mid=(horizontal?top:left)+step*(i+.5);
-        if(['bar','bar-horizontal','combo'].includes(s.type)){const lane=stack?0:barIndices.indexOf(si),lanes=stack?1:Math.max(1,barIndices.length),thickness=step*.75/lanes,offset=(horizontal?top:left)+step*i+step*.125+lane*thickness;
-          svg.push(`<rect class="chart-point" data-series="${si}" data-point="${i}" x="${horizontal?Math.min(p,baseP):offset}" y="${horizontal?offset:Math.min(p,baseP)}" width="${horizontal?Math.max(.5,Math.abs(p-baseP)):thickness}" height="${horizontal?thickness:Math.max(.5,Math.abs(p-baseP))}" fill="${s.pointColors?.[i]||s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></rect>`);pointLabel(horizontal?p+10:offset+thickness/2,horizontal?offset+thickness/2:p-4,v);
+        if(['bar','bar-horizontal','combo'].includes(s.type)){const lane=stack?0:barIndices.indexOf(si),lanes=stack?1:Math.max(1,barIndices.length),simple=chart.type==='bar'&&data.length===1,thickness=simple?Math.min(56,step*.56):step*.75/lanes,offset=simple?left+step*(i+.5)-thickness/2:(horizontal?top:left)+step*i+step*.125+lane*thickness;
+          svg.push(`<rect class="chart-point" data-series="${si}" data-point="${i}" x="${horizontal?Math.min(p,baseP):offset}" y="${horizontal?offset:Math.min(p,baseP)}" width="${horizontal?Math.max(.5,Math.abs(p-baseP)):thickness}" height="${horizontal?thickness:Math.max(.5,Math.abs(p-baseP))}" ${simple?'rx="3"':''} fill="${s.pointColors?.[i]||s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></rect>`);pointLabel(horizontal?p+10:offset+thickness/2,horizontal?offset+thickness/2:p-4,v);
         }else{points.push([mid,p]);basePoints.push([mid,baseP]);svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${mid}" cy="${p}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`);pointLabel(mid,p-7,v);}
       });
       if(points.length){let segment=[],base=[];const flush=()=>{if(!segment.length)return;if(s.type==='area')svg.push(`<polygon points="${[...segment,...base.reverse()].map(p=>p.join(',')).join(' ')}" fill="${s.color}" fill-opacity=".5"/>`);svg.push(poly(segment,s.color));segment=[];base=[];};points.forEach((p,i)=>{if(!p){flush();return;}segment.push(p);base.push(basePoints[i]);});flush();}

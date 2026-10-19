@@ -38,19 +38,28 @@ function sourceBounds(chart){
   const parts=String(chart.range).split(':'),[a,b]=parts.map(parseAddress);
   return parts.length===2&&a&&b&&b.r>=a.r&&b.c>=a.c?{a,b}:null;
 }
-export function chartSeriesBy(chart){
+export function chartSeriesBy(chart,sheet,workbook){
   if(['rows','columns'].includes(chart.seriesBy))return chart.seriesBy;
-  const bounds=sourceBounds(chart);return bounds&&bounds.a.r===bounds.b.r?'rows':'columns';
+  const bounds=sourceBounds(chart);if(!bounds)return 'columns';
+  const {a,b}=bounds;if(a.r===b.r)return 'rows';
+  // A header row followed by one observation describes named categories,
+  // rather than unrelated one-point series with a redundant legend.
+  if(sheet&&workbook&&b.r===a.r+1&&b.c>a.c&&b.c-a.c<=10000&&!['scatter','bubble'].includes(chart.type)){
+    const evaluate=createEvaluator(workbook,sheet.id),number=v=>typeof v==='number'&&Number.isFinite(v),start=a.c+Number(!number(evaluate(address(b.r,a.c))));
+    let named=b.c-start>=1;for(let c=start;c<=b.c&&named;c++){const heading=evaluate(address(a.r,c));named=typeof heading==='string'&&heading.trim()!==''&&!heading.startsWith('#')&&number(evaluate(address(b.r,c)));}
+    if(named)return 'rows';
+  }
+  return 'columns';
 }
-function sourceAxes(chart){
+function sourceAxes(chart,sheet,workbook){
   const bounds=sourceBounds(chart);if(!bounds)return null;
-  const {a,b}=bounds,rows=chartSeriesBy(chart)==='rows';
+  const {a,b}=bounds,rows=chartSeriesBy(chart,sheet,workbook)==='rows';
   const lane1=rows?a.r:a.c,lane2=rows?b.r:b.c,point1=rows?a.c:a.r,point2=rows?b.c:b.r;
   if(lane2-lane1>32||point2-point1>10000)return null;
   return {rows,lane1,lane2,point1,point2,xy:['scatter','bubble'].includes(chart.type),implicitX:chart.type==='scatter'&&lane1===lane2};
 }
 export function chartLayout(chart,sheet,workbook){
-  const axes=sourceAxes(chart);if(!axes)return {firstRowAsHeader:false,firstColumnAsLabels:false};
+  const axes=sourceAxes(chart,sheet,workbook);if(!axes)return {firstRowAsHeader:false,firstColumnAsLabels:false};
   const {rows,lane1,lane2,point1,point2,xy,implicitX}=axes,evaluate=createEvaluator(workbook,sheet.id),numeric=v=>typeof v==='number'&&Number.isFinite(v);
   const value=(lane,point)=>{const key=rows?address(lane,point):address(point,lane),cell=sheet.cells[key];if(!cell||cell.raw==='')return null;const v=evaluate(key);return typeof v==='string'&&v.startsWith('#')&&cell.cachedValue!==undefined?cell.cachedValue:v;};
   let numericFirstLane=false;for(let point=point1;point<=point2;point++)if(numeric(value(lane1,point))){numericFirstLane=true;break;}
@@ -60,7 +69,7 @@ export function chartLayout(chart,sheet,workbook){
   return rows?{firstRowAsHeader:categories,firstColumnAsLabels:names}:{firstRowAsHeader:names,firstColumnAsLabels:categories};
 }
 function seriesShape(chart,sheet,workbook){
-  const axes=sourceAxes(chart);if(!axes)return null;
+  const axes=sourceAxes(chart,sheet,workbook);if(!axes)return null;
   const layout=chartLayout(chart,sheet,workbook),{rows,xy,implicitX,lane1,point1}=axes;
   const names=rows?layout.firstColumnAsLabels:layout.firstRowAsHeader,categories=rows?layout.firstRowAsHeader:layout.firstColumnAsLabels;
   return {...axes,names,categories,startLane:lane1+Number(xy?!implicitX:categories),startPoint:point1+Number(names)};

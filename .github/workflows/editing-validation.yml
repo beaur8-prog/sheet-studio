@@ -27,7 +27,7 @@ jobs:
       - name: Check native composition and existing editing behavior
         shell: bash
         run: |
-          for spec in autofill ime-entry chart-audit chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit; do
+          for spec in autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit; do
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node "tests/ui-$spec.mjs" --desktop
             else

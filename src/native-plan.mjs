@@ -23,6 +23,7 @@ function chartPlan(sheet,before,workbook){
       patch.series=chartSeries(chart,sheet,workbook).slice(0,chart.type==='pie'?1:32).map(s=>({valuesRange:s.valRef.range,...(s.nameRef?.range?{nameRange:s.nameRef.range}:{}),...((s.xRef||s.catRef)?.range?{categoriesRange:(s.xRef||s.catRef).range}:{}),...(s.sizeRef?.range?{sizesRange:s.sizeRef.range}:{})}));
     }
     for(const key of ['x','y','width','height','title','legend','labels','xTitle','yTitle'])if(rebuild||!equal(chart[key],old?.[key]))patch[key]=chart[key]??({x:40,y:25,width:500,height:300,title:'',legend:true,labels:false,xTitle:'',yTitle:''}[key]);
+    if(patch.legend!==undefined&&!chart.source&&chart.type==='bar')patch.legend=chart.legend!==false&&(patch.series||chartSeries(chart,sheet,workbook)).length>1;
     if(Object.keys(patch).length>1)charts.push(patch);
   }
   const deletedCharts=oldCharts.filter(c=>c.nativeName&&!sheet.charts?.some(now=>now.id===c.id)).map(c=>c.nativeName);
