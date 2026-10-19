@@ -85,6 +85,6 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 Linux x64 DEB는 Linux에서 `npm run package:linux`로 빌드합니다. 설치·실행 방법은 [사용자 가이드](docs/USER-GUIDE.md)를 참고하세요.
 
-## Studio 앱 간 표 복사 (0.7.10 소스·로컬, 미배포)
+## Studio 앱 간 표 복사 (0.7.10)
 
 선택 범위를 복사해 Word Studio 1.2.11 또는 Slide Studio 1.6.1에 붙이면 편집 가능한 표가 됩니다. 반대 방향도 지원합니다. [사용법·교환 형식·상대 앱 구현·검증 안내](docs/STUDIO-CLIPBOARD.md)를 확인하세요.
