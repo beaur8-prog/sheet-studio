@@ -1,5 +1,15 @@
 # 검증 기록
 
+## 2026-10-19 · 0.7.11 차트 첫 숫자 열·행 누락 수정 (개발, 미배포)
+
+- 숫자 표 `10,20 / 30,40 / 50,60`을 선택하면 기존 코드는 첫 열과 첫 행을 무조건 제목으로 빼서 두 번째 열의 `40,60`만 그렸습니다. 수정본은 두 계열 `[10,30,50]`, `[20,40,60]`을 모두 그립니다. 문자 항목명은 축 이름으로 유지하며 제목 없는 표와 숫자 한 열도 지원합니다.
+- 첫 행/첫 열 사용을 자동 구분하고 차트 설정에서 직접 지정합니다. 숫자 연도·번호를 항목명으로 사용하거나 숫자 제목을 쓸 수 있고, 새 차트는 이 선택을 저장해 값 수정 후 임의로 재해석하지 않습니다. 가져온 Excel 원본 계열은 명시적으로 새 차트로 변환하기 전까지 유지합니다.
+- 로컬 단위 시험 **127개 통과**, Windows 전용 1개 건너뜀. 첫 열·행, 문자 제목/항목, 한 열·한 행, 0과 수식, 명시적 제목/항목 설정, JSON/XLSX 왕복과 범위 제한을 검사했습니다.
+- Mac arm64 소스와 0.7.11 패키지에서 실제 드래그/역방향 선택 후 삽입, 모든 열의 막대 수·값, 첫 열 수정, XLSX 저장·재열기, 항목 지정과 실행 취소·닫기·재시작을 통과했습니다. 기존 10개 차트 유형, 원본 보존·변환, 8개 크기 조절점·이동·확대·키보드·JSON 검사도 통과했습니다.
+- [차트 회귀 CI 39232223131](https://github.com/beaur8-prog/sheet-studio/actions/runs/39232223131): Windows·Ubuntu 22.04·24.04 소스 Electron 실행 **모두 통과**. Windows 단위 시험 128개, Ubuntu 각각 127개 통과(Windows 전용 1개 건너뜀). 세 환경에서 선택/첫 열·행, 10개 유형/원본 보존, 1024×768 창의 크기 조절·이동·확대 검사를 통과했습니다. Windows Excel worker의 PowerShell 문법 검사도 통과했으며 설치 파일 또는 실제 Office 실행을 검증한 CI는 아닙니다. 검증 소스는 `60324eb`입니다.
+- Windows Excel 저장 계획도 렌더러/XLSX와 같은 계열별 범위를 전달하도록 수정하고 계획 유효성을 검사했습니다. [Series.Values](https://learn.microsoft.com/en-us/office/vba/api/excel.series.values)와 [Series.XValues](https://learn.microsoft.com/en-us/office/vba/api/excel.series.xvalues)로 범위를 지정하고, 계열 이름·거품 크기는 문서의 R1C1 참조 방식을 따릅니다. **실제 Microsoft Excel/VBA 실행·왕복은 이번에 수행하지 않았습니다.**
+- Mac 앱은 ad-hoc 서명 무결성을 확인했고 로컬 캐시에 준비했습니다. 공개 릴리즈·리토스는 0.7.10을 유지하며 이번에는 배포하지 않았습니다.
+
 ## 2026-10-19 · 0.7.11 Ubuntu 앱 연결·방향키 입력 수정 (개발, 미배포)
 
 - 기존 0.7.10 DEB를 읽어 아이콘이 `1024x1024` 한 크기에만 설치되고, desktop 파일의 `StartupWMClass=Sheet Studio`와 파일명 `sheet-studio.desktop`이 다르며 런타임 `desktopName` 설정이 없음을 확인했습니다. 공통 아이콘 크기 9개(16·24·32·48·64·128·256·512·1024)를 설치하고, 패키지 메타데이터·시작 시 `app.setDesktopName()`·desktop 파일·실행 창의 식별자를 `sheet-studio`로 통일했습니다. [Electron의 Linux desktopName 설명](https://www.electronjs.org/docs/latest/api/app#appsetdesktopnamename-linux)을 따릅니다.
