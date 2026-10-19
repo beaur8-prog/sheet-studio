@@ -1,8 +1,9 @@
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';
-import platform from '../scripts/platform.cjs';import {createWorkbook} from '../src/engine.mjs';
+import platform from '../scripts/platform.cjs';import {createRequire} from 'node:module';import {createWorkbook} from '../src/engine.mjs';
 const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','studio-clipboard-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:process.argv.includes('--packaged')?[]:[root],env});const page=await app.firstWindow();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const packaged=process.argv.includes('--packaged'),version=createRequire(import.meta.url)('../package.json').version;
+const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});const page=await app.firstWindow();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
 const select=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();};
 let saved;
