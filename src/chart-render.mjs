@@ -8,7 +8,8 @@ const poly=(points,color,fill='none',extra='')=>`<polyline points="${points.map(
 
 export function renderChartSVG(chart,sheet,workbook){
   const {width,height}=chartRect(chart),w=width-36,h=height-70,data=chartData(chart,sheet,workbook);
-  if(chart.type==='unsupported'||!data.length)return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'Excel 원본 차트 보존','text-anchor="middle"')+text(w/2,h/2+20,chart.unsupportedReason||'이 유형의 미리 보기는 아직 지원하지 않습니다.','text-anchor="middle"')};
+  if(chart.type==='unsupported')return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'Excel 원본 차트 보존','text-anchor="middle"')+text(w/2,h/2+20,chart.unsupportedReason||'이 유형의 미리 보기는 아직 지원하지 않습니다.','text-anchor="middle"')};
+  if(!data.length)return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'표시할 숫자 데이터가 없습니다.','text-anchor="middle"')+text(w/2,h/2+20,'범위와 첫 행·첫 열 설정을 확인하세요.','text-anchor="middle"')};
   const legend=chart.legend!==false&&data.length>1,legendRows=legend?Math.min(3,Math.ceil(data.length/Math.max(1,Math.floor(w/130)))):0;
   const left=chart.type==='bar-horizontal'?75:55,right=w-(data.some(s=>s.secondary)?52:20),top=18,bottom=Math.max(top+35,h-35-legendRows*17),pw=right-left,ph=bottom-top;
   const svg=[],count=Math.max(1,...data.map(s=>s.values.length)),labels=data.find(s=>s.labels.length)?.labels||Array.from({length:count},(_,i)=>String(i+1));

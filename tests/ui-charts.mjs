@@ -14,24 +14,25 @@ if(desktop){
   page=await application.firstWindow();await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1024,768));
 }else{browser=await chromium.launch({headless:true,channel:'msedge'});page=await browser.newPage({viewport:{width:1540,height:970}});}
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
-const go=async address=>{await page.locator('#name-box').fill(address);await page.locator('#name-box').press('Enter');};
+const settle=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+const go=async address=>{await page.locator('#name-box').fill(address);await page.locator('#name-box').press('Enter');await settle();};
 const chart=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].charts[0]);
 const key=process.platform==='darwin'?'Meta':'Control';
-const undo=async()=>{await page.locator('#grid').focus();await page.keyboard.press(key+'+z');};
-const redo=async()=>{await page.locator('#grid').focus();await page.keyboard.press(key+'+Shift+z');};
-const zoom=async value=>{await page.locator('#zoom').evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},value);};
+const undo=async()=>{await page.locator('#grid').focus();await page.keyboard.press(key+'+z');await settle();};
+const redo=async()=>{await page.locator('#grid').focus();await page.keyboard.press(key+'+Shift+z');await settle();};
+const zoom=async value=>{await page.locator('#zoom').evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},value);await settle();};
 async function drag(edge,dx,dy,{cancel=false}={}){
   // Scrolling/zoom rebuilds chart DOM on animation frames. Measure after that render.
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   const handle=page.locator('[data-chart-resize="'+edge+'"]').first();
   await handle.scrollIntoViewIfNeeded();
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  const rect=await handle.boundingBox();
+  const rect=await handle.evaluate(el=>{const {x,y,width,height}=el.getBoundingClientRect();return{x,y,width,height};});
   assert.ok(rect,'Chart resize handle is visible after rendering');
   await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.down();
   await page.mouse.move(rect.x+rect.width/2+dx,rect.y+rect.height/2+dy,{steps:8});
   if(cancel)await page.keyboard.press('Escape');
-  await page.mouse.up();
+  await page.mouse.up();await settle();
 }
 try{
   if(!desktop)await page.goto('http://127.0.0.1:5192');await page.locator('#cells .cell').first().waitFor();
@@ -46,7 +47,7 @@ try{
   await drag('nw',40,30);const moved=await chart();assert.equal(moved.x,initial.x+40);assert.equal(moved.y,initial.y+30);assert.equal(moved.width,610);assert.equal(moved.height,360);
   await undo();await undo();assert.equal((await chart()).width,500);
   await zoom(150);await drag('se',120,60);assert.equal((await chart()).width,580);assert.equal((await chart()).height,340);
-  const box=await page.locator('.chart-card').boundingBox();assert.equal(Math.round(box.width),870);
+  const box=await page.locator('.chart-card').evaluate(el=>({width:el.getBoundingClientRect().width}));assert.equal(Math.round(box.width),870);
   await drag('se',40,20,{cancel:true});assert.equal((await chart()).width,580);
   await undo();assert.equal((await chart()).width,500);await redo();assert.equal((await chart()).width,580);
   await zoom(100);
@@ -57,7 +58,7 @@ try{
   await page.keyboard.press('Shift+ArrowDown');assert.equal((await chart()).width,640);assert.equal((await chart()).height,341);assert.equal(await page.locator('#name-box').inputValue(),selection);
   await page.locator('[data-chart-title]').dblclick();await page.getByRole('dialog').locator('input').fill('분기 매출');await page.getByRole('button',{name:'확인',exact:true}).click();
   assert.equal((await chart()).title,'분기 매출');
-  const beforeMove=await chart(),title=await page.locator('[data-chart-title]').boundingBox();
+  await settle();const beforeMove=await chart(),title=await page.locator('[data-chart-title]').evaluate(el=>{const {x,y}=el.getBoundingClientRect();return{x,y};});
   await page.mouse.move(title.x+40,title.y+12);await page.mouse.down();await page.mouse.move(title.x+60,title.y+37,{steps:5});await page.mouse.up();
   assert.equal((await chart()).x,beforeMove.x+20);assert.equal((await chart()).y,beforeMove.y+25);
   await drag('se',-900,-600);assert.equal((await chart()).width,280);assert.equal((await chart()).height,180);await undo();
@@ -77,4 +78,4 @@ try{
   await drag('se',60,40);assert.equal((await chart()).width,560);assert.equal(await page.locator('.chart-card polyline').count(),1);
   await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/charts-'+(packaged?'packaged':desktop?'desktop':'browser')+'.png')});
   assert.deepEqual(errors,[]);console.log('Chart UI passed: 8 handles, resize/move, zoom, scroll, undo/redo, Escape, keyboard, title, persistence, JSON, legacy documents, line chart.');
-}finally{if(application)await application.close();if(browser)await browser.close();}
+}catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/charts-failed.png')}).catch(()=>{});console.error('Chart test viewport',await page.evaluate(()=>({width:innerWidth,height:innerHeight,scrollLeft:document.querySelector('#grid')?.scrollLeft,scrollTop:document.querySelector('#grid')?.scrollTop})).catch(()=>null));throw error;}finally{if(application)await application.close();if(browser)await browser.close();}

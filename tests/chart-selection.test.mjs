@@ -56,3 +56,10 @@ test('native Excel plans bind explicit series ranges and rebuild when label choi
  b.nativeSource.baseline=structuredClone(b.sheets);s.charts[0].firstColumnAsLabels=true;plan=buildNativePlan(b);assert.deepEqual(plan.sheets[0].charts[0].series,[{valuesRange:'B2:B3',nameRange:'B1:B1',categoriesRange:'A2:A3'}]);validatePayload({mode:'save',source:b.nativeSource,plan});
  for(const series of [[{valuesRange:'A2:B3'}],[{valuesRange:'A2:A3',categoriesRange:'B2:B2'}],[{valuesRange:'A2:A3',nameRange:'A1:A2'}],[{valuesRange:'A2:A3',Formula:'evil'}]]){const bad=structuredClone(plan);bad.sheets[0].charts[0].series=series;assert.throws(()=>validatePayload({mode:'save',source:b.nativeSource,plan:bad}),/차트/);}
 });
+
+
+test('an empty selection gives a data hint while unsupported imported charts keep the preservation notice',async()=>{
+ const {renderChartSVG}=await import('../src/chart-render.mjs'),b=fixture([]),s=b.sheets[0];
+ assert.match(renderChartSVG({type:'bar',range:'A1:B2'},s,b).svg,/표시할 숫자 데이터/);
+ assert.match(renderChartSVG({type:'unsupported',range:'A1:B2'},s,b).svg,/Excel 원본 차트 보존/);
+});
