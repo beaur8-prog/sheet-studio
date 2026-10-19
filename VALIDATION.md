@@ -1,5 +1,15 @@
 # 검증 기록
 
+## 2026-10-19 · 0.7.11 Ubuntu 앱 연결·방향키 입력 수정 (개발, 미배포)
+
+- 기존 0.7.10 DEB를 읽어 아이콘이 `1024x1024` 한 크기에만 설치되고, desktop 파일의 `StartupWMClass=Sheet Studio`와 파일명 `sheet-studio.desktop`이 다르며 런타임 `desktopName` 설정이 없음을 확인했습니다. 공통 아이콘 크기 9개(16·24·32·48·64·128·256·512·1024)를 설치하고, 패키지 메타데이터·시작 시 `app.setDesktopName()`·desktop 파일·실행 창의 식별자를 `sheet-studio`로 통일했습니다. [Electron의 Linux desktopName 설명](https://www.electronjs.org/docs/latest/api/app#appsetdesktopnamename-linux)을 따릅니다.
+- 일반 셀 입력에서 방향키로 확정하지 않던 문제를 기존 0.7.10에서 재현했습니다. 수정본은 네 방향 확정·이동, 숫자·완성 수식·실행 취소, 숨김 행/열·병합 셀·시트 가장자리를 검사했습니다. F2·더블클릭·수식 입력줄의 글자 커서와 수식 참조 선택은 유지합니다. 입력 이벤트가 편집 모드를 임의로 바꾸지 않게 했고 IME 조합 중 확정을 막습니다.
+- 로컬 단위 시험 **117개 통과**, Windows 전용 1개 건너뜀. 소스 앱의 입력 이동·직접 편집·수식·함수·parity 감사 UI와 Mac arm64 0.7.11 패키지의 입력 이동·수식 UI가 통과했습니다. Mac 패키지의 실행 코드 10개 파일이 소스와 일치하고 ad-hoc 서명 무결성도 확인했습니다.
+- [Ubuntu 22.04·24.04 설치 검증 39227854352](https://github.com/beaur8-prog/sheet-studio/actions/runs/39227854352) **모두 통과**. DEB를 실제 설치하고 desktop 파일 구문·GIO 앱 목록 등록·GTK 아이콘 조회(16~512px)와 실제 X11 `WM_CLASS = "sheet-studio", "sheet-studio"`를 확인했습니다. 설치 앱에서 입력 이동·직접 편집·수식·함수 회귀 검사도 통과했습니다.
+- 두 Ubuntu의 실제 Wayland 창에서 `set_app_id("sheet-studio")`를 확인했습니다. 검사 환경은 Xvfb 위에 입력 장치를 갖춘 Weston을 실행한 중첩 Wayland이며, 창을 명시적으로 표시해 식별자를 수집합니다. GNOME Shell의 실제 **Pin to Dash 메뉴를 수동 클릭한 시험이나 Wayland 전체 기능 검증은 아닙니다.** 사용자 Ubuntu에서의 고정 결과는 새 배포본 설치 후 확인해야 합니다.
+- 테스트 환경만 바꾼 최종 검사는 앞서 설치한 DEB를 재사용했으며, 설치된 ASAR의 버전·desktopName·실행 코드가 현재 소스와 일치하는지 다시 검사했습니다. 검증 자료는 `.verification/0.7.11/`, GitHub Actions의 `linux-validation-ubuntu-*` 산출물에 보관합니다.
+- 공개 릴리즈와 리토스는 **0.7.10을 유지**합니다. 0.7.11 배포는 요청받은 뒤 진행합니다. 화면 잠금이 확인되어 사용 중인 Mac 앱의 교체·재실행은 하지 않았고, 검증한 0.7.11 Mac 빌드는 로컬 캐시에 준비했습니다.
+
 ## 2026-10-19 · 0.7.10 공개 배포 검증
 
 - [GitHub Actions 39189920681](https://github.com/beaur8-prog/sheet-studio/actions/runs/39189920681): Mac arm64·Windows x64·Ubuntu 22.04 x64 빌드와 배포 앱 검사 모두 통과. Windows 단위 시험 118개, Mac·Linux 각각 117개 통과(Windows 전용 1개 건너뜀).
