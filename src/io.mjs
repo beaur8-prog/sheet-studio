@@ -1,3 +1,4 @@
+import {cellBorders,borderSides,borderStyles} from './borders.mjs';
 import {restoreWorksheetParts,addWorksheetParts} from './worksheet-xlsx.mjs';
 import {importConditional,exportConditional,shiftWorksheetFeatures} from './conditional.mjs';
 import {addFilterParts,restoreFilterParts} from './filter-xlsx.mjs';
@@ -81,7 +82,9 @@ function readStyle(cell) {
   if (alignment.horizontal) result.align = alignment.horizontal;
   if (alignment.vertical) result.verticalAlign = alignment.vertical;
   if (alignment.wrapText) result.wrap = true;
-  if (Object.values(cell.border || {}).some(side => side?.style)) result.border = true;
+  if (borderSides.some(side => cell.border?.[side]?.style)) {
+    result.borders=Object.fromEntries(borderSides.map(side=>{const edge=cell.border[side];return [side,edge?.style?{style:borderStyles.includes(edge.style)?edge.style:'thin',color:rgb(edge.color)||'#8a8a8a'}:null];}));
+  }
   if (numFmt) {
     result.format = formatKind(numFmt);
     result.numberFormat = numFmt;
@@ -146,29 +149,36 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   let cellCount = 0;
   const sheets = book.worksheets.map(source => {
     const sheet = newSheet(source.name);
+    const importCell = cell => {
+      if (cell.isMerged && cell.master.address !== cell.address) return;
+      if (++cellCount > MAX_CELLS) throw new Error('200,000개 이하의 셀이 있는 파일을 선택하세요.');
+      const style = readStyle(cell);
+      let raw = '';
+      const value = cell.value;
+      if (cell.formula) raw = '='+formulaForEditing(cell.formula);
+      else if (value instanceof Date) { raw = String(Math.round((value.getTime()/DAY+25569-(value.getTime()<Date.UTC(1900,2,1)?1:0))*1e8)/1e8); style.format = 'date'; }
+      else if (typeof value === 'number') raw = String(value);
+      else if (typeof value === 'boolean') raw = String(value).toUpperCase();
+      else if (typeof value === 'string') raw = stringRaw(value);
+      else if (value?.richText) raw = stringRaw(value.richText.map(run => run.text).join(''));
+      else if (value?.text !== undefined) raw = stringRaw(value.text);
+      else if (value?.error) raw = value.error;
+      const entry = { raw, style };
+      if (typeof cell.note === 'string') entry.note = cell.note;
+      else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
+      if (cell.formula && cell.result !== undefined) entry.cachedValue = cell.result?.error || cell.result;
+      sheet.cells[cell.address] = entry;
+    };
     source.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (row.height) sheet.rowHeights[rowNumber - 1] = row.height * 4 / 3;
-      row.eachCell({ includeEmpty: false }, cell => {
-        if (cell.isMerged && cell.master.address !== cell.address) return;
-        if (++cellCount > MAX_CELLS) throw new Error('200,000개 이하의 셀이 있는 파일을 선택하세요.');
-        const style = readStyle(cell);
-        let raw = '';
-        const value = cell.value;
-        if (cell.formula) raw = '='+formulaForEditing(cell.formula);
-        else if (value instanceof Date) { raw = String(Math.round((value.getTime()/DAY+25569-(value.getTime()<Date.UTC(1900,2,1)?1:0))*1e8)/1e8); style.format = 'date'; }
-        else if (typeof value === 'number') raw = String(value);
-        else if (typeof value === 'boolean') raw = String(value).toUpperCase();
-        else if (typeof value === 'string') raw = stringRaw(value);
-        else if (value?.richText) raw = stringRaw(value.richText.map(run => run.text).join(''));
-        else if (value?.text !== undefined) raw = stringRaw(value.text);
-        else if (value?.error) raw = value.error;
-        const entry = { raw, style };
-        if (typeof cell.note === 'string') entry.note = cell.note;
-        else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
-        if (cell.formula && cell.result !== undefined) entry.cachedValue = cell.result?.error || cell.result;
-        sheet.cells[cell.address] = entry;
-      });
+      row.eachCell({ includeEmpty: false }, importCell);
     });
+    // ExcelJS skips null-valued styled cells (and rows containing only those
+    // cells) in eachRow/eachCell. Walk the sparse model to retain empty borders
+    // and fills without expanding a sheet's potentially million-row extent.
+    for (const row of source.model.rows || []) for (const model of row.cells || []) {
+      if (!sheet.cells[model.address] && Object.keys(model.style || {}).length) importCell(source.getCell(model.address));
+    }
     // Rows with only a custom height can be omitted by eachRow(includeEmpty:false).
     for (const row of source.model.rows || []) {if (row.height) sheet.rowHeights[row.number - 1] = row.height * 4 / 3;if(row.hidden)sheet.rowHeights[row.number-1]=0;}
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
@@ -216,10 +226,7 @@ function applyStyle(target, style = {}) {
     horizontal: ['left', 'center', 'right', 'fill', 'justify', 'centerContinuous', 'distributed'].includes(style.align) ? style.align : undefined,
     vertical: style.verticalAlign || 'middle', wrapText: !!style.wrap,
   };
-  if (style.border) {
-    const edge = { style: 'thin', color: { argb: 'FF8A8A8A' } };
-    target.border = { top: edge, right: edge, bottom: edge, left: edge };
-  }
+  target.border = Object.fromEntries(Object.entries(cellBorders(style)).map(([side,edge])=>[side,edge?{style:edge.style,color:{argb:'FF'+edge.color.slice(1).toUpperCase()}}:{}]));
   target.numFmt = style.numberFormat && formatKind(style.numberFormat) === (style.format || 'general')
     ? style.numberFormat : formats[style.format] || 'General';
   if (Number.isInteger(style.decimals) && ['number', 'currency', 'accounting', 'percent'].includes(style.format)) {

@@ -6,6 +6,12 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   saveFile: payload => ipcRenderer.invoke('sheet:save-file', payload),
   setTitle: title => ipcRenderer.send('sheet:set-title', String(title)),
   editText: action => ipcRenderer.invoke('sheet:edit-text', action),
+  onWindowBlur: listener => {
+    if (typeof listener !== 'function') throw new TypeError('A window listener is required.');
+    const handler = () => listener();
+    ipcRenderer.on('sheet:window-blur', handler);
+    return () => ipcRenderer.removeListener('sheet:window-blur', handler);
+  },
   onMenuAction: listener => {
     if (typeof listener !== 'function') throw new TypeError('A menu listener is required.');
     const allowed = new Set(['new', 'open', 'save', 'undo', 'redo', 'cut', 'copy', 'paste', 'select-all', 'find']);

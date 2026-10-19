@@ -64,6 +64,22 @@ function Set-Cell($sheet,$patch) {
           'format' {$formats=@{general=[string]$sheet.Application.International(26);number='#,##0.00';currency='₩#,##0.00';accounting='₩#,##0.00';percent='0.00%';date='yyyy-mm-dd'};if($formats.ContainsKey([string]$value)){$cell.NumberFormat=[string]$formats[[string]$value]}else{$cell.NumberFormat=[string]$sheet.Application.International(26)}}
         }
       }
+      if (Has-Field $style 'borders') {
+        # Apply per-edge settings after the legacy all-borders flag, regardless of JSON key order.
+        $indices=@{top=8;right=10;bottom=9;left=7}
+        foreach($side in $indices.Keys) {
+          if($null -ne $style.borders -and !(Has-Field $style.borders $side)){continue}
+          $edge=$null;if($null -ne $style.borders){$edge=$style.borders.$side}
+          $border=$cell.Borders.Item($indices[$side])
+          try {
+            if($null -eq $edge){$border.LineStyle=-4142;continue}
+            $lines=@{dotted=-4118;dashed=-4115;mediumDashed=-4115;double=-4119;dashDot=4;mediumDashDot=4;dashDotDot=5;mediumDashDotDot=5;slantDashDot=13}
+            $line=1;if($lines.ContainsKey([string]$edge.style)){$line=$lines[[string]$edge.style]}
+            $weight=2;if($edge.style -eq 'hair'){$weight=1}elseif($edge.style -like 'medium*'){$weight=-4138}elseif($edge.style -eq 'thick'){$weight=4}
+            $border.Weight=$weight;$border.LineStyle=$line;$border.Color=Color-Number $edge.color
+          } finally {Release-Com $border}
+        }
+      }
       if ((Has-Field $style 'numberFormat') -and $style.numberFormat) {if($style.numberFormat -eq 'General'){$cell.NumberFormat=[string]$sheet.Application.International(26)}else{$cell.NumberFormat=[string]$style.numberFormat}}
       if ((Has-Field $style 'decimals') -and $null -ne $style.decimals -and $style.format -in @('number','currency','accounting','percent')) {
         $places=[Math]::Min(12,[Math]::Max(0,[int]$style.decimals));$fraction='';if($places){$fraction='.'+('0'*$places)}

@@ -96,6 +96,8 @@ async function createWindow() {
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   win.webContents.session.setPermissionCheckHandler(() => false);
+  const window = win;
+  window.on('blur', () => { if (!window.webContents.isDestroyed()) window.webContents.send('sheet:window-blur'); });
   win.once('ready-to-show', () => win.show());
   await win.loadFile(rendererPath);
   win.on('closed', () => { win = null; });

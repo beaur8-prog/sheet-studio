@@ -1,3 +1,4 @@
+import {validateBorders} from './borders.mjs';
 import {validateFreeze,validateConditionalRules} from './worksheet-schema.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
 import {validateChart} from './chart-schema.mjs';
@@ -1041,8 +1042,9 @@ function validateWorkbook(data) {
       if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
       if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
       if (cell.style) {
+        if (cell.style.borders !== undefined) validateBorders(cell.style.borders);
         for (const field of ['bold', 'italic', 'underline', 'wrap', 'border']) if (cell.style[field] !== undefined && typeof cell.style[field] !== 'boolean') throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
-        for (const field of ['fontFamily', 'color', 'background', 'align', 'format', 'numberFormat']) if (cell.style[field] !== undefined && (typeof cell.style[field] !== 'string' || cell.style[field].length > 512)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+        for (const field of ['fontFamily', 'color', 'background', 'align', 'verticalAlign', 'format', 'numberFormat']) if (cell.style[field] !== undefined && (typeof cell.style[field] !== 'string' || cell.style[field].length > 512)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
         if (cell.style.fontSize !== undefined && (typeof cell.style.fontSize !== 'number' || !Number.isFinite(cell.style.fontSize) || cell.style.fontSize <= 0 || cell.style.fontSize > 4096)) throw new Error(`글꼴 크기가 올바르지 않습니다: ${ref}`);
         if (cell.style.decimals !== undefined && (!Number.isInteger(cell.style.decimals) || cell.style.decimals < 0 || cell.style.decimals > 12)) throw new Error(`소수점 자릿수가 올바르지 않습니다: ${ref}`);
         for (const field of ['color', 'background']) if (cell.style[field] && !/^(?:#[\da-f]{3,8}|[a-z]+|(?:rgb|hsl)a?\([\d.%+,\s/-]+\))$/i.test(cell.style[field])) throw new Error(`셀 색상이 올바르지 않습니다: ${ref}`);
