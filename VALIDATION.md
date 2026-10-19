@@ -1,5 +1,14 @@
 # 검증 기록
 
+## 2026-10-19 · 0.7.13 공개 배포 검증
+
+- 공개 태그 `v0.7.13`의 소스는 `2477b1d`입니다. [배포 CI 39251454338](https://github.com/beaur8-prog/sheet-studio/actions/runs/39251454338)에서 **Mac arm64·Windows x64·Ubuntu 22.04 x64 모두 통과**했습니다. Windows 단위 시험 139개, Mac·Linux 각각 138개 통과(Windows 전용 1개 건너뜀). 0.7.12의 범례 가운데 정렬·첫 한글 입력 수정과 0.7.13의 숫자 자동 채우기를 함께 배포합니다.
+- 실제 배포 패키지에서 기본 실행, 차트 첫 숫자 행/열·범례·한글 조합·자동 채우기·테두리·방향키 입력·직접 편집·수식·시트·색상·셀 서식·OS 클립보드·parity 감사 UI 검사가 통과했습니다. Linux는 DEB를 설치한 앱으로 검사했습니다. Windows 설치·재설치·제거, 바로가기·앱 식별자·설치 앱 실행 및 문서·복구 데이터 보존도 통과했습니다.
+- GitHub의 DMG·Mac ZIP·Windows Setup EXE·Linux DEB를 다시 내려받아 플랫폼별 manifest와 SHA-256을 대조했습니다. Mac ZIP을 캐시에 추출해 앱 버전, ad-hoc 서명 무결성과 실행 코드 10개의 소스 일치를 확인했습니다. 배포 Mac ASAR SHA-256은 `77d72598f4af9bd225ed2022b1786c249304ddd66efad3840f0663875ef31f70`입니다. 통합 `SHA256SUMS.txt`와 플랫폼별 manifest·런타임 출처를 릴리즈에 제공합니다.
+- **기존 리토스 공유 주소·공유 토큰·생성 시각·만료 없음·읽기 전용 설정을 유지**한 채 동일 공유 항목의 ‘공유본 갱신’을 사용했습니다. DMG·Windows Setup·Linux DEB·SHA256SUMS 4개 첨부와 설치·실행법·버전별 변경 내역을 0.7.13으로 갱신했습니다. 공개 주소에서 파일 전체를 다시 읽어 검증한 GitHub 파일과 크기·SHA-256이 모두 일치함을 확인했습니다. 다운로드 위험 파일 경고와 Windows의 PC 보호 → 추가 정보 → 실행 안내를 유지했습니다.
+- 로컬 설치 앱은 앞서 실행한 0.7.13이며, 이번 공개 Mac 패키지와 실행 파일 10개의 바이트가 일치함을 확인했습니다. 사용 중인 문서를 다시 교체하거나 테스트 데이터로 바꾸지 않았습니다. 검증 자료는 `.verification/release-0.7.13/`에 보관합니다.
+- Mac은 Apple Developer ID 미서명·미공증, Windows는 Authenticode 미서명입니다. 실제 GNOME Dock 메뉴 클릭, Windows Excel/VBA 실행과 Microsoft Office 파일 왕복은 이번 검증에 포함하지 않았습니다. 한글 검사는 Chromium의 실제 조합 경로를 사용하며 물리 키보드와 OS 한국어 입력기를 켠 실기 시험은 아닙니다. 아래 개발 검증 기록은 공개 배포 전의 기록입니다.
+
 ## 2026-10-19 · 0.7.13 숫자 자동 채우기 (개발, 미배포)
 
 - `1, 2` 두 셀의 모서리를 여섯 셀까지 드래그하면 가로·세로 모두 `1, 2, 1, 2, 1, 2`가 되던 문제를 실제 입력과 마우스 드래그로 재현했습니다. 숫자도 무조건 반복하던 경로를 바꿔 `1, 2, 3, 4, 5, 6`으로 이어집니다. 기존 parity 감사의 반복 숫자 기대값도 수정했습니다. 기대 동작은 [Microsoft 자동 채우기 안내](https://support.microsoft.com/en-us/excel/get-started/fill-data-automatically-in-worksheet-cells)와 [숫자 계열 추세 안내](https://support.microsoft.com/en-gb/excel/project-values-in-a-series)를 참고했습니다. 실제 Microsoft Excel 앱과 대조 실행한 검사는 아닙니다.
