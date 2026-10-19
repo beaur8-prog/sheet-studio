@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
@@ -72,6 +72,13 @@ ipcMain.on('sheet:set-title', (event, title) => {
   trusted(event);
   if (typeof title === 'string') win.setTitle(title.slice(0, 250).replace(/[\r\n]/g, ' '));
 });
+
+ipcMain.handle('sheet:write-clipboard', (event, payload) => {
+  trusted(event);
+  if (!payload || typeof payload.text !== 'string' || typeof payload.html !== 'string' || Buffer.byteLength(payload.text) > 10*1024*1024 || Buffer.byteLength(payload.html) > 10*1024*1024) throw new Error('복사할 표 데이터가 너무 큽니다.');
+  clipboard.write({ text: payload.text, html: payload.html });
+});
+ipcMain.handle('sheet:paste-clipboard', event => { trusted(event); win.webContents.paste(); });
 
 ipcMain.handle('sheet:edit-text', (event, action) => {
   trusted(event);

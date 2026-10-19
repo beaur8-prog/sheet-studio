@@ -1,0 +1,18 @@
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';
+import platform from '../scripts/platform.cjs';import {createWorkbook} from '../src/engine.mjs';
+const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','studio-clipboard-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:process.argv.includes('--packaged')?[]:[root],env});const page=await app.firstWindow();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+const select=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();};
+let saved;
+try{
+ await page.locator('.cell').first().waitFor();saved=await app.evaluate(({clipboard})=>clipboard.availableFormats().map(format=>({format,bytes:clipboard.readBuffer(format)})));
+ const b=createWorkbook();b.name='clipboard test';b.sheets[0].cells={A1:{raw:'보고서',style:{bold:true,background:'#fff2cc',borders:{bottom:{style:'double',color:'#ff0000'}}}},A2:{raw:'=1+2'},B2:{raw:'줄1\n줄2'}};b.sheets[0].merges=['A1:B1'];await page.locator('#file-input').setInputFiles({name:'clipboard.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='clipboard test');await select('A1:B2');
+ await page.locator('[data-action=copy]').click();await page.getByText('선택한 셀을 복사했습니다.',{exact:true}).waitFor();
+ const rich=await app.evaluate(({clipboard})=>({text:clipboard.readText(),html:clipboard.readHTML()}));assert.ok(rich.html.includes('colspan="2"'));assert.ok(rich.html.includes('double'));assert.ok(!rich.html.includes('=1+2'));assert.ok(rich.text.includes('"줄1\n줄2"'));
+ await select('D1');await page.locator('[data-action=paste]').click();await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.D2?.raw==='=1+2');assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.E2.raw),'줄1\n줄2');
+ const fixture=JSON.parse(await fs.readFile(path.join(root,'tests/fixtures/studio-table.json'),'utf8'));await app.evaluate(({clipboard},fixture)=>clipboard.write(fixture),fixture);await select('G1');await page.locator('[data-action=paste]').click();await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.G1?.raw==='보고서');const imported=await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);assert.ok(imported.merges.includes('G1:H1'));assert.equal(imported.cells.G2.raw,'줄1\n줄2');assert.equal(imported.cells.H2.raw,"'=literal");assert.equal(imported.cells.G1.style.borders.bottom.color,'#ff0000');
+ await page.locator('#undo').click();await settle();assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.G1),undefined);
+ await page.screenshot({path:'test-results/studio-table-copy.png'});assert.deepEqual(errors,[]);console.log('PASS: OS clipboard HTML+TSV, own formulas/merged cells, external editable table import, literal safety and undo');
+}finally{if(saved)await app.evaluate(({clipboard},formats)=>{clipboard.clear();for(const item of formats)clipboard.writeBuffer(item.format,Buffer.from(item.bytes));},saved);await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

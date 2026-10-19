@@ -133,6 +133,10 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 
 Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 실행 → Excel 연결** → 실행 → **결과 가져오기** → **XLSM 저장** 순서입니다. Excel 보안 정책을 그대로 따릅니다. Mac Excel VBA 연결은 구현하지 않았습니다. **이번 릴리즈에서 Windows VBA 실행 및 실제 Microsoft Excel과의 왕복 호환성은 검증하지 않았습니다.** 세부 범위는 [VBA 안내](VBA.md)를 확인하세요.
 
+### Word·Slide Studio와 표 복사 (0.7.10 로컬·소스, 미배포)
+
+표 범위를 복사한 뒤 Word Studio 1.2.11의 본문 또는 Slide Studio 1.6.1의 슬라이드에 붙이면 셀을 수정할 수 있는 표가 됩니다. 글자·배경·테두리·병합을 전달하며 수식은 표시값으로 변환합니다. [사용법과 호환 범위](STUDIO-CLIPBOARD.md)를 확인하세요.
+
 ## 7. 단축키
 
 | 작업 | Mac | Windows |

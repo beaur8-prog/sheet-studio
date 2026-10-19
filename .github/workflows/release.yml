@@ -66,12 +66,14 @@ jobs:
             xvfb-run -a node tests/ui-sheet-lifecycle.mjs --packaged
             xvfb-run -a node tests/ui-colors.mjs --packaged
             xvfb-run -a node tests/ui-cell-format.mjs --packaged
+            xvfb-run -a node tests/ui-studio-clipboard.mjs --packaged
             xvfb-run -a node tests/ui-parity-audit.mjs --packaged
           else
             node scripts/electron-smoke.cjs --packaged
             node tests/ui-sheet-lifecycle.mjs --packaged
             node tests/ui-colors.mjs --packaged
             node tests/ui-cell-format.mjs --packaged
+            node tests/ui-studio-clipboard.mjs --packaged
             node tests/ui-parity-audit.mjs --packaged
           fi
       - name: Verify Windows installation and shortcut

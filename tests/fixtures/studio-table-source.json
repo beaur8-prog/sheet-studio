@@ -1,0 +1,54 @@
+{
+  "cells": [
+    [
+      {
+        "text": "보고서",
+        "style": {
+          "bold": true,
+          "background": "#fff2cc",
+          "color": "#0070c0",
+          "fontSize": 16,
+          "borders": {
+            "bottom": {
+              "width": 3,
+              "line": "solid",
+              "color": "#ff0000"
+            }
+          }
+        }
+      },
+      {
+        "text": "",
+        "style": {}
+      }
+    ],
+    [
+      {
+        "text": "줄1\n줄2",
+        "style": {}
+      },
+      {
+        "text": "=literal",
+        "style": {
+          "align": "right"
+        }
+      }
+    ]
+  ],
+  "merges": [
+    {
+      "row": 0,
+      "column": 0,
+      "rowSpan": 1,
+      "columnSpan": 2
+    }
+  ],
+  "columnWidths": [
+    150,
+    100
+  ],
+  "rowHeights": [
+    35,
+    40
+  ]
+}
