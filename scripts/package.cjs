@@ -51,9 +51,12 @@ async function packageApp() {
       win: { target: 'nsis', signAndEditExecutable: false, icon },
       nsis: {
         artifactName: 'Sheet-Studio-${version}-Windows-${arch}-Setup.exe',
-        oneClick: true, perMachine: false,
+        oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
         createDesktopShortcut: true, createStartMenuShortcut: true,
-        shortcutName: 'Sheet Studio', deleteAppDataOnUninstall: false,
+        shortcutName: 'Sheet Studio', uninstallDisplayName: 'Sheet Studio',
+        installerIcon: icon, uninstallerIcon: icon,
+        installerLanguages: ['ko_KR', 'en_US'], displayLanguageSelector: true,
+        runAfterFinish: true, deleteAppDataOnUninstall: false,
       },
       mac: {
         category: 'public.app-category.productivity', icon: path.join(stage, 'electron/app.png'),

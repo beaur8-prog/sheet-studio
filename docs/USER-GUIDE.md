@@ -2,11 +2,11 @@
 
 > **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
 
-v0.7.10 기준 · 2026년 10월 19일
+v0.7.11 기준 · 2026년 10월 19일
 
-개발 소스 0.7.11에는 아래 방향키 입력 동작, Ubuntu 아이콘·Dash 연결 및 안쪽 테두리 겹침·차트 첫 숫자 열/행 누락 수정이 포함됩니다. 현재 공개 다운로드 0.7.10에는 아직 반영되지 않았습니다.
+0.7.11에는 Windows 설치 마법사, Ubuntu 아이콘·Dash 연결, 직접 입력 후 방향키 이동, 안쪽 테두리 굵기와 차트 첫 숫자 열·행 누락 수정이 포함됩니다.
 
-[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.10) · [버전별 변경 내역](CHANGELOG.md)
+[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.11) · [버전별 변경 내역](CHANGELOG.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -22,13 +22,13 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.10)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.11)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.10-macOS-arm64.dmg` 또는 `.zip` |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.10-Windows-x64-Setup.exe` |
-| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.10-Linux-amd64.deb` |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.11-macOS-arm64.dmg` 또는 `.zip` |
+| Windows 64비트 x64 | `Sheet-Studio-0.7.11-Windows-x64-Setup.exe` |
+| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.11-Linux-amd64.deb` |
 
 ### Mac
 
@@ -41,8 +41,8 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ### Windows
 
-1. `Sheet-Studio-0.7.10-Windows-x64-Setup.exe`를 다운로드합니다.
-2. Setup EXE를 실행해 설치합니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
+1. `Sheet-Studio-0.7.11-Windows-x64-Setup.exe`를 다운로드합니다.
+2. Setup EXE를 실행하고 한국어 또는 영어를 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
 
@@ -56,10 +56,10 @@ Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이�
 
 ### Linux (Ubuntu·Debian 계열 x64)
 
-`Sheet-Studio-0.7.10-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
+`Sheet-Studio-0.7.11-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
 
 ```sh
-sudo apt install ./Sheet-Studio-0.7.10-Linux-amd64.deb
+sudo apt install ./Sheet-Studio-0.7.11-Linux-amd64.deb
 sheet-studio
 ```
 
@@ -103,7 +103,7 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 
 셀 범위를 선택한 뒤 **홈 → 글꼴 색(A)** 또는 **우클릭 → 글꼴 색**을 엽니다. 팔레트의 대상 범위를 확인하고 색을 고른 뒤 **적용**을 누르세요. **취소**하면 기존 색을 유지합니다. 채우기 색도 같은 방식이며 실행 취소 한 번으로 되돌릴 수 있습니다.
 
-### 셀 서식 — 0.7.10 배포 포함
+### 셀 서식 — 0.7.11 배포 포함
 
 범위를 선택하고 **우클릭 → 셀 서식…** 또는 **홈 → 서식 → 셀 서식…**을 엽니다. 테두리 탭에서 선 종류·색을 고른 뒤 윤곽선·안쪽·모든 테두리 또는 개별 위치를 선택하고 **적용**을 누르세요. 표시 형식·맞춤·글꼴·채우기도 함께 설정할 수 있습니다. 취소하면 바뀌지 않으며 적용 내용은 한 번에 실행 취소할 수 있습니다. 자세한 내용은 [워크시트 안내](WORKSHEET.md#셀-서식)를 참조하세요.
 
@@ -138,7 +138,7 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 
 Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 실행 → Excel 연결** → 실행 → **결과 가져오기** → **XLSM 저장** 순서입니다. Excel 보안 정책을 그대로 따릅니다. Mac Excel VBA 연결은 구현하지 않았습니다. **이번 릴리즈에서 Windows VBA 실행 및 실제 Microsoft Excel과의 왕복 호환성은 검증하지 않았습니다.** 세부 범위는 [VBA 안내](VBA.md)를 확인하세요.
 
-### Word·Slide Studio와 표 복사 (0.7.10)
+### Word·Slide Studio와 표 복사 (0.7.11)
 
 표 범위를 복사한 뒤 Word Studio 1.2.11의 본문 또는 Slide Studio 1.6.1의 슬라이드에 붙이면 셀을 수정할 수 있는 표가 됩니다. 글자·배경·테두리·병합을 전달하며 수식은 표시값으로 변환합니다. [사용법과 호환 범위](STUDIO-CLIPBOARD.md)를 확인하세요.
 
@@ -175,7 +175,7 @@ Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 
 ```sh
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
-git checkout v0.7.10
+git checkout v0.7.11
 npm ci
 npm run runtime:install
 npm run desktop
