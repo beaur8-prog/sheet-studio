@@ -1,0 +1,42 @@
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import platform from '../scripts/platform.cjs';
+import {createWorkbook} from '../src/engine.mjs';
+const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes('--packaged'),version=createRequire(import.meta.url)('../package.json').version;
+const dataDir=path.join(root,'.package','autofill-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
+const page=await app.firstWindow(),errors=[];await page.setViewportSize({width:1280,height:900});page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);
+const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+const cells=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells);
+const raw=async refs=>{const c=await cells();return refs.map(ref=>c[ref]?.raw);};
+const select=async range=>{await page.locator('#name-box').fill(range);await page.locator('#name-box').press('Enter');await settle();};
+let fixture=0;
+const load=async(cells={},extra={})=>{const b=createWorkbook();b.name='autofill '+ ++fixture;Object.assign(b.sheets[0],extra,{cells});await page.locator('#file-input').setInputFiles({name:'autofill.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await page.waitForFunction(n=>sheetStudio.getWorkbook().name===n,b.name);await settle();};
+const drag=async(range,end,{cancel=false}={})=>{await select(range);const handle=await page.locator('.fill-handle').boundingBox(),target=await page.getByRole('gridcell',{name:end,exact:true}).boundingBox();assert.ok(handle&&target);await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();await page.mouse.move(target.x+target.width/2,target.y+target.height/2,{steps:8});if(cancel)await page.keyboard.press('Escape');await page.mouse.up();await settle();};
+const c=raw=>({raw:String(raw)});
+try{
+ await page.locator('.cell').first().waitFor();await fs.mkdir('test-results',{recursive:true});
+ await load();await select('A1');await page.keyboard.type('1');await page.keyboard.press('Enter');await page.keyboard.type('2');await page.keyboard.press('Enter');
+ await drag('A1:A2','A6');assert.deepEqual(await raw(['A1','A2','A3','A4','A5','A6']),['1','2','3','4','5','6']);
+ await page.screenshot({path:'test-results/autofill-vertical.png'});
+ await load();await select('B2');await page.keyboard.type('1');await page.keyboard.press('Tab');await page.keyboard.type('2');await page.keyboard.press('Tab');
+ await drag('B2:C2','G2');assert.deepEqual(await raw(['B2','C2','D2','E2','F2','G2']),['1','2','3','4','5','6']);
+ await page.screenshot({path:'test-results/autofill-horizontal.png'});
+ await load({A5:c(5),A6:c(10)});await drag('A5:A6','A1');assert.deepEqual(await raw(['A1','A2','A3','A4','A5','A6']),['-15','-10','-5','0','5','10']);
+ await load({E2:c(2),F2:c(4)});await drag('E2:F2','A2');assert.deepEqual(await raw(['A2','B2','C2','D2','E2','F2']),['-6','-4','-2','0','2','4']);
+ await load({A1:c(100),A2:c(95),B1:c(.1),B2:c(.2)});await drag('A1:B2','B6');assert.deepEqual(await raw(['A3','A4','A5','A6']),['90','85','80','75']);assert.deepEqual(await raw(['B3','B4','B5','B6']),['0.3','0.4','0.5','0.6']);
+ await load({A1:{raw:'1',style:{bold:true,color:'#ff0000'}},A2:{raw:'2',style:{italic:true}},A6:c('keep')});await drag('A1:A2','A6');assert.equal((await cells()).A3.style.color,'#ff0000');assert.equal((await cells()).A4.style.italic,true);await page.keyboard.press('ControlOrMeta+z');assert.deepEqual(await raw(['A1','A2','A3','A6']),['1','2',undefined,'keep']);await page.keyboard.press('ControlOrMeta+Shift+z');assert.equal((await cells()).A6.raw,'6');
+ await load({A1:c(1),A2:c(2),A3:c('protected')},{rowHeights:{2:0}});await drag('A1:A2','A6');assert.deepEqual(await raw(['A3','A4','A5','A6']),['protected','3','4','5']);
+ await load({A1:c(1),B1:c(2),C1:c('protected')},{columnWidths:{2:0}});await drag('A1:B1','F1');assert.deepEqual(await raw(['C1','D1','E1','F1']),['protected','3','4','5']);
+ await load({A1:c('=B1+$C$1'),A2:c('=B2+$C$1')});await drag('A1:A2','A6');assert.deepEqual(await raw(['A3','A4','A5','A6']),['=B3+$C$1','=B4+$C$1','=B5+$C$1','=B6+$C$1']);
+ await load({A1:c('월'),A2:c('화')});await drag('A1:A2','A6');assert.deepEqual(await raw(['A3','A4','A5','A6']),['월','화','월','화']);
+ await load({A1:c(7)});await drag('A1','A4');assert.deepEqual(await raw(['A2','A3','A4']),['7','7','7']);
+ await load({A1:c(1),A2:c(2)});const original=await cells();await drag('A1:A2','A6',{cancel:true});assert.deepEqual(await cells(),original);assert.equal(await page.locator('#name-box').inputValue(),'A1:A2');
+ // Ctrl/Cmd+D remains a copy-down command, distinct from dragging a series.
+ await select('A1:A6');await page.keyboard.press('ControlOrMeta+d');assert.deepEqual(await raw(['A1','A2','A3','A4','A5','A6']),['1','1','1','1','1','1']);
+ await load({A1:c(1),A2:c(2)});await drag('A1:A2','A6');await page.reload();await page.locator('.cell').first().waitFor();assert.equal((await cells()).A6.raw,'6');assert.deepEqual(errors,[]);
+ console.log('PASS: actual typed seeds and handle drag, horizontal/vertical/reverse series, steps/decimals, multiple lanes, styles, undo/redo, hidden protection, formulas/text/single values, cancel, copy-down and reload');
+}catch(e){await page.screenshot({path:'test-results/autofill-failure.png'});throw e;}finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}
