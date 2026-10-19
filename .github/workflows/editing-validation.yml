@@ -29,9 +29,9 @@ jobs:
         run: |
           for spec in ime-entry chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit; do
             if [ "$RUNNER_OS" = Linux ]; then
-              xvfb-run -a node "tests/ui-$spec.mjs"
+              xvfb-run -a node "tests/ui-$spec.mjs" --desktop
             else
-              node "tests/ui-$spec.mjs"
+              node "tests/ui-$spec.mjs" --desktop
             fi
           done
       - uses: actions/upload-artifact@v4

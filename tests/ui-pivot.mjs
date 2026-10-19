@@ -5,9 +5,9 @@ import fs from 'node:fs/promises';
 import platform from '../scripts/platform.cjs';
 import {createRequire} from 'node:module';
 const version=createRequire(import.meta.url)('../package.json').version;
-const root=path.resolve(import.meta.dirname,'..'),desktop=process.argv.includes('--packaged');
+const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes('--packaged'),desktop=packaged||process.argv.includes('--desktop');
 let application,browser,page;
-if(desktop){const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','pivot-smoke-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:platform.packagedExecutable(root,version),env});page=await application.firstWindow();}
+if(desktop){const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','pivot-smoke-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});page=await application.firstWindow();}
 else{browser=await chromium.launch({headless:true,channel:'msedge'});page=await browser.newPage({viewport:{width:1480,height:960}});}
 const errors=[];
 page.on('pageerror',e=>errors.push(e.message));
@@ -41,6 +41,6 @@ try{
  await page.locator('#pivot-bar').getByRole('button',{name:'필드 편집',exact:true}).click();await dialog.getByRole('button',{name:'+ 필터 추가',exact:true}).click();await dialog.getByLabel('필터 필드 1',{exact:true}).selectOption('지역');
  await dialog.getByLabel('필터 항목 1',{exact:true}).selectOption({label:'동부'});await dialog.getByRole('button',{name:'적용',exact:true}).click();assert.equal(await value('D3'),30);
  await page.locator('#pivot-bar').getByRole('button',{name:'일반 범위로 변환',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'변환',exact:true}).click();assert.equal(await page.locator('#pivot-bar').isVisible(),false);await enter('B2','999');assert.equal(await value('B2'),999);
- await page.keyboard.press('Control+z');await page.keyboard.press('Control+z');await page.locator('#pivot-bar').waitFor();assert.equal(await value('B2'),30);
+ await page.keyboard.press('ControlOrMeta+z');await page.keyboard.press('ControlOrMeta+z');await page.locator('#pivot-bar').waitFor();assert.equal(await value('B2'),30);
  assert.deepEqual(errors,[]);console.log('Pivot UI: create, edit, preview, protection, refresh, reload, XLSX roundtrip, filter, conversion and undo passed.');
 }finally{if(application)await application.close();if(browser)await browser.close();}
