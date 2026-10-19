@@ -1,10 +1,8 @@
 # Sheet Studio
 
-**[Mac·Windows 다운로드](https://github.com/beaur8-prog/sheet-studio/releases/latest)** · [설치·사용자 가이드](docs/USER-GUIDE.md) · [버전별 수정 내역](docs/CHANGELOG.md)
+**[Mac·Windows·Linux 다운로드](https://github.com/beaur8-prog/sheet-studio/releases/latest)** · [설치·사용자 가이드](docs/USER-GUIDE.md) · [버전별 수정 내역](docs/CHANGELOG.md)
 
-현재 배포 버전은 **0.7.11**입니다. Word Studio와 같은 Windows 설치 마법사, Ubuntu 아이콘·Dash 연결, 직접 입력 후 방향키 이동, 안쪽 테두리와 차트 첫 숫자 열·행 누락 수정을 포함합니다.
-
-개발 버전 **0.7.13(미배포)**에는 가로·세로 숫자 연속 자동 채우기, 차트 범례 가운데 정렬과 셀 이동 직후 한글 조합 입력 수정이 포함됩니다. 공개 다운로드는 0.7.11을 유지합니다.
+현재 배포 버전은 **0.7.13**입니다. 가로·세로 숫자 연속 자동 채우기, 차트 범례 가운데 정렬과 셀 이동 직후 한글 조합 입력 수정을 포함합니다. Windows 설치 마법사·Ubuntu 아이콘과 기존 셀 입력·테두리·차트 수정도 포함합니다.
 
 설치된 Microsoft Excel의 네이티브 실행 파일과 한국어 UI를 분석하고, 익숙한 작업 흐름을 독립적으로 구현한 Windows·macOS 스프레드시트 앱입니다. Microsoft Excel의 원본 코드 복원이나 전체 기능의 동일성을 주장하지 않습니다.
 

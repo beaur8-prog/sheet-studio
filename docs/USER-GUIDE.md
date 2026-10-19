@@ -2,11 +2,11 @@
 
 > **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
 
-v0.7.11 기준 · 2026년 10월 19일
+v0.7.13 기준 · 2026년 10월 19일
 
-0.7.11에는 Windows 설치 마법사, Ubuntu 아이콘·Dash 연결, 직접 입력 후 방향키 이동, 안쪽 테두리 굵기와 차트 첫 숫자 열·행 누락 수정이 포함됩니다.
+0.7.13에는 가로·세로 숫자 연속 자동 채우기, 차트 범례 가운데 정렬과 셀 이동 직후 첫 한글 조합 입력 수정이 포함됩니다. Windows 설치 마법사·Ubuntu 아이콘·기존 셀 입력·테두리·차트 수정도 포함합니다.
 
-[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.11) · [버전별 변경 내역](CHANGELOG.md)
+[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.13) · [버전별 변경 내역](CHANGELOG.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -22,13 +22,13 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.11)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.13)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.11-macOS-arm64.dmg` 또는 `.zip` |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.11-Windows-x64-Setup.exe` |
-| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.11-Linux-amd64.deb` |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.13-macOS-arm64.dmg` 또는 `.zip` |
+| Windows 64비트 x64 | `Sheet-Studio-0.7.13-Windows-x64-Setup.exe` |
+| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.13-Linux-amd64.deb` |
 
 ### Mac
 
@@ -41,7 +41,7 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ### Windows
 
-1. `Sheet-Studio-0.7.11-Windows-x64-Setup.exe`를 다운로드합니다.
+1. `Sheet-Studio-0.7.13-Windows-x64-Setup.exe`를 다운로드합니다.
 2. Setup EXE를 실행하고 한국어 또는 영어를 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 기본 경로는 `%LOCALAPPDATA%\Programs\Sheet Studio`입니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
@@ -56,10 +56,10 @@ Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이�
 
 ### Linux (Ubuntu·Debian 계열 x64)
 
-`Sheet-Studio-0.7.11-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
+`Sheet-Studio-0.7.13-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
 
 ```sh
-sudo apt install ./Sheet-Studio-0.7.11-Linux-amd64.deb
+sudo apt install ./Sheet-Studio-0.7.13-Linux-amd64.deb
 sheet-studio
 ```
 
@@ -103,7 +103,13 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 
 셀 범위를 선택한 뒤 **홈 → 글꼴 색(A)** 또는 **우클릭 → 글꼴 색**을 엽니다. 팔레트의 대상 범위를 확인하고 색을 고른 뒤 **적용**을 누르세요. **취소**하면 기존 색을 유지합니다. 채우기 색도 같은 방식이며 실행 취소 한 번으로 되돌릴 수 있습니다.
 
-### 셀 서식 — 0.7.11 배포 포함
+### 숫자 자동 채우기
+
+`1`, `2`를 나란한 두 셀에 입력하고 두 셀을 선택한 뒤 오른쪽 아래 모서리의 채우기 핸들을 여섯 셀까지 끌면 `1, 2, 3, 4, 5, 6`이 됩니다. 가로·세로와 위·왼쪽 역방향을 지원합니다. `2, 4`는 `6, 8`로, `100, 95`는 `90, 85`로 이어지며 소수·백분율도 지원합니다. 여러 행·열은 각각의 숫자 간격을 사용합니다. 숫자 세 개 이상은 선형 추세를 연장합니다.
+
+숫자 한 개·문자는 반복 복사하며 수식은 상대 참조를 이동해 복사합니다. 숨김 셀은 변경하지 않습니다. Esc는 드래그를 취소하고 적용 후에는 한 번의 실행 취소로 되돌립니다. **⌘D / Ctrl+D**, **⌘R / Ctrl+R**는 숫자 계열 생성이 아닌 아래·오른쪽 복사 명령입니다.
+
+### 셀 서식
 
 범위를 선택하고 **우클릭 → 셀 서식…** 또는 **홈 → 서식 → 셀 서식…**을 엽니다. 테두리 탭에서 선 종류·색을 고른 뒤 윤곽선·안쪽·모든 테두리 또는 개별 위치를 선택하고 **적용**을 누르세요. 표시 형식·맞춤·글꼴·채우기도 함께 설정할 수 있습니다. 취소하면 바뀌지 않으며 적용 내용은 한 번에 실행 취소할 수 있습니다. 자세한 내용은 [워크시트 안내](WORKSHEET.md#셀-서식)를 참조하세요.
 
@@ -119,7 +125,7 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 
 ### 차트
 
-표 범위를 선택하고 **삽입**에서 차트를 만듭니다. 0.7.11부터 숫자로 된 첫 행·첫 열은 데이터에 포함하며, 문자 제목과 항목명은 자동으로 구분합니다. 숫자 한 열도 선택할 수 있습니다. 연도·번호를 항목명으로 쓰려면 차트 설정의 **첫 열을 항목 이름으로 사용**, 숫자 제목을 쓰려면 **첫 행을 계열 이름으로 사용**을 켜세요. 차트 설정에서 유형·범례·레이블을 바꾸고 테두리 조절점으로 크기를 바꿉니다. XLSX와 앱 문서에 저장할 수 있습니다.
+표 범위를 선택하고 **삽입**에서 차트를 만듭니다. 0.7.11부터 숫자로 된 첫 행·첫 열은 데이터에 포함하며, 문자 제목과 항목명은 자동으로 구분합니다. 숫자 한 열도 선택할 수 있습니다. 연도·번호를 항목명으로 쓰려면 차트 설정의 **첫 열을 항목 이름으로 사용**, 숫자 제목을 쓰려면 **첫 행을 계열 이름으로 사용**을 켜세요. 차트 설정에서 유형·범례·레이블을 바꾸고 테두리 조절점으로 크기를 바꿉니다. XLSX와 앱 문서에 저장할 수 있습니다. 범례는 각 줄을 차트 가운데에 배치하며 차트 크기를 바꾸면 다시 맞춥니다. 긴 이름은 말줄임하고 전체 이름은 마우스를 올려 확인합니다.
 
 ### 피벗테이블
 
@@ -175,7 +181,7 @@ Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 
 ```sh
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
-git checkout v0.7.11
+git checkout v0.7.13
 npm ci
 npm run runtime:install
 npm run desktop
