@@ -52,11 +52,14 @@ jobs:
           xvfb-run -a node tests/ui-formulas.mjs --packaged
           xvfb-run -a node tests/ui-functions.mjs --packaged
       - name: Verify native Wayland window association
+        timeout-minutes: 2
         run: |
+          # The nested backend supplies a real virtual keyboard/pointer seat.
+          xvfb-run -a bash -e <<'WAYLAND_TEST'
           export XDG_RUNTIME_DIR="$RUNNER_TEMP/sheet-wayland"
           mkdir -m 700 "$XDG_RUNTIME_DIR"
           export WAYLAND_DISPLAY=wayland-sheet-test
-          weston --backend=headless-backend.so --use-pixman --socket="$WAYLAND_DISPLAY" --idle-time=0 --width=1280 --height=960 > "$RUNNER_TEMP/sheet-weston.log" 2>&1 &
+          weston --backend=x11-backend.so --use-pixman --socket="$WAYLAND_DISPLAY" --idle-time=0 --width=1280 --height=960 > "$RUNNER_TEMP/sheet-weston.log" 2>&1 &
           weston_pid=$!
           trap 'kill "$weston_pid" || true' EXIT
           for attempt in {1..50}; do
@@ -69,6 +72,7 @@ jobs:
             tail -80 test-results/linux-desktop/wayland-protocol.log || true
             exit 1
           fi
+          WAYLAND_TEST
       - uses: actions/upload-artifact@v4
         if: always()
         with:

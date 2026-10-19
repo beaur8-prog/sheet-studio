@@ -8,6 +8,7 @@ import {createWorkbook} from '../src/engine.mjs';
 
 const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes('--packaged');
 const version=createRequire(import.meta.url)('../package.json').version;
+await fs.mkdir(path.join(root,'.package'),{recursive:true});
 const dataDir=await fs.mkdtemp(path.join(root,'.package/entry-navigation-'));
 const env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
