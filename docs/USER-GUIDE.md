@@ -42,7 +42,7 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 ### Windows
 
 1. `Sheet-Studio-0.7.11-Windows-x64-Setup.exe`를 다운로드합니다.
-2. Setup EXE를 실행하고 한국어 또는 영어를 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
+2. Setup EXE를 실행하고 한국어 또는 영어를 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 기본 경로는 `%LOCALAPPDATA%\Programs\Sheet Studio`입니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
 
@@ -65,7 +65,7 @@ sheet-studio
 
 설치 후 앱 목록의 **Sheet Studio**로도 실행할 수 있습니다. 앱은 일반 사용자로 실행하세요. 업데이트도 새 DEB 파일에 같은 설치 명령을 사용합니다. 삭제는 `sudo apt remove lattice-sheet-studio`입니다.
 
-Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다. 다른 배포판·Wayland 데스크톱은 별도 검증하지 않았습니다. ARM64·RPM 패키지는 제공하지 않습니다. Linux에서 Windows Excel/VBA 연결은 지원하지 않습니다. 다운로드한 DEB는 서명된 패키지 저장소를 통한 배포가 아니므로 출처와 SHA-256 체크섬을 확인하세요.
+Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다. 다른 배포판과 실제 GNOME 데스크톱의 메뉴 조작은 별도 검증하지 않았습니다. ARM64·RPM 패키지는 제공하지 않습니다. Linux에서 Windows Excel/VBA 연결은 지원하지 않습니다. 다운로드한 DEB는 서명된 패키지 저장소를 통한 배포가 아니므로 출처와 SHA-256 체크섬을 확인하세요.
 
 0.7.11부터 앱 메뉴와 실행 창이 같은 `sheet-studio.desktop` 항목을 사용하며, 일반적인 아이콘 크기를 함께 설치합니다. Ubuntu 22.04·24.04에서 설치·아이콘 조회·X11 및 중첩 Weston Wayland 창 식별자를 검사했습니다. 실제 GNOME Dock 메뉴 클릭은 별도 수동 검증하지 않았습니다. 업데이트 후에는 실행 중인 이전 앱을 종료하고 앱 목록에서 **Sheet Studio**를 다시 실행하세요. Ubuntu Dock에서 해당 아이콘을 우클릭해 **Dash에 고정 / Pin to Dash**를 선택합니다. 실행 파일이나 설치 파일을 직접 고정하는 방식이 아닙니다.
 
