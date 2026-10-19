@@ -1,0 +1,59 @@
+name: Validate Linux desktop and cell entry
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  installed-app:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install disposable desktop test tools
+        run: sudo apt-get update && sudo apt-get install -y xvfb x11-utils weston desktop-file-utils python3-gi gir1.2-gtk-3.0 hicolor-icon-theme fonts-noto-cjk
+      - run: npm ci
+      - run: npm run runtime:install
+      - run: npm test
+      - run: npm run package:linux
+      - name: Install the candidate DEB
+        run: |
+          sudo apt-get install -y ./release/*/linux-x64/*.deb
+          echo 'SHEET_STUDIO_EXECUTABLE=/opt/Sheet Studio/sheet-studio' >> "$GITHUB_ENV"
+      - name: Verify X11 icon association and editing behavior
+        run: |
+          xvfb-run -a node scripts/check-linux-desktop.cjs
+          xvfb-run -a node tests/ui-entry-navigation.mjs --packaged
+          xvfb-run -a node tests/ui-cell-editing.mjs --packaged
+          xvfb-run -a node tests/ui-formulas.mjs --packaged
+          xvfb-run -a node tests/ui-functions.mjs --packaged
+      - name: Verify native Wayland window association
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/sheet-wayland"
+          mkdir -m 700 "$XDG_RUNTIME_DIR"
+          export WAYLAND_DISPLAY=wayland-sheet-test
+          weston --backend=headless-backend.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --width=1280 --height=960 > "$RUNNER_TEMP/sheet-weston.log" 2>&1 &
+          weston_pid=$!
+          trap 'kill "$weston_pid" || true' EXIT
+          for attempt in {1..50}; do
+            test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" && break
+            sleep 0.1
+          done
+          test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+          node scripts/check-linux-desktop.cjs --wayland
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-validation-${{ matrix.os }}
+          path: |
+            test-results/
+            release/**/*.deb
+            release/**/artifact-manifest.json
+          if-no-files-found: error

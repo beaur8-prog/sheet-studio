@@ -45,7 +45,7 @@ jobs:
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
       - name: Install Linux test dependencies
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2 libgbm1
+        run: sudo apt-get update && sudo apt-get install -y xvfb x11-utils desktop-file-utils python3-gi gir1.2-gtk-3.0 hicolor-icon-theme libgtk-3-0 libnss3 libasound2 libgbm1
       - run: npm ci
       - run: npm run runtime:install
       - run: npm test
@@ -62,7 +62,11 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = linux ]; then
+            xvfb-run -a node scripts/check-linux-desktop.cjs
             xvfb-run -a node scripts/electron-smoke.cjs --packaged
+            xvfb-run -a node tests/ui-entry-navigation.mjs --packaged
+            xvfb-run -a node tests/ui-cell-editing.mjs --packaged
+            xvfb-run -a node tests/ui-formulas.mjs --packaged
             xvfb-run -a node tests/ui-sheet-lifecycle.mjs --packaged
             xvfb-run -a node tests/ui-colors.mjs --packaged
             xvfb-run -a node tests/ui-cell-format.mjs --packaged
@@ -70,6 +74,9 @@ jobs:
             xvfb-run -a node tests/ui-parity-audit.mjs --packaged
           else
             node scripts/electron-smoke.cjs --packaged
+            node tests/ui-entry-navigation.mjs --packaged
+            node tests/ui-cell-editing.mjs --packaged
+            node tests/ui-formulas.mjs --packaged
             node tests/ui-sheet-lifecycle.mjs --packaged
             node tests/ui-colors.mjs --packaged
             node tests/ui-cell-format.mjs --packaged

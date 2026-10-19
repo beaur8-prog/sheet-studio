@@ -58,6 +58,15 @@ async function createIcon(directory) {
   return icon;
 }
 
+async function createLinuxIcons(directory) {
+  await fs.mkdir(directory, { recursive: true });
+  // Common hicolor sizes are needed: many themes do not search 1024x1024.
+  for (const size of [16, 24, 32, 48, 64, 128, 256, 512, 1024]) {
+    await fs.writeFile(path.join(directory, `${size}x${size}.png`), makePNG(size));
+  }
+  return directory;
+}
+
 async function brandExecutable(filename, iconPath, version, root) {
   const ResEdit = require(require.resolve('resedit', { paths: [root, path.dirname(root)] }));
   const exe = ResEdit.NtExecutable.from(await fs.readFile(filename), { ignoreCert: true });
@@ -89,4 +98,4 @@ async function brandExecutable(filename, iconPath, version, root) {
   await fs.writeFile(filename, output);
 }
 
-module.exports = { createIcon, brandExecutable };
+module.exports = { createIcon, createLinuxIcons, brandExecutable };

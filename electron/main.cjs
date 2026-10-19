@@ -18,6 +18,9 @@ let win;
 const rendererPath = path.join(__dirname, '../dist/index.html');
 const rendererURL = pathToFileURL(rendererPath).href;
 app.setName('Sheet Studio');
+// GNOME matches this ID to sheet-studio.desktop for its icon and Dash pinning.
+// It sets the Wayland app_id and the X11 WM_CLASS before any windows are made.
+if (process.platform === 'linux') app.setDesktopName('sheet-studio.desktop');
 // Match the installer shortcut identity so Windows can group and pin this app.
 if (process.platform === 'win32') app.setAppUserModelId('local.lattice.sheetstudio');
 if (process.env.SHEET_STUDIO_DATA) app.setPath('userData', path.resolve(process.env.SHEET_STUDIO_DATA));

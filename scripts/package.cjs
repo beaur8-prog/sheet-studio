@@ -2,7 +2,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
-const { createIcon, brandExecutable } = require('./branding.cjs');
+const { createIcon, createLinuxIcons, brandExecutable } = require('./branding.cjs');
 const { verifyRuntime } = require('./runtime-proof.cjs');
 const { generateManifest } = require('./artifacts.cjs');
 const { buildTarget, findRuntime, runtimeLocations, outputDir } = require('./platform.cjs');
@@ -26,12 +26,13 @@ async function packageApp() {
   const icon = await createIcon(path.join(stage, 'electron'));
   await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({
     name: manifest.name, version: manifest.version, description: manifest.description,
-    author: manifest.author, main: manifest.main, homepage: 'https://github.com/beaur8-prog/sheet-studio',
+    author: manifest.author, main: manifest.main, desktopName: manifest.desktopName, homepage: 'https://github.com/beaur8-prog/sheet-studio',
   }, null, 2));
   const output = process.env.SHEET_STUDIO_OUTPUT_DIR
     ? path.resolve(process.env.SHEET_STUDIO_OUTPUT_DIR)
     : outputDir(root, manifest.version, target.platform, target.arch);
   const mac = target.platform === 'darwin', linux = target.platform === 'linux';
+  const linuxIcons = linux ? await createLinuxIcons(path.join(stage, 'linux-icons')) : null;
   let appOutDir;
   const artifacts = await build({
     projectDir: stage,
@@ -43,7 +44,8 @@ async function packageApp() {
       npmRebuild: false, asar: true,
       directories: { output },
       files: ['dist/**/*', 'electron/**/*', 'package.json'],
-      linux: { target: 'deb', executableName: 'sheet-studio', category: 'Office', icon: path.join(stage, 'electron/app.png'),
+      linux: { target: 'deb', executableName: 'sheet-studio', category: 'Office', icon: linuxIcons,
+        syncDesktopName: true,
         artifactName: 'Sheet-Studio-${version}-Linux-${arch}.${ext}',
         maintainer: 'beaur8-prog <beaur8-prog@users.noreply.github.com>' },
       win: { target: 'nsis', signAndEditExecutable: false, icon },

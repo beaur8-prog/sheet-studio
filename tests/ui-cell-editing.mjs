@@ -8,7 +8,7 @@ import {createWorkbook} from '../src/engine.mjs';
 
 const root=path.resolve(import.meta.dirname,'..'),version=createRequire(import.meta.url)('../package.json').version,packaged=process.argv.includes('--packaged');
 const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package/cell-editing-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:packaged?[]:[root],env});
+const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(10000);
 const frame=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
 const cell=a=>page.getByRole('gridcell',{name:a,exact:true});
