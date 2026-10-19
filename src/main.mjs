@@ -311,7 +311,7 @@ function toggleFilter(){
 function clearFilters(){if(!filterActive(sheet()))return;checkpoint();sheet().autoFilter.columns={};sheet().autoFilter.hiddenRows=[];delete sheet().autoFilter.unsupported;changed({rebuild:true});}
 function sortFiltered(c,desc){try{checkpoint();sortFilterRange(book,sheet(),c,desc);changed({rebuild:true});}catch(e){toast(e.message);}}
 function openColumnFilter(column,anchor){
- commitEdit();closeMenu();const s=sheet();if(!s.autoFilter)return;if(s.autoFilter.unsupported?.length)return toast('이 문서의 색·아이콘 또는 동적 날짜 필터는 Excel에서 편집하거나 지우기를 먼저 사용하세요.');
+ commitEdit();closeMenu();const s=sheet();if(!s.autoFilter)return;if(s.autoFilter.unsupported?.length)return toast('이 문서의 미지원 아이콘·색 또는 동적 날짜 필터는 Excel에서 편집하거나 지우기를 먼저 사용하세요.');
  if(!anchor){const b=s.autoFilter.range;ensureVisible(b.r1,column);const rect=cellRect(b.r1,column),grid=$('#grid-shell').getBoundingClientRect();anchor={left:grid.left+rect.x,bottom:grid.top+rect.y+rect.h};}
  openFilterMenu({book,sheet:s,column,anchor,focusGrid:()=>focusGrid(),sort:desc=>sortFiltered(column,desc),apply:rule=>{checkpoint();if(rule)s.autoFilter.columns[column]=rule;else delete s.autoFilter.columns[column];applyFilters(book,s);changed({rebuild:true});}});
 }

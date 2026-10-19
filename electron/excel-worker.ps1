@@ -183,10 +183,10 @@ function Apply-Plan($book,$plan) {
       foreach($range in $entry.merge){$r=$sheet.Range([string]$range);try{[void]$r.Merge()}finally{Release-Com $r}}
       foreach($name in $entry.deletedCharts){$object=$sheet.ChartObjects().Item([string]$name);try{[void]$object.Delete()}finally{Release-Com $object}}
       foreach($patch in $entry.charts){Set-Chart $sheet $patch}
+      if(Has-Field $entry 'conditionalFormats'){Set-ConditionalFormats $sheet $entry.conditionalFormats}
       if($entry.PSObject.Properties.Name -contains 'autoFilter'){Set-AutoFilter $sheet $entry.autoFilter}
       foreach($index in $entry.manualHiddenRows){$sheet.Rows.Item([int]$index+1).Hidden=$true}
       foreach($p in $entry.rowHeights.PSObject.Properties){if($null -ne $p.Value -and $p.Value -eq 0){$sheet.Rows.Item([int]$p.Name+1).Hidden=$true}}
-      if(Has-Field $entry 'conditionalFormats'){Set-ConditionalFormats $sheet $entry.conditionalFormats}
       if((Has-Field $entry 'freeze') -and $sheet.Visible -eq -1){[void]$sheet.Activate();$window=$book.Windows.Item(1);try{$window.FreezePanes=$false;$window.SplitRow=[int]$entry.freeze.rows;$window.SplitColumn=[int]$entry.freeze.cols;$window.FreezePanes=($entry.freeze.rows -gt 0 -or $entry.freeze.cols -gt 0)}finally{Release-Com $window}}
     }
     if($map.ContainsKey([string]$plan.activeSheetId) -and $map[[string]$plan.activeSheetId].Visible -eq -1){[void]$map[[string]$plan.activeSheetId].Activate()}

@@ -6,15 +6,18 @@ export const closeFilterMenu=()=>closeCurrent();
 const operators=[['equal','같음'],['notEqual','같지 않음'],['greaterThan','보다 큼'],['greaterThanOrEqual','크거나 같음'],['lessThan','보다 작음'],['lessThanOrEqual','작거나 같음'],['beginsWith','시작 문자'],['endsWith','끝 문자'],['contains','포함'],['notContains','포함하지 않음']];
 
 export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid}){
-  closeCurrent();const {kind,values}=filterOptions(book,sheet,column),rule=sheet.autoFilter.columns[column],title=sheet.cells[address(sheet.autoFilter.range.r1,column)]?.raw||address(sheet.autoFilter.range.r1,column);
-  const own=filterPredicates(sheet,createEvaluator(book,sheet.id)).find(p=>p.column===column);
+  closeCurrent();const {kind,values,colors}=filterOptions(book,sheet,column),rule=sheet.autoFilter.columns[column],title=sheet.cells[address(sheet.autoFilter.range.r1,column)]?.raw||address(sheet.autoFilter.range.r1,column);
+  const own=rule?.type!=='color'&&filterPredicates(book,sheet,createEvaluator(book,sheet.id)).find(p=>p.column===column);
   const original=new Set(rule?.type==='values'?rule.values.map(valueKey):values.filter(v=>!own||own.test(v.value)).map(v=>v.key));
-  let selected=new Set(original),search='',mode='list';
+  let selected=new Set(original),search='',mode=rule?.type==='color'?'color':'list',colorRule=rule?.type==='color'?structuredClone(rule):null;
+  if(colorRule&&!colors[colorRule.target].some(v=>v.color===colorRule.color))colors[colorRule.target].push({color:colorRule.color,count:0});
+  const colorMenu=Object.entries(colors).map(([target,items])=>`<fieldset><legend>${target==='background'?'셀 채우기색':'글자색'}</legend>${items.slice(0,1000).map(({color,count})=>`<label><input type="radio" name="filter-color" data-color-target="${target}" value="${color||''}" ${colorRule?.target===target&&colorRule.color===color?'checked':''}><span class="filter-color-swatch ${target==='background'&&!color?'no-fill':''}" style="${target==='background'&&color?'background:'+color:'color:'+(color||'#222222')}">${target==='color'?'가':''}</span><span>${color?esc(color.toUpperCase()):target==='background'?'채우기 없음':'자동 (기본 글자색)'}</span><small>${count.toLocaleString()}개</small></label>`).join('')}${!items.length?'<p>일치하는 행이 없습니다.</p>':items.length>1000?'<p>처음 1,000개 색 표시 · 다른 열 조건으로 범위를 좁히세요.</p>':''}</fieldset>`).join('');
   const el=document.createElement('div');el.className='filter-popup';el.setAttribute('role','dialog');el.setAttribute('aria-label',`${title} 필터`);
   el.innerHTML=`<div class="filter-heading">${esc(title)}</div><div class="filter-main">
     <button type="button" data-sort="asc">↑ ${kind==='text'?'텍스트 오름차순 정렬':'오름차순 정렬'}</button>
     <button type="button" data-sort="desc">↓ ${kind==='text'?'텍스트 내림차순 정렬':'내림차순 정렬'}</button><hr>
     <button type="button" id="filter-clear" ${rule?'':'disabled'}>“${esc(title)}”에서 필터 해제</button>
+    <details class="filter-color-menu" ${mode==='color'?'open':''}><summary>색 기준 필터</summary><div>${colorMenu}</div><p>색을 선택한 뒤 확인을 누르세요.</p></details>
     <details class="filter-condition-menu"><summary>${{text:'텍스트',number:'숫자',date:'날짜'}[kind]} 필터</summary><div>${operators.filter(([op])=>kind==='text'||!['beginsWith','endsWith','contains','notContains'].includes(op)).map(([op,label])=>`<button type="button" data-condition="${op}">${kind==='date'&&op==='greaterThan'?'이후':kind==='date'&&op==='lessThan'?'이전':label}…</button>`).join('')}<button type="button" data-condition="between">사이…</button>${kind==='number'?'<button type="button" data-condition="top">상위 10…</button><button type="button" data-average="above">평균 초과</button><button type="button" data-average="below">평균 미만</button>':''}<button type="button" data-condition="custom">사용자 지정 필터…</button></div></details>
     <label class="filter-search"><span>검색</span><input id="filter-search" type="search" placeholder="검색" aria-label="필터 값 검색" autocomplete="off"></label>
     <label class="filter-add" hidden><input type="checkbox" id="filter-add">현재 선택 영역을 필터에 추가</label>
@@ -32,7 +35,7 @@ export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid}){
     $('.filter-values').innerHTML=`<label><input type="checkbox" id="filter-all" ${count===list.length&&count?'checked':''}>${search?'(모든 검색 결과 선택)':'(모두 선택)'}</label>`+list.slice(0,10000).map((v,i)=>`<label title="${esc(v.label)}"><input type="checkbox" data-value="${i}" ${selected.has(v.key)?'checked':''}><span>${esc(v.label)}</span></label>`).join('')+(list.length?'':'<p>일치하는 항목이 없습니다.</p>');
     $('#filter-all').indeterminate=count>0&&count<list.length;
     $('.filter-count').textContent=list.length>10000?`${list.length.toLocaleString()}개 중 처음 10,000개 표시 · 검색으로 범위를 좁히세요`:'';
-    $('#filter-ok').disabled=count===0&&!($('#filter-add').checked&&original.size);
+    $('#filter-ok').disabled=mode==='color'?!colorRule:count===0&&!($('#filter-add').checked&&original.size);
     $('.filter-add').hidden=!search||!rule;
   }
   function custom(op){
@@ -47,7 +50,9 @@ export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid}){
   }
   function confirm(){
     let next;
-    if(mode==='list'){
+    if(mode==='color'){
+      if(!colorRule)return;next=colorRule;
+    }else if(mode==='list'){
       const list=visible(),set=new Set(list.filter(v=>selected.has(v.key)).map(v=>v.key));
       if(search&&$('#filter-add').checked)for(const v of original)set.add(v);
       if(!set.size)return;
@@ -66,8 +71,11 @@ export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid}){
   }
   el.addEventListener('pointerdown',e=>e.stopPropagation());el.addEventListener('dblclick',e=>e.stopPropagation());
   el.addEventListener('click',e=>{e.stopPropagation();const s=e.target.closest('[data-sort]'),c=e.target.closest('[data-condition]'),a=e.target.closest('[data-average]');if(s){sort(s.dataset.sort==='desc');close();}if(c)custom(c.dataset.condition);if(a){apply({type:'average',above:a.dataset.average==='above'});close();}});
-  $('#filter-search').addEventListener('input',e=>{search=e.target.value;selected=new Set(search?visible().map(v=>v.key):original);drawValues();});
-  $('.filter-values').addEventListener('change',e=>{const list=visible();if(e.target.id==='filter-all'){for(const v of list)if(e.target.checked)selected.add(v.key);else selected.delete(v.key);}else if(e.target.dataset.value!==undefined){const key=list[+e.target.dataset.value].key;if(e.target.checked)selected.add(key);else selected.delete(key);}const selector=e.target.id?'#'+e.target.id:'[data-value=\"'+e.target.dataset.value+'\"]';drawValues();$(selector)?.focus();});
+  const listMode=()=>{mode='list';el.querySelectorAll('[name="filter-color"]').forEach(input=>input.checked=false);};
+  $('.filter-color-menu').addEventListener('change',e=>{if(!e.target.matches('[data-color-target]'))return;mode='color';colorRule={type:'color',target:e.target.dataset.colorTarget,color:e.target.value||null};$('#filter-ok').disabled=false;});
+  el.querySelectorAll('details').forEach(details=>details.addEventListener('toggle',()=>{if(details.open)position();}));
+  $('#filter-search').addEventListener('input',e=>{listMode();search=e.target.value;selected=new Set(search?visible().map(v=>v.key):original);drawValues();});
+  $('.filter-values').addEventListener('change',e=>{listMode();const list=visible();if(e.target.id==='filter-all'){for(const v of list)if(e.target.checked)selected.add(v.key);else selected.delete(v.key);}else if(e.target.dataset.value!==undefined){const key=list[+e.target.dataset.value].key;if(e.target.checked)selected.add(key);else selected.delete(key);}const selector=e.target.id?'#'+e.target.id:'[data-value=\"'+e.target.dataset.value+'\"]';drawValues();$(selector)?.focus();});
   $('#filter-add').addEventListener('change',drawValues);$('#filter-ok').onclick=confirm;$('#filter-cancel').onclick=close;
   $('#filter-clear').onclick=()=>{apply(null);close();};
   el.addEventListener('keydown',e=>{e.stopPropagation();if(e.isComposing)return;if(e.key==='Escape'){e.preventDefault();close();}else if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();if(!$('#filter-ok').disabled)confirm();}else if(e.key==='Tab'){

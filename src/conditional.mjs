@@ -1,5 +1,6 @@
 import {address,parseAddress,evaluateFormula,createEvaluator,shiftFormula,transformFormulaReferences} from './engine.mjs';
 import {validateConditionalRules} from './worksheet-schema.mjs';
+import {normalizeColor} from './spreadsheet-colors.mjs';
 export function ruleBounds(rule) {
   const [a,b]=rule.range.split(':').map(parseAddress);
   if(!a||!b||a.r>b.r||a.c>b.c)throw Error('조건부 서식 범위가 올바르지 않습니다.');
@@ -68,14 +69,15 @@ export function shiftWorksheetFeatures(sheet,axis,index,delta,targetSheet=sheet.
   });
 }
 const rgb=c=>c?.argb&&/^([\da-f]{8})$/i.test(c.argb)?'#'+c.argb.slice(-6).toLowerCase():undefined;
-export function importConditional(source,sheet) {
+export function importConditional(source,sheet,resolveColor=rgb) {
+  const color=c=>normalizeColor(resolveColor(c));
   const rules=[];let unsupported=0;
   for(const group of source.conditionalFormattings||[])for(const original of group.rules||[])for(const ref of group.ref.split(/\s+/)){
     const r={id:crypto.randomUUID(),range:ref.includes(':')?ref:ref+':'+ref,type:original.type,formulae:(original.formulae||[]).map(String),style:{},stopIfTrue:!!original.stopIfTrue,_priority:original.priority||1};
     for(const k of ['operator','text','rank','percent','bottom','aboveAverage'])if(original[k]!==undefined)r[k]=original[k];
     if(original.type==='containsText'&&original.operator&&original.operator!=='containsText'){r.type='expression';delete r.operator;}
     const origin=parseAddress(group.ref.split(/\s+/)[0].split(':')[0]),anchor=parseAddress(ref.split(':')[0]);if(origin&&anchor)r.formulae=r.formulae.map(f=>shiftFormula('='+f.replace(/^=/,''),anchor.r-origin.r,anchor.c-origin.c).slice(1));
-    const s=original.style||{};if(rgb(s.fill?.bgColor)||rgb(s.fill?.fgColor))r.style.background=rgb(s.fill?.bgColor)||rgb(s.fill.fgColor);if(rgb(s.font?.color))r.style.color=rgb(s.font.color);
+    const s=original.style||{};if(color(s.fill?.fgColor)||color(s.fill?.bgColor))r.style.background=color(s.fill?.fgColor)||color(s.fill.bgColor);if(color(s.font?.color))r.style.color=color(s.font.color);
     for(const k of ['bold','italic'])if(s.font?.[k]!==undefined)r.style[k]=s.font[k];
     try{validateConditionalRules([r]);ruleBounds(r);rules.push(r);}catch{unsupported++;}
   }

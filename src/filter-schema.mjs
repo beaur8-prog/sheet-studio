@@ -17,6 +17,8 @@ export function validateAutoFilter(f){
       if(typeof rule.top!=='boolean'||typeof rule.percent!=='boolean'||!Number.isFinite(rule.count)||rule.count<1||rule.count>500||rule.percent&&rule.count>100)bad();
     }else if(rule.type==='average'){
       if(typeof rule.above!=='boolean')bad();
+    }else if(rule.type==='color'){
+      if(!['background','color'].includes(rule.target)||rule.color!==null&&(typeof rule.color!=='string'||!/^#[\da-f]{6}$/i.test(rule.color)))bad();
     }else bad();
   }
   if(f.hiddenRows!==undefined&&(!Array.isArray(f.hiddenRows)||f.hiddenRows.length>200000||f.hiddenRows.some(r=>!Number.isInteger(r)||r<=r1||r>r2)))bad();

@@ -2,6 +2,8 @@ import {cellBorders,borderSides,borderStyles} from './borders.mjs';
 import {restoreWorksheetParts,addWorksheetParts} from './worksheet-xlsx.mjs';
 import {importConditional,exportConditional,shiftWorksheetFeatures} from './conditional.mjs';
 import {addFilterParts,restoreFilterParts} from './filter-xlsx.mjs';
+import JSZip from 'jszip';
+import {createColorResolver} from './spreadsheet-colors.mjs';
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
 import { createEvaluator,transformFormulaReferences,formulaForXlsx,formulaForEditing } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
@@ -48,12 +50,6 @@ function stringRaw(value) {
   return /^[=']/.test(text) || numeric.test(text.trim()) || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(text.trim()) ||
     /^(TRUE|FALSE)$/i.test(text) || errors.has(text) || /^#(?:CYCLE!|SPILL!)$/.test(text) ? "'" + text : text;
 }
-function rgb(color) {
-  if (color?.argb && /^[0-9a-f]{6,8}$/i.test(color.argb)) return '#' + color.argb.slice(-6);
-  // Default Office theme colors. Theme-specific palette customizations are not retained.
-  const theme = ['#ffffff', '#000000', '#e7e6e6', '#44546a', '#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47'];
-  return Number.isInteger(color?.theme) ? theme[color.theme] : undefined;
-}
 function argb(color) {
   if (typeof color !== 'string') return undefined;
   let hex = color.replace(/^#/, '');
@@ -69,7 +65,7 @@ function formatKind(format) {
   if (/[$₩€£¥]|\[\$/.test(cleaned)) return 'currency';
   return 'number';
 }
-function readStyle(cell) {
+function readStyle(cell,rgb) {
   const result = {};
   const { font = {}, alignment = {}, fill = {}, numFmt } = cell;
   if (font.bold) result.bold = true;
@@ -146,13 +142,14 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   const book = new ExcelJS.Workbook();
   try { await book.xlsx.load(data); }
   catch (error) { throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.', { cause: error }); }
+  const colorZip=await JSZip.loadAsync(data),resolveColor=createColorResolver(await colorZip.file('xl/theme/theme1.xml')?.async('string'),await colorZip.file('xl/styles.xml')?.async('string'));
   let cellCount = 0;
   const sheets = book.worksheets.map(source => {
     const sheet = newSheet(source.name);
     const importCell = cell => {
       if (cell.isMerged && cell.master.address !== cell.address) return;
       if (++cellCount > MAX_CELLS) throw new Error('200,000개 이하의 셀이 있는 파일을 선택하세요.');
-      const style = readStyle(cell);
+      const style = readStyle(cell,resolveColor);
       let raw = '';
       const value = cell.value;
       if (cell.formula) raw = '='+formulaForEditing(cell.formula);
@@ -184,7 +181,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
     for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
     const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
-    importConditional(source,sheet);
+    importConditional(source,sheet,resolveColor);
     sheet.merges = [...(source.model.merges || [])];
     return sheet;
   });

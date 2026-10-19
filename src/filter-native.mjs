@@ -6,6 +6,10 @@ export function nativeFilterPlan(f){
   if(f.unsupported?.length)throw Error('지원하지 않는 필터를 변경하려면 먼저 지우기를 사용하세요.');
   const filters=Object.entries(f.columns).map(([c,rule])=>{
     const filter={field:+c-f.range.c1+1};
+    if(rule.type==='color'){
+      if(rule.color===null)return {...filter,operator:rule.target==='background'?12:13};
+      const [r,g,b]=rule.color.slice(1).match(/../g).map(v=>parseInt(v,16));return {...filter,operator:rule.target==='background'?8:9,criteria1:r+(g<<8)+(b<<16)};
+    }
     if(rule.type==='values'){
       if(!rule.values.length)throw Error('필터 값이 비어 있습니다.');
       if(rule.kind==='date'){

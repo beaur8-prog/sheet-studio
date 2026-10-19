@@ -1,5 +1,7 @@
 import {address,parseAddress,createEvaluator,formatValue,shiftFormula} from './engine.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
+import {createConditionalEvaluator} from './conditional.mjs';
+import {normalizeColor} from './spreadsheet-colors.mjs';
 
 export const filterActive=s=>!!(Object.keys(s.autoFilter?.columns||{}).length||s.autoFilter?.unsupported?.length);
 export const valueKey=value=>String(value??'').toLocaleLowerCase();
@@ -68,36 +70,40 @@ function predicate(rule,values){
   const count=rule.percent?Math.max(1,Math.floor(numbers.length*rule.count/100)):Math.trunc(rule.count),limit=numbers[Math.min(count,numbers.length)-1];
   return v=>typeof v==='number'&&(rule.top?v>=limit:v<=limit);
 }
-export function filterPredicates(sheet,evaluate,omitColumn=-1){
+export function filterPredicates(book,sheet,evaluate,omitColumn=-1){
   const f=sheet.autoFilter;if(!f)return [];
+  const conditional=Object.values(f.columns).some(r=>r.type==='color')?createConditionalEvaluator(book,sheet,evaluate):null;
   return Object.entries(f.columns).filter(([c])=>+c!==omitColumn).map(([c,rule])=>{
+    if(rule.type==='color')return {column:+c,test:(_value,r)=>normalizeColor({...sheet.cells[address(r,+c)]?.style,...conditional(r,+c,evaluate(address(r,+c)))}[rule.target])===normalizeColor(rule.color)};
     const values=[];if(rule.type==='top'||rule.type==='average')for(let r=f.range.r1+1;r<=f.range.r2;r++)values.push(filterValue(sheet,evaluate,r,+c));
     return {column:+c,test:predicate(rule,values)};
   });
 }
 export function applyFilters(book,sheet){
   const f=sheet.autoFilter;if(!f)return;
-  validateAutoFilter(f);if(f.unsupported?.length)throw Error('이 문서의 색·아이콘 또는 동적 날짜 필터는 Excel에서 편집하거나 지우기를 먼저 사용하세요.');const evaluate=createEvaluator(book,sheet.id),rules=filterPredicates(sheet,evaluate),hidden=[];
-  for(let r=f.range.r1+1;r<=f.range.r2;r++)if(!rules.every(({column,test})=>test(filterValue(sheet,evaluate,r,column))))hidden.push(r);
+  validateAutoFilter(f);if(f.unsupported?.length)throw Error('이 문서의 미지원 아이콘·색 또는 동적 날짜 필터는 Excel에서 편집하거나 지우기를 먼저 사용하세요.');const evaluate=createEvaluator(book,sheet.id),rules=filterPredicates(book,sheet,evaluate),hidden=[];
+  for(let r=f.range.r1+1;r<=f.range.r2;r++)if(!rules.every(({column,test})=>test(filterValue(sheet,evaluate,r,column),r)))hidden.push(r);
   f.hiddenRows=hidden;
 }
 export function filterOptions(book,sheet,column){
-  const evaluate=createEvaluator(book,sheet.id),rules=filterPredicates(sheet,evaluate,column),values=new Map();let dates=0,numbers=0,texts=0;
+  const evaluate=createEvaluator(book,sheet.id),rules=filterPredicates(book,sheet,evaluate,column),values=new Map(),conditional=createConditionalEvaluator(book,sheet,evaluate),colors={background:new Map(),color:new Map()};let dates=0,numbers=0,texts=0;
   const b=sheet.autoFilter.range;
   for(let r=b.r1+1;r<=b.r2;r++){
-    if(!rules.every(({column,test})=>test(filterValue(sheet,evaluate,r,column))))continue;
+    if(!rules.every(({column,test})=>test(filterValue(sheet,evaluate,r,column),r)))continue;
     const value=filterValue(sheet,evaluate,r,column),key=valueKey(value),style=sheet.cells[address(r,column)]?.style;
+    const displayed={...style,...conditional(r,column,evaluate(address(r,column)))};for(const target of ['background','color']){const color=normalizeColor(displayed[target]);colors[target].set(color,(colors[target].get(color)||0)+1);}
     if(!values.has(key))values.set(key,{key,value,label:value===''?'(빈 셀)':formatValue(value,style)});
     if(value!==''){if(typeof value==='number'){if(style?.format==='date')dates++;else numbers++;}else texts++;}
   }
   const kind=dates>numbers&&dates>texts?'date':numbers>texts?'number':'text';
+  const colorOptions=Object.fromEntries(Object.entries(colors).map(([target,list])=>[target,[...list].map(([color,count])=>({color,count})).sort((a,b)=>(a.color||'').localeCompare(b.color||''))]));
   if(kind==='date'){
     const grouped=new Map();for(const v of values.values()){
       if(typeof v.value==='number'){v.value=Math.floor(v.value);v.key=valueKey(v.value);const d=filterDateParts(v.value);v.label=`${d.year}-${String(d.month).padStart(2,'0')}-${String(d.day).padStart(2,'0')}`;}
       grouped.set(v.key,v);
-    }return {kind,values:[...grouped.values()].sort((a,b)=>compareFilterValues(a.value,b.value,false))};
+    }return {kind,colors:colorOptions,values:[...grouped.values()].sort((a,b)=>compareFilterValues(a.value,b.value,false))};
   }
-  return {kind,values:[...values.values()].sort((a,b)=>compareFilterValues(a.value,b.value,false))};
+  return {kind,colors:colorOptions,values:[...values.values()].sort((a,b)=>compareFilterValues(a.value,b.value,false))};
 }
 export function compareFilterValues(a,b,desc){
   if(a==='')return b===''?0:1;if(b==='')return -1;
