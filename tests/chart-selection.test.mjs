@@ -20,7 +20,7 @@ test('single columns, single numeric rows, zeroes and formula results remain plo
  for(const [rows,range,expected] of [
   [[['매출'],[0],['=10+20']],'A1:A3',[[0,30]]],
   [[[10],[20],[30]],'A1:A3',[[10,20,30]]],
-  [[[10,20,30]],'A1:C1',[[10],[20],[30]]],
+  [[[10,20,30]],'A1:C1',[[10,20,30]]],
   [[[0]],'A1:A1',[[0]]],
   [[['매출','비용']],'A1:B1',[]],
  ]){const b=fixture(rows);assert.deepEqual(chartData({type:'bar',range},b.sheets[0],b).map(s=>s.values),expected);}

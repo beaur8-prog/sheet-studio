@@ -32,46 +32,60 @@ export function refValues(ref,workbook,{limit=10000}={}){
   return out;
 }
 export function referenceSize(ref){const [a,b]=ref?.range?.split(':').map(parseAddress)||[];return a&&b?(Math.abs(a.r-b.r)+1)*(Math.abs(a.c-b.c)+1):ref?.cache?.length||0;}
-// Infer labels only from cell types, never by dropping the first row/column
-// unconditionally. New charts persist these choices so later edits cannot change
-// the meaning of the source range. Imported explicit series bypass this path.
+// A horizontal vector is one series, just like a vertical vector. Persist the
+// chosen direction on new charts; imported explicit series keep their own refs.
+function sourceBounds(chart){
+  const parts=String(chart.range).split(':'),[a,b]=parts.map(parseAddress);
+  return parts.length===2&&a&&b&&b.r>=a.r&&b.c>=a.c?{a,b}:null;
+}
+export function chartSeriesBy(chart){
+  if(['rows','columns'].includes(chart.seriesBy))return chart.seriesBy;
+  const bounds=sourceBounds(chart);return bounds&&bounds.a.r===bounds.b.r?'rows':'columns';
+}
+function sourceAxes(chart){
+  const bounds=sourceBounds(chart);if(!bounds)return null;
+  const {a,b}=bounds,rows=chartSeriesBy(chart)==='rows';
+  const lane1=rows?a.r:a.c,lane2=rows?b.r:b.c,point1=rows?a.c:a.r,point2=rows?b.c:b.r;
+  if(lane2-lane1>32||point2-point1>10000)return null;
+  return {rows,lane1,lane2,point1,point2,xy:['scatter','bubble'].includes(chart.type),implicitX:chart.type==='scatter'&&lane1===lane2};
+}
 export function chartLayout(chart,sheet,workbook){
-  const [a,b]=String(chart.range).split(':').map(parseAddress);
-  if(!a||!b||b.r<a.r||b.c<a.c||b.r-a.r>10000||b.c-a.c>32)return {firstRowAsHeader:false,firstColumnAsLabels:false};
-  const evaluate=createEvaluator(workbook,sheet.id),numeric=v=>typeof v==='number'&&Number.isFinite(v);
-  const value=(r,c)=>{const key=address(r,c),cell=sheet.cells[key];if(!cell||cell.raw==='')return null;const v=evaluate(key);return typeof v==='string'&&v.startsWith('#')&&cell.cachedValue!==undefined?cell.cachedValue:v;};
-  const xy=['scatter','bubble'].includes(chart.type);
-  let numericFirstColumn=false;
-  for(let r=a.r;r<=b.r;r++)if(numeric(value(r,a.c))){numericFirstColumn=true;break;}
-  const firstColumnAsLabels=chart.firstColumnAsLabels??(a.c<b.c&&!numericFirstColumn);
-  const start=a.c+(xy||firstColumnAsLabels?1:0),firstRow=[];
-  for(let c=start;c<=b.c;c++)firstRow.push(value(a.r,c));
-  const firstRowAsHeader=chart.firstRowAsHeader??(firstRow.some(v=>typeof v==='string'&&v.trim()!==''&&!v.startsWith('#'))&&!firstRow.some(numeric));
-  return {firstRowAsHeader,firstColumnAsLabels};
+  const axes=sourceAxes(chart);if(!axes)return {firstRowAsHeader:false,firstColumnAsLabels:false};
+  const {rows,lane1,lane2,point1,point2,xy,implicitX}=axes,evaluate=createEvaluator(workbook,sheet.id),numeric=v=>typeof v==='number'&&Number.isFinite(v);
+  const value=(lane,point)=>{const key=rows?address(lane,point):address(point,lane),cell=sheet.cells[key];if(!cell||cell.raw==='')return null;const v=evaluate(key);return typeof v==='string'&&v.startsWith('#')&&cell.cachedValue!==undefined?cell.cachedValue:v;};
+  let numericFirstLane=false;for(let point=point1;point<=point2;point++)if(numeric(value(lane1,point))){numericFirstLane=true;break;}
+  const categories=(rows?chart.firstRowAsHeader:chart.firstColumnAsLabels)??(lane1<lane2&&!numericFirstLane);
+  const firstPoint=[];for(let lane=lane1+Number(xy?!implicitX:categories);lane<=lane2;lane++)firstPoint.push(value(lane,point1));
+  const names=(rows?chart.firstColumnAsLabels:chart.firstRowAsHeader)??(firstPoint.some(v=>typeof v==='string'&&v.trim()!==''&&!v.startsWith('#'))&&!firstPoint.some(numeric));
+  return rows?{firstRowAsHeader:categories,firstColumnAsLabels:names}:{firstRowAsHeader:names,firstColumnAsLabels:categories};
+}
+function seriesShape(chart,sheet,workbook){
+  const axes=sourceAxes(chart);if(!axes)return null;
+  const layout=chartLayout(chart,sheet,workbook),{rows,xy,implicitX,lane1,point1}=axes;
+  const names=rows?layout.firstColumnAsLabels:layout.firstRowAsHeader,categories=rows?layout.firstRowAsHeader:layout.firstColumnAsLabels;
+  return {...axes,names,categories,startLane:lane1+Number(xy?!implicitX:categories),startPoint:point1+Number(names)};
 }
 export function chartRangeError(chart,sheet,workbook){
-  const parts=String(chart.range).split(':'),[a,b]=parts.map(parseAddress);
-  if(parts.length!==2||!a||!b||b.r<a.r||b.c<a.c)return '올바른 셀 범위를 입력하세요. 예: A1:C5';
-  const limit='차트에는 최대 10,000개 데이터 행·32개 값 열을 사용하세요.';
-  if(b.r-a.r>10000||b.c-a.c>32)return limit;
-  const {firstRowAsHeader,firstColumnAsLabels}=chartLayout(chart,sheet,workbook),xy=['scatter','bubble'].includes(chart.type);
-  const rows=b.r-a.r+1-Number(firstRowAsHeader),cols=b.c-a.c+1-Number(xy||firstColumnAsLabels);
-  if(rows<1||cols<1)return '값으로 사용할 행과 열이 필요합니다. 첫 행·첫 열 사용 설정을 확인하세요.';
-  if(rows>10000||cols>32)return limit;
-  if(chart.type==='bubble'&&cols<2)return '거품형에는 X값, Y값, 크기 열이 필요합니다.';
+  if(!sourceBounds(chart))return '올바른 셀 범위를 입력하세요. 예: A1:C5';
+  const limit='차트에는 계열당 최대 10,000개 값과 32개 값 행·열을 사용하세요.',shape=seriesShape(chart,sheet,workbook);
+  if(!shape)return limit;
+  const {startLane,lane2,startPoint,point2,rows}=shape,points=point2-startPoint+1,lanes=lane2-startLane+1;
+  if(chart.type==='bubble'&&(lanes<2||lanes%2!==0))return `거품형에는 X값·Y값·크기 ${rows?'행':'열'}이 필요합니다. X값 다음에 Y값·크기 쌍을 선택하세요.`;
+  if(points<1||lanes<1)return '값으로 사용할 행과 열이 필요합니다. 첫 행·첫 열 사용 설정을 확인하세요.';
+  if(points>10000||lanes>32)return limit;
   return null;
 }
 export function chartSeries(chart,sheet,workbook){
   if(chart.series?.length)return chart.series;
-  const [a,b]=String(chart.range).split(':').map(parseAddress);if(!a||!b||a.r>b.r||a.c>b.c||b.r-a.r>10000||b.c-a.c>32)return [];
-  const {firstRowAsHeader,firstColumnAsLabels}=chartLayout(chart,sheet,workbook),xy=['scatter','bubble'].includes(chart.type),r1=a.r+Number(firstRowAsHeader),c1=a.c+Number(xy||firstColumnAsLabels);
-  if(r1>b.r||c1>b.c||b.r-r1>=10000||b.c-c1>=32)return [];
-  let populated=false;for(let r=r1;r<=b.r&&!populated;r++)for(let c=c1;c<=b.c;c++)if(sheet.cells[address(r,c)]?.raw){populated=true;break;}
+  if(chartRangeError(chart,sheet,workbook))return [];
+  const {rows,lane1,lane2,point1,point2,startLane,startPoint,names,categories,xy,implicitX}=seriesShape(chart,sheet,workbook);
+  const key=(lane,point)=>rows?address(lane,point):address(point,lane),ref=(lane,from=startPoint,to=point2)=>chartRef(sheet.id,key(lane,from)+':'+key(lane,to));
+  const evaluate=createEvaluator(workbook,sheet.id);let populated=false;for(let lane=startLane;lane<=lane2&&!populated;lane++)for(let point=startPoint;point<=point2;point++){const cell=sheet.cells[key(lane,point)];if(!cell||cell.raw==='')continue;let value=evaluate(key(lane,point));if(typeof value==='string'&&value.startsWith('#')&&cell.cachedValue!==undefined)value=cell.cachedValue;if(typeof value!=='boolean'&&value!==null&&value!==''&&Number.isFinite(Number(value))){populated=true;break;}}
   if(!populated)return [];
-  const ref=(c,from=r1,to=b.r)=>chartRef(sheet.id,address(from,c)+':'+address(to,c));
-  const categories=xy||firstColumnAsLabels?ref(a.c):{cache:Array.from({length:b.r-r1+1},(_,i)=>String(i+1))},result=[];
-  for(let c=c1;c<=b.c&&result.length<32;c+=chart.type==='bubble'?2:1){
-    const i=result.length;result.push({...(firstRowAsHeader?{nameRef:ref(c,a.r,a.r)}:{name:`계열 ${i+1}`}),catRef:categories,valRef:ref(c),...(xy?{xRef:ref(a.c)}:{}),...(chart.type==='bubble'?{sizeRef:c+1<=b.c?ref(c+1):{cache:[]}}:{}),color:chartColors[i%chartColors.length],type:chart.type==='combo'?(c===b.c?'line':'bar'):chart.type,secondary:chart.type==='combo'&&c===b.c&&chart.secondaryAxis!==false});
+  const indexed={cache:Array.from({length:point2-startPoint+1},(_,i)=>xy?i+1:String(i+1))},categoryRef=xy&&!implicitX||!xy&&categories?ref(lane1):indexed,result=[];
+  for(let lane=startLane;lane<=lane2;lane+=chart.type==='bubble'?2:1){
+    const i=result.length,isLine=chart.type==='combo'&&startLane<lane2&&lane===lane2;
+    result.push({...(names?{nameRef:ref(lane,point1,point1)}:{name:`계열 ${i+1}`}),catRef:categoryRef,valRef:ref(lane),...(xy?{xRef:categoryRef}:{}),...(chart.type==='bubble'?{sizeRef:ref(lane+1)}:{}),color:chartColors[i%chartColors.length],type:chart.type==='combo'?(isLine?'line':'bar'):chart.type,secondary:isLine&&chart.secondaryAxis!==false});
   }
   return result;
 }
@@ -79,7 +93,7 @@ export function chartData(chart,sheet,workbook){
   const preview=ref=>refValues(ref,workbook,{limit:1000});
   return chartSeries(chart,sheet,workbook).map((s,i)=>({
     ...s,name:String(refValues(s.nameRef,workbook)[0]??s.name??`계열 ${i+1}`),
-    labels:preview(s.catRef).map(v=>v===null?'':String(v)),
+    labels:preview(s.catRef||s.xRef).map(v=>v===null?'':String(v)),
     values:preview(s.valRef).map(v=>v===null||v===''||typeof v==='boolean'||!Number.isFinite(Number(v))?null:Number(v)),
     xs:preview(s.xRef).map(v=>v===null?null:Number(v)),
     sizes:preview(s.sizeRef).map(v=>Math.max(0,Number(v)||0)),

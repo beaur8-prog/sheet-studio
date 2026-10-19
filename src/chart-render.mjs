@@ -27,8 +27,8 @@ export function layoutChartLegends(root){
 export function renderChartSVG(chart,sheet,workbook){
   const {width,height}=chartRect(chart),w=width-36,h=height-70,data=chartData(chart,sheet,workbook);
   if(chart.type==='unsupported')return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'Excel 원본 차트 보존','text-anchor="middle"')+text(w/2,h/2+20,chart.unsupportedReason||'이 유형의 미리 보기는 아직 지원하지 않습니다.','text-anchor="middle"')};
-  if(!data.length)return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'표시할 숫자 데이터가 없습니다.','text-anchor="middle"')+text(w/2,h/2+20,'범위와 첫 행·첫 열 설정을 확인하세요.','text-anchor="middle"')};
-  const legend=chart.legend!==false&&data.length>1,legendRows=legend?Math.min(3,Math.ceil(data.length/Math.max(1,Math.floor(w/130)))):0;
+  if(!data.length||!data.some(s=>s.values.some(Number.isFinite)))return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'표시할 숫자 데이터가 없습니다.','text-anchor="middle"')+text(w/2,h/2+20,'범위와 첫 행·첫 열 설정을 확인하세요.','text-anchor="middle"')};
+  const circular=['pie','doughnut'].includes(chart.type),legend=chart.legend!==false&&(circular||data.length>1),legendCols=Math.max(1,Math.floor(w/(circular?95:130))),legendCount=circular?data[0].values.length:data.length,legendRows=legend?Math.min(3,Math.ceil(legendCount/legendCols)):0;
   const left=chart.type==='bar-horizontal'?75:55,right=w-(data.some(s=>s.secondary)?52:20),top=18,bottom=Math.max(top+35,h-35-legendRows*17),pw=right-left,ph=bottom-top;
   const svg=[],count=Math.max(1,...data.map(s=>s.values.length)),labels=data.find(s=>s.labels.length)?.labels||Array.from({length:count},(_,i)=>String(i+1));
   const pointLabel=(x,y,value)=>{if(chart.labels&&Number.isFinite(value))svg.push(text(x,y,fmt(value),'text-anchor="middle"'));};
@@ -36,24 +36,24 @@ export function renderChartSVG(chart,sheet,workbook){
     const series=chart.type==='pie'?data.slice(0,1):data,cx=w/2,cy=(top+bottom)/2,r=Math.max(15,Math.min(pw,ph)/2-10);
     series.forEach((s,k)=>{const values=s.values.map(v=>Math.abs(v||0)),sum=values.reduce((a,b)=>a+b,0);let start=-Math.PI/2;
       values.forEach((v,i)=>{if(!v||!sum)return;const angle=v/sum*Math.PI*2,end=start+angle,color=s.pointColors?.[i]||chartColors[i%chartColors.length],outer=chart.type==='pie'?r:r-k*r/(series.length+1),inner=chart.type==='pie'?0:outer-r/(series.length+1)*.78;
-        const p=(rad,a)=>[cx+rad*Math.cos(a),cy+rad*Math.sin(a)];let d;
-        if(angle>Math.PI*2-.00001){svg.push(`<circle cx="${cx}" cy="${cy}" r="${(outer+inner)/2}" fill="${inner?'none':color}" stroke="${color}" stroke-width="${inner?outer-inner:0}"/>`);}
-        else {const [a,b]=p(outer,start),[c,d2]=p(outer,end),[e,f]=p(inner,end),[g,j]=p(inner,start);d=`M ${a} ${b} A ${outer} ${outer} 0 ${angle>Math.PI?1:0} 1 ${c} ${d2} L ${e} ${f} ${inner?`A ${inner} ${inner} 0 ${angle>Math.PI?1:0} 0 ${g} ${j}`:''} Z`;svg.push(`<path d="${d}" fill="${color}" stroke="white" stroke-width="1"><title>${esc(labels[i])}: ${v}</title></path>`);}
+        const p=(rad,a)=>[cx+rad*Math.cos(a),cy+rad*Math.sin(a)],label=esc(s.labels[i]??String(i+1)),attrs=`class="chart-point" data-series="${k}" data-point="${i}"`,title=`<title>${label}: ${v}</title>`;let d;
+        if(angle>Math.PI*2-.00001){svg.push(`<circle ${attrs} cx="${cx}" cy="${cy}" r="${(outer+inner)/2}" fill="${inner?'none':color}" stroke="${color}" stroke-width="${inner?outer-inner:0}">${title}</circle>`);}
+        else {const [a,b]=p(outer,start),[c,d2]=p(outer,end),[e,f]=p(inner,end),[g,j]=p(inner,start);d=`M ${a} ${b} A ${outer} ${outer} 0 ${angle>Math.PI?1:0} 1 ${c} ${d2} L ${e} ${f} ${inner?`A ${inner} ${inner} 0 ${angle>Math.PI?1:0} 0 ${g} ${j}`:''} Z`;svg.push(`<path ${attrs} d="${d}" fill="${color}" stroke="white" stroke-width="1">${title}</path>`);}
         if(chart.labels){const [x,y]=p((outer+inner)/2,start+angle/2);svg.push(text(x,y,Math.round(v/sum*100)+'%','text-anchor="middle"'));}start=end;
       });
     });
-    if(chart.legend!==false){const items=labels.slice(0,Math.max(1,Math.floor(w/95))).map((name,i)=>({name,color:chartColors[i%chartColors.length]}));svg.push(legendSVG(items,items.length,1,w,h,8,5));}
+    if(chart.legend!==false){const capacity=legendCols*legendRows,items=labels.slice(0,capacity).map((name,i)=>({name:i===capacity-1&&labels.length>capacity?'외 '+(labels.length-i)+'개 항목':name,color:chartColors[i%chartColors.length]}));svg.push(legendSVG(items,legendCols,legendRows,w,h,8,5));}
   }else if(chart.type==='radar'){
     const cx=(left+right)/2,cy=(top+bottom)/2,r=Math.min(pw,ph)/2-16,max=Math.max(1,...data.flatMap(s=>s.values.map(v=>v||0))),n=Math.max(3,count),pos=(i,v)=>[cx+Math.sin(i/n*2*Math.PI)*r*v,cy-Math.cos(i/n*2*Math.PI)*r*v];
     for(let tick=1;tick<=4;tick++)svg.push(poly(Array.from({length:n+1},(_,i)=>pos(i%n,tick/4)),'#ddd'));
     labels.forEach((label,i)=>{const [x,y]=pos(i,1.15);svg.push(line(cx,cy,...pos(i,1)));svg.push(text(x,y,label.slice(0,12),'text-anchor="middle"'));});
-    data.forEach(s=>svg.push(poly([...s.values,s.values[0]].map((v,i)=>pos(i%n,Math.max(0,v||0)/max)),s.color,chart.radarFilled?s.color:'none',chart.radarFilled?'fill-opacity=".16"':'')));
+    data.forEach((s,si)=>{svg.push(poly([...s.values,s.values[0]].map((v,i)=>pos(i%n,Math.max(0,v||0)/max)),s.color,chart.radarFilled?s.color:'none',chart.radarFilled?'fill-opacity=".16"':''));s.values.forEach((v,i)=>{if(!Number.isFinite(v))return;const [x,y]=pos(i%n,Math.max(0,v)/max);svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${x}" cy="${y}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`);pointLabel(x,y-7,v);});});
   }else if(['scatter','bubble'].includes(chart.type)){
-    const xs=data.flatMap(s=>s.values.map((v,i)=>s.xs[i]??i+1)).filter(Number.isFinite),ys=data.flatMap(s=>s.values).filter(Number.isFinite);
+    const valueX=(s,i)=>s.xRef?s.xs[i]:i+1,xs=data.flatMap(s=>s.values.map((v,i)=>valueX(s,i))).filter(Number.isFinite),ys=data.flatMap(s=>s.values).filter(Number.isFinite);
     const xmin=Math.min(0,...xs),xmax=Math.max(1,...xs),ymin=Math.min(0,...ys),ymax=Math.max(1,...ys),x=v=>left+(v-xmin)/(xmax-xmin)*pw,y=v=>bottom-(v-ymin)/(ymax-ymin)*ph;
     for(let i=0;i<=4;i++){const yy=bottom-i/4*ph,xx=left+i/4*pw;svg.push(line(left,yy,right,yy),text(left-6,yy+3,fmt(ymin+i/4*(ymax-ymin)),'text-anchor="end"'),text(xx,bottom+15,fmt(xmin+i/4*(xmax-xmin)),'text-anchor="middle"'));}
-    data.forEach(s=>{const points=s.values.map((v,i)=>Number.isFinite(v)&&Number.isFinite(s.xs[i]??i+1)?[x(s.xs[i]??i+1),y(v)]:null),maxSize=Math.max(1,...s.sizes);
-      if(s.lines)svg.push(poly(points.filter(Boolean),s.color));points.forEach((p,i)=>{if(!p)return;const radius=chart.type==='bubble'?Math.max(2,Math.sqrt((s.sizes[i]||0)/maxSize)*Math.min(pw,ph)*.09):4;svg.push(`<circle cx="${p[0]}" cy="${p[1]}" r="${radius}" fill="${s.color}" fill-opacity=".65"><title>${esc(s.name)}: ${s.xs[i]??i+1}, ${s.values[i]}</title></circle>`);pointLabel(p[0],p[1]-radius-3,s.values[i]);});});
+    data.forEach((s,si)=>{const points=s.values.map((v,i)=>Number.isFinite(v)&&Number.isFinite(valueX(s,i))&&(chart.type!=='bubble'||s.sizes[i]>0)?[x(valueX(s,i)),y(v)]:null),maxSize=Math.max(1,...s.sizes);
+      if(s.lines)svg.push(poly(points.filter(Boolean),s.color));points.forEach((p,i)=>{if(!p)return;const radius=chart.type==='bubble'?Math.max(2,Math.sqrt((s.sizes[i]||0)/maxSize)*Math.min(pw,ph)*.09):4;svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${p[0]}" cy="${p[1]}" r="${radius}" fill="${s.color}" fill-opacity=".65"><title>${esc(s.name)}: ${valueX(s,i)}, ${s.values[i]}</title></circle>`);pointLabel(p[0],p[1]-radius-3,s.values[i]);});});
   }else{
     const horizontal=chart.type==='bar-horizontal',stack=chart.grouping==='stacked'||chart.grouping==='percentStacked',percent=chart.grouping==='percentStacked';
     const totals=Array.from({length:count},(_,i)=>data.reduce((sum,s)=>sum+Math.abs(s.values[i]||0),0));
@@ -66,10 +66,10 @@ export function renderChartSVG(chart,sheet,workbook){
     data.forEach((s,si)=>{const points=[],basePoints=[];values[si].forEach((v,i)=>{if(v===null){points.push(null);basePoints.push(null);return;}const side=v>=0?'positive':'negative',base=stack?positions[i][side]:0,topValue=base+v;if(stack)positions[i][side]=topValue;
         const p=coord(topValue,!!s.secondary),baseP=coord(base,!!s.secondary),mid=(horizontal?top:left)+step*(i+.5);
         if(['bar','bar-horizontal','combo'].includes(s.type)){const lane=stack?0:barIndices.indexOf(si),lanes=stack?1:Math.max(1,barIndices.length),thickness=step*.75/lanes,offset=(horizontal?top:left)+step*i+step*.125+lane*thickness;
-          svg.push(`<rect x="${horizontal?Math.min(p,baseP):offset}" y="${horizontal?offset:Math.min(p,baseP)}" width="${horizontal?Math.max(.5,Math.abs(p-baseP)):thickness}" height="${horizontal?thickness:Math.max(.5,Math.abs(p-baseP))}" fill="${s.pointColors?.[i]||s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></rect>`);pointLabel(horizontal?p+10:offset+thickness/2,horizontal?offset+thickness/2:p-4,v);
-        }else{points.push([mid,p]);basePoints.push([mid,baseP]);pointLabel(mid,p-7,v);}
+          svg.push(`<rect class="chart-point" data-series="${si}" data-point="${i}" x="${horizontal?Math.min(p,baseP):offset}" y="${horizontal?offset:Math.min(p,baseP)}" width="${horizontal?Math.max(.5,Math.abs(p-baseP)):thickness}" height="${horizontal?thickness:Math.max(.5,Math.abs(p-baseP))}" fill="${s.pointColors?.[i]||s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></rect>`);pointLabel(horizontal?p+10:offset+thickness/2,horizontal?offset+thickness/2:p-4,v);
+        }else{points.push([mid,p]);basePoints.push([mid,baseP]);svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${mid}" cy="${p}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`);pointLabel(mid,p-7,v);}
       });
-      if(points.length){let segment=[],base=[];const flush=()=>{if(!segment.length)return;if(s.type==='area')svg.push(`<polygon points="${[...segment,...base.reverse()].map(p=>p.join(',')).join(' ')}" fill="${s.color}" fill-opacity=".5"/>`);svg.push(poly(segment,s.color));if(s.type==='line')segment.forEach(p=>svg.push(`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="${s.color}"/>`));segment=[];base=[];};points.forEach((p,i)=>{if(!p){flush();return;}segment.push(p);base.push(basePoints[i]);});flush();}
+      if(points.length){let segment=[],base=[];const flush=()=>{if(!segment.length)return;if(s.type==='area')svg.push(`<polygon points="${[...segment,...base.reverse()].map(p=>p.join(',')).join(' ')}" fill="${s.color}" fill-opacity=".5"/>`);svg.push(poly(segment,s.color));segment=[];base=[];};points.forEach((p,i)=>{if(!p){flush();return;}segment.push(p);base.push(basePoints[i]);});flush();}
     });
   }
   if(legend&&!['pie','doughnut'].includes(chart.type)){const cols=Math.max(1,Math.floor(w/130)),items=data.slice(0,cols*legendRows).map((s,i)=>({...s,name:i===cols*legendRows-1&&data.length>i+1?'외 '+(data.length-i)+'개 계열':s.name}));svg.push(legendSVG(items,cols,legendRows,w,h));}
