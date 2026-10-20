@@ -63,6 +63,8 @@ sudo apt install ./Sheet-Studio-0.7.16-Linux-amd64.deb
 sheet-studio
 ```
 
+한글이 네모로 표시되는 환경에서는 `sudo apt install fonts-noto-cjk`로 한글 글꼴을 설치하고 앱을 다시 실행하세요.
+
 설치 후 앱 목록의 **Sheet Studio**로도 실행할 수 있습니다. 앱은 일반 사용자로 실행하세요. 업데이트도 새 DEB 파일에 같은 설치 명령을 사용합니다. 삭제는 `sudo apt remove lattice-sheet-studio`입니다.
 
 Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다. 다른 배포판과 실제 GNOME 데스크톱의 메뉴 조작은 별도 검증하지 않았습니다. ARM64·RPM 패키지는 제공하지 않습니다. Linux에서 Windows Excel/VBA 연결은 지원하지 않습니다. 다운로드한 DEB는 서명된 패키지 저장소를 통한 배포가 아니므로 출처와 SHA-256 체크섬을 확인하세요.
