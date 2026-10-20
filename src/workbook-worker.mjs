@@ -1,5 +1,7 @@
 import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress} from './engine.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
+import {estimateDataBytes} from './data-size.mjs';
+import {MAX_HISTORY_BYTES} from './limits.mjs';
 import {readSpreadsheet, writeSpreadsheet} from './io.mjs';
 import {openRecoveryStore, workbookMetadata} from './recovery-store.mjs';
 import {applyFilters, filterOptions, filterPredicates, valueKey, sortFilterRange, sortRange, inferFilterRange} from './filters.mjs';
@@ -11,8 +13,18 @@ const evaluator = id => {
   if (!evaluators.has(id)) evaluators.set(id, createEvaluator(book, id));
   return evaluators.get(id);
 };
-const cellDescription = cells => {let textLength=0,count=0;for(const ref in cells){count++;textLength+=cells[ref].raw.length;}return {count,textLength,bytes:JSON.stringify(cells).length*2};};
-const describe = book => ({bytes: JSON.stringify(book).length * 2, sheets: book.sheets.map(sheet => ({id: sheet.id,...cellDescription(sheet.cells)}))});
+const cellDescription = cells => {
+  let textLength=0,count=0,bytes=4;
+  for(const ref in cells){
+    count++;textLength+=cells[ref].raw.length;
+    if(bytes<=MAX_HISTORY_BYTES)bytes+=estimateDataBytes(cells[ref],MAX_HISTORY_BYTES-bytes)+(ref.length+4)*2;
+  }
+  return {count,textLength,bytes:Math.min(bytes,MAX_HISTORY_BYTES+1)};
+};
+const describe = book => {
+  const sheets=book.sheets.map(sheet=>({id:sheet.id,...cellDescription(sheet.cells)}));
+  return {bytes:Math.min(MAX_HISTORY_BYTES+1,estimateDataBytes(workbookMetadata(book),MAX_HISTORY_BYTES)+sheets.reduce((n,s)=>n+s.bytes+32,0)),sheets};
+};
 async function handle(type, data) {
   if (type === 'load') {
     store = await openRecoveryStore();

@@ -1,6 +1,7 @@
 import {plain, registerProxy, trustData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS, MAX_DOCUMENT_TEXT_CHARS, MAX_HISTORY_BYTES} from './limits.mjs';
 import {validateCell, validateWorkbookMetadata} from './engine.mjs';
+import {estimateDataBytes} from './data-size.mjs';
 
 const own = (value, key) => Object.hasOwn(value, key);
 const index = key => typeof key === 'string' && /^(?:0|[1-9]\d*)$/.test(key) && +key < 4294967295;
@@ -111,7 +112,7 @@ export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_
         seen.add(value);
       }
       // A conservative UTF-16 payload budget, in addition to the entry limit.
-      size += value && typeof value === 'object' && sizes.has(value) ? sizes.get(value) : (JSON.stringify(value)?.length || 0) * 2;
+      size += value && typeof value === 'object' && sizes.has(value) ? sizes.get(value) : estimateDataBytes(value,maxBytes-size);
       if (size > maxBytes) return size;
     }
     return size;
