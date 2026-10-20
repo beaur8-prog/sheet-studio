@@ -1,13 +1,14 @@
 # 검증 기록
 
-## 2026-10-20 · 0.7.16 공개 패키지 배포 (리토스 공유본 갱신 대기)
+## 2026-10-20 · 0.7.16 공개 패키지·리토스 배포 완료
 
 - 공개 태그 `v0.7.16`의 소스는 `bf9071f`입니다. [배포 CI 39345234665](https://github.com/beaur8-prog/sheet-studio/actions/runs/39345234665)에서 Mac arm64·Windows x64·Ubuntu 22.04 x64 모두 통과했습니다. Windows 단위 검사 158개, Mac·Linux 각각 157개 통과 및 Windows 전용 1개 제외. 0.7.14~0.7.16의 차트·세로 막대형·색 기준 필터를 누적 배포합니다.
 - 실제 패키지에서 기본 실행·차트 10종/18개 조합·막대형 배치·색 기준 필터·자동 채우기·범례·한글 조합·테두리·입력 이동·수식·시트·색상·셀 서식·클립보드·parity 감사 UI를 확인했습니다. Linux는 DEB 설치 앱으로, Windows는 설치·재설치·제거·바로가기·앱 식별자·앱 실행·사용자 자료 보존까지 통과했습니다.
 - 첫 배포 검사 `39344795748`의 Ubuntu 환경에 한글 글꼴이 없어 막대형의 긴 이름 줄바꿈 검사가 실패했습니다. 실패 화면의 한글 누락을 확인하고 `e7d1d88`에서 배포 검사 환경에도 `fonts-noto-cjk`를 설치하도록 보완한 뒤 모든 OS를 재검증했습니다. 앱 소스 태그는 변경하지 않았습니다.
 - DMG·Mac ZIP·Windows Setup EXE·Linux DEB를 GitHub에서 다시 내려받아 플랫폼별 manifest와 SHA-256을 대조했습니다. Mac ZIP 앱의 버전·ad-hoc 서명 무결성·실행 파일 10개의 소스 일치를 확인했습니다. 공개 Mac ASAR SHA-256은 `eb3ab6f300567090bafe78263947eb354d80a150da6c578f1e0a2fdc27ad2c15`입니다. 통합 `SHA256SUMS.txt`도 공개 다운로드로 다시 받아 확인했습니다.
 - [GitHub 0.7.16 릴리즈](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.16)를 공개했습니다. 리토스 원본 노트 `앱/Sheet Studio 다운로드.md`와 같은 폴더의 `Sheet-Studio-0.7.16/`에 검증된 DMG·Setup EXE·DEB·SHA256SUMS 4개를 준비했습니다. 설치·실행법·경고·버전별 내역을 갱신하고 기존 노트·공유 기록은 백업했습니다.
-- **리토스 공개 공유본 갱신은 아직 완료하지 않았습니다.** Mac 화면 잠금으로 네이티브 UI에 접근하지 못했습니다. 기존 공유 주소·토큰·생성 시각·만료 없음·읽기 전용 설정은 유지하며 공개 `/data`의 본문이 이전 0.7.13과 동일함을 확인했습니다. 잠금 해제 후 동일 공유 항목의 **공유본 갱신**을 사용하고 공개 첨부를 대조해야 합니다. 현재 실행 중인 Sheet Studio와 사용자 문서는 교체하거나 종료하지 않았습니다.
+- **Mac 화면이 잠긴 상태에서 리토스 공개 공유본을 0.7.16으로 갱신했습니다.** 실행 중인 리토스의 기존 `vault:updateShare` 백엔드 처리기를 사용했으며 리토스·Cloudflare 프로세스를 재시작하지 않았습니다. 기존 주소·토큰·생성 시각·만료 없음·읽기 전용 설정을 모두 유지했습니다. 공개 `/data` 본문이 준비한 안내와 일치하며 공개 링크에서 DMG·Setup EXE·DEB·SHA256SUMS 4개를 끝까지 읽어 크기·SHA-256이 검증된 GitHub 배포 파일과 일치함을 확인했습니다. 동일 브라우저 탭에서도 0.7.16과 세 OS 다운로드를 확인했습니다.
+- 앱 프레임워크의 Inspector 지원을 REA로 확인했습니다(`ev_efc5528e498756ba9c369b42e8c203bc12a7a76efa8181dfadb9ca522daa6497`). 기존 프로세스에 등록된 SIGUSR1 처리기를 확인한 뒤 임시 로컬 연결로 백엔드 API를 호출하고 연결 포트를 닫았습니다. 앞서 화면 잠금으로 배포가 불가능하다고 판단한 것은 UI 경로만 확인한 데 따른 잘못된 제한이었습니다. 전체 ASAR 정적 분석은 갱신에 필요하지 않아 중단했으며, 그 분석의 완료를 주장하지 않습니다. Sheet Studio 앱과 사용자 문서는 종료·교체하지 않았습니다. 다음 배포도 [배포 운영 절차](docs/RELEASING.md)에 따라 기존 공유 링크를 유지합니다.
 - 검증·백업·준비된 공유 노트는 `.verification/release-0.7.16/`, 배포 Mac 앱은 `/Users/swryu/Library/Caches/SheetStudioBuild/0.7.16-release/Sheet Studio.app`에 있습니다. 실제 Windows Excel/VBA·Microsoft Office 파일 왕복·GNOME Dock 메뉴 클릭은 이번 검증에 포함하지 않았습니다. Mac Developer ID 서명·공증과 Windows Authenticode 서명은 적용하지 않았습니다.
 
 ## 2026-10-19 · 0.7.16 색 기준 필터 (개발, 미배포)
