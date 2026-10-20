@@ -20,4 +20,4 @@
 
 0.7.16 배포에서는 기존 앱 프로세스의 지원 여부와 신호 처리기를 확인하고, 임시 loopback Inspector 연결을 통해 등록된 `vault:updateShare` 처리기를 기존 앱의 webContents/mainFrame 객체로 호출했습니다. 기존 출처 검증을 유지했으며 호출 후 임시 연결 포트를 닫았습니다. Inspector 지원이 없거나 연결이 불가능하면 앱·터널을 재시작해 우회하지 않습니다. 이 방법의 지원 여부는 [Electron 명령행 스위치](https://www.electronjs.org/docs/latest/api/command-line-switches)와 실제 설치 앱을 확인해야 합니다.
 
-마지막으로 동일한 공개 URL의 `/data`와 브라우저 화면을 확인하고, 공개 첨부를 끝까지 읽어 검증된 파일의 크기·SHA-256과 비교합니다. 설치·실행법, 버전별 수정 내역, Mac 미공증·Windows 미서명·다운로드 경고와 **Windows의 PC 보호 → 추가 정보 → 실행** 안내를 유지합니다. 배포 결과와 보존한 링크를 `VALIDATION.md`에 기록합니다.
+마지막으로 동일한 공개 URL의 `/data`와 브라우저 화면을 확인하고, 공개 첨부를 끝까지 읽어 검증된 파일의 크기·SHA-256과 비교합니다. 설치·실행법, 현재 버전의 수정 사항, Mac 미공증·Windows 미서명·다운로드 경고와 **Windows의 PC 보호 → 추가 정보 → 실행** 안내를 유지합니다. 배포 결과와 보존한 링크를 `VALIDATION.md`에 기록합니다.
