@@ -45,7 +45,7 @@ jobs:
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
       - name: Install Linux test dependencies
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb x11-utils desktop-file-utils python3-gi gir1.2-gtk-3.0 hicolor-icon-theme libgtk-3-0 libnss3 libasound2 libgbm1
+        run: sudo apt-get update && sudo apt-get install -y xvfb fonts-noto-cjk x11-utils desktop-file-utils python3-gi gir1.2-gtk-3.0 hicolor-icon-theme libgtk-3-0 libnss3 libasound2 libgbm1
       - run: npm ci
       - run: npm run runtime:install
       - run: npm test
