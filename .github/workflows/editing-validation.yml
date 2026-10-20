@@ -10,7 +10,7 @@ jobs:
       matrix:
         os: [macos-15, windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,16 +27,23 @@ jobs:
       - name: Check native composition and existing editing behavior
         shell: bash
         run: |
-          for spec in autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit; do
+          for spec in autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit recovery capacity; do
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node "tests/ui-$spec.mjs" --desktop
             else
               node "tests/ui-$spec.mjs" --desktop
             fi
           done
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a node tests/ui-capacity.mjs --desktop --tall
+          else
+            node tests/ui-capacity.mjs --desktop --tall
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: editing-validation-${{ matrix.os }}
-          path: test-results/*.png
+          path: |
+            test-results/*.png
+            test-results/capacity-*.json
           if-no-files-found: ignore

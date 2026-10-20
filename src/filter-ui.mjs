@@ -1,3 +1,4 @@
+import {cloneData} from './clone.mjs';
 import {filterOptions,valueKey,dateNumber,filterPredicates,searchFilterValue} from './filters.mjs';
 import {address,createEvaluator} from './engine.mjs';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -5,11 +6,11 @@ let closeCurrent=()=>{};
 export const closeFilterMenu=()=>closeCurrent();
 const operators=[['equal','같음'],['notEqual','같지 않음'],['greaterThan','보다 큼'],['greaterThanOrEqual','크거나 같음'],['lessThan','보다 작음'],['lessThanOrEqual','작거나 같음'],['beginsWith','시작 문자'],['endsWith','끝 문자'],['contains','포함'],['notContains','포함하지 않음']];
 
-export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid}){
-  closeCurrent();const {kind,values,colors}=filterOptions(book,sheet,column),rule=sheet.autoFilter.columns[column],title=sheet.cells[address(sheet.autoFilter.range.r1,column)]?.raw||address(sheet.autoFilter.range.r1,column);
-  const own=rule?.type!=='color'&&filterPredicates(book,sheet,createEvaluator(book,sheet.id)).find(p=>p.column===column);
-  const original=new Set(rule?.type==='values'?rule.values.map(valueKey):values.filter(v=>!own||own.test(v.value)).map(v=>v.key));
-  let selected=new Set(original),search='',mode=rule?.type==='color'?'color':'list',colorRule=rule?.type==='color'?structuredClone(rule):null;
+export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid,prepared}){
+  closeCurrent();const {kind,values,colors}=(prepared?.options||filterOptions(book,sheet,column)),rule=sheet.autoFilter.columns[column],title=sheet.cells[address(sheet.autoFilter.range.r1,column)]?.raw||address(sheet.autoFilter.range.r1,column);
+  const own=!prepared&&rule?.type!=='color'&&filterPredicates(book,sheet,createEvaluator(book,sheet.id)).find(p=>p.column===column);
+  const original=new Set(prepared?prepared.original:rule?.type==='values'?rule.values.map(valueKey):values.filter(v=>!own||own.test(v.value)).map(v=>v.key));
+  let selected=new Set(original),search='',mode=rule?.type==='color'?'color':'list',colorRule=rule?.type==='color'?cloneData(rule):null;
   if(colorRule&&!colors[colorRule.target].some(v=>v.color===colorRule.color))colors[colorRule.target].push({color:colorRule.color,count:0});
   const colorMenu=Object.entries(colors).map(([target,items])=>`<fieldset><legend>${target==='background'?'셀 채우기색':'글자색'}</legend>${items.slice(0,1000).map(({color,count})=>`<label><input type="radio" name="filter-color" data-color-target="${target}" value="${color||''}" ${colorRule?.target===target&&colorRule.color===color?'checked':''}><span class="filter-color-swatch ${target==='background'&&!color?'no-fill':''}" style="${target==='background'&&color?'background:'+color:'color:'+(color||'#222222')}">${target==='color'?'가':''}</span><span>${color?esc(color.toUpperCase()):target==='background'?'채우기 없음':'자동 (기본 글자색)'}</span><small>${count.toLocaleString()}개</small></label>`).join('')}${!items.length?'<p>일치하는 행이 없습니다.</p>':items.length>1000?'<p>처음 1,000개 색 표시 · 다른 열 조건으로 범위를 좁히세요.</p>':''}</fieldset>`).join('');
   const el=document.createElement('div');el.className='filter-popup';el.setAttribute('role','dialog');el.setAttribute('aria-label',`${title} 필터`);

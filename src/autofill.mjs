@@ -1,3 +1,4 @@
+import {cloneData} from './clone.mjs';
 import {address,shiftFormula} from './engine.mjs';
 
 const modulo=(n,size)=>(n%size+size)%size;
@@ -41,7 +42,7 @@ export function autoFillPlan({sourceCells,sourceRange,targetRange,hiddenRow=()=>
  const updates=[];
  rows.forEach((r,ri)=>cols.forEach((c,ci)=>{
   if(inside(r,c,s)||!isEditable(r,c))return;
-  const sr=sourceRows[modulo(ri-rowOffset,sourceRows.length)],sc=sourceCols[modulo(ci-colOffset,sourceCols.length)],cell=structuredClone(sourceCells[address(sr,sc)]||{raw:''});
+  const sr=sourceRows[modulo(ri-rowOffset,sourceRows.length)],sc=sourceCols[modulo(ci-colOffset,sourceCols.length)],cell=cloneData(sourceCells[address(sr,sc)]||{raw:''});
   const trend=trends.get(vertical?sc:sr);
   if(trend)cell.raw=trend(vertical?ri-rowOffset:ci-colOffset);
   else if(cell.raw?.startsWith('='))cell.raw=shiftFormula(cell.raw,r-sr,c-sc);

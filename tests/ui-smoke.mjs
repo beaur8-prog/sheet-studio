@@ -27,7 +27,7 @@ try{
  await enter('C1','한글 입력');await checkCell('C1','한글 입력');
  await go('A2');await page.getByRole('button',{name:'행 삽입',exact:true}).click();
  await checkCell('A4','35');await checkCell('B3','40');
- await page.reload();await cell('A1').waitFor();await checkCell('A4','35');
+ await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await cell('A1').waitFor();await checkCell('A4','35');
  await go('XFD1048576');assert.equal(await page.locator('#name-box').inputValue(),'XFD1048576');
  await go('A1');
  await page.getByRole('button',{name:'도움말',exact:true}).click();await page.getByRole('button',{name:'예제 통합 문서',exact:true}).click();

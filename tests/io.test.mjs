@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
@@ -125,4 +126,12 @@ test('invalid format and broken input give clear errors', async () => {
   await assert.rejects(readSpreadsheet(new Uint8Array(), 'broken.xlsx'), /XLSX/);
   await assert.rejects(readSpreadsheet(new TextEncoder().encode('"unclosed'), 'broken.csv'), /따옴표/);
   await assert.rejects(writeSpreadsheet(sample(), 'pdf'), /지원되지/);
+});
+
+test('oversized expanded XLSX entries are rejected before inflation',async()=>{
+  const zip=new JSZip();zip.file('xl/worksheets/sheet1.xml','<worksheet/>',{createFolders:false});
+  const bytes=Buffer.from(await zip.generateAsync({type:'uint8array'}));
+  const central=bytes.indexOf(Buffer.from([0x50,0x4b,0x01,0x02]));assert.ok(central>=0);
+  bytes.writeUInt32LE(513*1024*1024,central+24);
+  await assert.rejects(()=>readSpreadsheet(bytes,'large.xlsx'),/512 MB/);
 });

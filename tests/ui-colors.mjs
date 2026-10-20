@@ -12,7 +12,7 @@ const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package','sheet-lif
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow();
 page.setDefaultTimeout(8000);const findings=[];
-const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 const load=async b=>{await page.locator('#file-input').setInputFiles({name:'review.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await page.waitForFunction(n=>sheetStudio.getWorkbook().name===n,b.name);await settle();};
 const rename=async(name)=>{await page.locator('[data-sheet].active').click({button:'right'});await page.locator('[data-action="rename-sheet"]').click();await page.locator('#prompt-value').fill(name);await page.getByRole('dialog').getByRole('button',{name:'확인',exact:true}).click();await settle();};
 try{

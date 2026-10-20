@@ -67,6 +67,6 @@ try{
   point=await start('col',0);await move(point,30,0);await page.mouse.up();await frame();
   assert.equal((await model()).cells.B2.raw,'편집 내용 유지');assert.equal((await model()).columnWidths[0],230);
   await undo();assert.equal((await model()).columnWidths[0],210);assert.equal((await model()).cells.B2.raw,'편집 내용 유지');
-  const saved=await model();await page.reload();await page.locator('.cell').first().waitFor();assert.deepEqual((await model()).columnWidths,saved.columnWidths);assert.deepEqual((await model()).rowHeights,saved.rowHeights);
+  const saved=await model();await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('.cell').first().waitFor();assert.deepEqual((await model()).columnWidths,saved.columnWidths);assert.deepEqual((await model()).rowHeights,saved.rowHeights);
   assert.deepEqual(errors,[]);console.log('Dimension UI passed: boundary hover/hit area, live column/row drag, capture across redraws, guide, undo/redo/no-op, Escape/blur cancel, double-click AutoFit, zoom, frozen/scrolled headers, hidden dimensions and reload.');
 }finally{await app.close();}

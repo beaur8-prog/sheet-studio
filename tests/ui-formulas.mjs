@@ -15,7 +15,7 @@ book.sheets.push({id:'other',name:"다른 '시트'",cells:{A1:{raw:'7'},A2:{raw:
 const settle=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');await settle();};
 const cell=a=>page.getByRole('gridcell',{name:a,exact:true});
-const value=a=>page.evaluate(a=>sheetStudio.evaluate(a),a);
+const value=a=>page.evaluate(a=>sheetStudio.evaluateAsync(a),a);
 const raw=a=>page.evaluate(a=>sheetStudio.getWorkbook().sheets[0].cells[a]?.raw||'',a);
 const sum=()=>page.getByRole('button',{name:'자동 합계',exact:true}).click();
 const draft=async(a,text)=>{await go(a);await page.keyboard.press('F2');await page.locator('#editor').fill(text);await settle();};
@@ -50,6 +50,6 @@ try{
  await page.locator('#zoom').evaluate(el=>{el.value='100';el.dispatchEvent(new Event('input',{bubbles:true}));});await draft('A12','한글 입력');await page.locator('#editor').dispatchEvent('keydown',{key:'Enter',isComposing:true});assert.equal(await raw('A12'),'');await page.locator('#editor').press('Enter');assert.equal(await raw('A12'),'한글 입력');
  await go('A1:B5');await page.getByRole('button',{name:'데이터',exact:true}).click();await page.getByRole('button',{name:'필터',exact:true}).click();await page.locator('[data-filter-column="1"]').click();await page.locator('#filter-search').fill('10');await page.locator('#filter-ok').click();
  await draft('J1','=');await page.locator('[data-sheet="other"]').click();await page.locator('[data-sheet="sheet-1"]').click();await page.locator('#formula').press('Escape');await page.waitForFunction(()=>document.querySelector('#status').textContent==='필터 모드');assert.equal(await page.locator('#status').innerText(),'필터 모드');assert.equal(await cell('B3').count(),0);await page.getByRole('button',{name:'지우기',exact:true}).click();
- await page.reload();await cell('B5').waitFor();assert.equal(await value('B5'),50);assert.equal(await value('J8'),15);assert.deepEqual(errors,[]);
+ await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await cell('B5').waitFor();assert.equal(await value('B5'),50);assert.equal(await value('J8'),15);assert.deepEqual(errors,[]);
  console.log('Formula UI passed: AutoSum draft/range/edit/confirm/cancel, horizontal and multi-column totals, overwrite guard, undo, mouse/keyboard references, colors, F4, formula-bar Tab, cross-sheet refs, zoom/scroll, invalid addresses, IME guard and persistence.');
 }catch(error){await page.screenshot({path:path.join(root,'test-results/formula-failure.png')});throw error;}finally{await app.close();}

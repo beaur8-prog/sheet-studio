@@ -10,7 +10,7 @@ const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes
 const dataDir=path.join(root,'.package','chart-audit-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);await page.setViewportSize({width:1280,height:900});
-const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 const get=()=>page.evaluate(()=>sheetStudio.getWorkbook());
 const go=async range=>{await page.locator('#name-box').fill(range);await page.locator('#name-box').press('Enter');await settle();};
 let fixture=0;
@@ -44,7 +44,7 @@ try{
  await load([['항목','가','나','다','라'],['매출',10,20,30,40],['비용',5,8,12,15]]);await open('A1:E3','pie',{seriesBy:'rows'});assert.match(await page.locator('#chart-data-help').innerText(),/2개 계열.*첫 계열/);assert.equal(await page.locator('#chart-first-row').isChecked(),true);assert.equal(await page.locator('#chart-first-column').isChecked(),true);await submit('삽입');await check(4);
  await page.locator('[data-edit-chart]').click();await page.locator('#chart-type').selectOption('doughnut');await submit('적용');await check(8);await page.locator('#undo').click();await check(4);await page.locator('#redo').click();await check(8);
  await page.locator('[data-edit-chart]').click();await page.locator('#chart-series-by').selectOption('columns');await submit('적용');await check(8);assert.equal((await get()).sheets[0].charts[0].seriesBy,'columns');await page.locator('#undo').click();assert.equal((await get()).sheets[0].charts[0].seriesBy,'rows');
- await page.locator('[data-edit-chart]').click();await page.locator('#chart-series-by').selectOption('columns');await page.getByRole('button',{name:'닫기',exact:true}).click();assert.equal((await get()).sheets[0].charts[0].seriesBy,'rows');await page.reload();await page.locator('.chart-card').waitFor();await check(8);
+ await page.locator('[data-edit-chart]').click();await page.locator('#chart-series-by').selectOption('columns');await page.getByRole('button',{name:'닫기',exact:true}).click();assert.equal((await get()).sheets[0].charts[0].seriesBy,'rows');await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('.chart-card').waitFor();await check(8);
  await roundtrip();await check(8);
  // The added direction control must not push Apply/Close outside a short window.
  await page.setViewportSize({width:1024,height:600});await load([[10,20,30,40]]);await open('A1:D1','pie');

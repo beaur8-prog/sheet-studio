@@ -1,3 +1,4 @@
+import {worksheetMetadataXML,splitWorksheetXML} from './worksheet-metadata.mjs';
 import JSZip from 'jszip';
 import {chartSeries,chartData,parseChartFormula,refFormula,refValues,referenceSize,chartColors} from './chart-model.mjs';
 import {chartRect} from './chart-geometry.mjs';
@@ -50,7 +51,7 @@ export async function restoreChartParts(bytes,workbook){
     const relation=bookRels.find(r=>r.id===attr(entry,'r:id'));if(!relation||relation.mode==='External')continue;
     let sheet=workbook.sheets.find(s=>s.name===attr(entry,'name'));
     if(!sheet)continue; // Chart-only sheets are not worksheets in the current cell editor.
-    const sheetPart=resolvePart('xl/workbook.xml',relation.target),sheetXML=xml(await zip.file(sheetPart).async('string')),sheetRels=await readRelationships(zip,sheetPart);
+    const sheetPart=resolvePart('xl/workbook.xml',relation.target),sheetXML=xml(worksheetMetadataXML(await zip.file(sheetPart).async('string'))),sheetRels=await readRelationships(zip,sheetPart);
     const format=first(sheetXML,'sheetFormatPr');sheet.defaultColumnWidth=Math.round((Number(attr(format,'defaultColWidth'))||8.43)*digitWidth+5);sheet.defaultRowHeight=(Number(attr(format,'defaultRowHeight'))||15)*4/3;
     for(const drawing of all(sheetXML,'drawing')){
       const drawingRel=sheetRels.find(r=>r.id===attr(drawing,'r:id'));if(!drawingRel||drawingRel.mode==='External')continue;
@@ -163,7 +164,7 @@ export async function addChartParts(bytes,workbook,names){
     }
     const drawing=`xl/drawings/sheetStudioDrawing${index+1}.xml`,sheetPart=`xl/worksheets/sheet${index+1}.xml`;
     zip.file(drawing,`${DECL}<xdr:wsDr xmlns:xdr="${D}" xmlns:a="${A}" xmlns:r="${R}">${anchors}</xdr:wsDr>`);zip.file(relPath(drawing),relationships(drawingRelations));content(drawing,DRAWING_TYPE);
-    const doc=xml(await zip.file(sheetPart).async('string')),node=doc.createElementNS(doc.documentElement.namespaceURI,'drawing');node.setAttributeNS(R,'r:id','rIdSheetStudioDrawing');const before=children(doc.documentElement).find(n=>['legacyDrawing','legacyDrawingHF','picture','oleObjects','controls','webPublishItems','tableParts','extLst'].includes(n.localName));doc.documentElement.insertBefore(node,before||null);zip.file(sheetPart,stringify(doc));
+    const preserved=splitWorksheetXML(await zip.file(sheetPart).async('string')),doc=xml(preserved.metadata),node=doc.createElementNS(doc.documentElement.namespaceURI,'drawing');node.setAttributeNS(R,'r:id','rIdSheetStudioDrawing');const before=children(doc.documentElement).find(n=>['legacyDrawing','legacyDrawingHF','picture','oleObjects','controls','webPublishItems','tableParts','extLst'].includes(n.localName));doc.documentElement.insertBefore(node,before||null);zip.file(sheetPart,preserved.restore(stringify(doc)));
     const rels=zip.file(relPath(sheetPart))?xml(await zip.file(relPath(sheetPart)).async('string')):xml(relationships('')),r=xml(relationships(relationship('rIdSheetStudioDrawing',R+'/drawing','/'+drawing))).documentElement.firstChild;rels.documentElement.appendChild(rels.importNode(r,true));zip.file(relPath(sheetPart),stringify(rels));
   }
   if(workbook.chartTheme)zip.file('xl/theme/theme1.xml',workbook.chartTheme);

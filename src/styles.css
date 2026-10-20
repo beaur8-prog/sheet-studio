@@ -26,3 +26,7 @@ button.color-input{border-bottom:4px solid;width:28px;height:26px;font-weight:70
 .cell-editor.entry-ready{opacity:0;pointer-events:none;caret-color:transparent}
 
 .chart-modal{display:flex;flex-direction:column;max-height:calc(100dvh - 32px)}.chart-modal>h2,.chart-modal>.modal-actions{flex-shrink:0}.chart-modal>.modal-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:4px}
+/* Keep painting and window controls responsive during background document work. */
+.workbook-busy{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;gap:12px;background:#181818b8;color:#fff;font:14px system-ui;backdrop-filter:blur(2px)}
+.workbook-spinner{width:24px;height:24px;border:3px solid #ffffff44;border-top-color:#5ac98c;border-radius:50%;animation:workbook-spin .8s linear infinite}
+@keyframes workbook-spin{to{transform:rotate(360deg)}}

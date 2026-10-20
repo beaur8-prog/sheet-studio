@@ -1,3 +1,5 @@
+import {cloneData} from './clone.mjs';
+import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 import {address,parseAddress,createEvaluator,formatValue,shiftFormula} from './engine.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
@@ -114,12 +116,12 @@ export function compareFilterValues(a,b,desc){
 export function sortFilterRange(book,sheet,column,desc){
   const f=sheet.autoFilter,b=f.range,evaluate=createEvaluator(book,sheet.id),rows=[],destinations=[],hidden=new Set(f.hiddenRows||[]);
   if(f.unsupported?.length)throw Error('지원하지 않는 필터를 지운 뒤 정렬하세요.');
-  if((b.r2-b.r1)*(b.c2-b.c1+1)>200000)throw Error('한 번에 200,000개 이하의 셀을 정렬하세요.');
+  if((b.r2-b.r1)*(b.c2-b.c1+1)>MAX_DOCUMENT_CELLS)throw Error('한 번에 1,000,000개 이하의 셀을 정렬하세요.');
   if(sheet.merges?.some(m=>{const [a,z]=m.split(':').map(parseAddress);return a.r<=b.r2&&z.r>b.r1&&a.c<=b.c2&&z.c>=b.c1;}))throw Error('병합된 셀이 있는 범위는 정렬할 수 없습니다.');
   for(let r=b.r1+1;r<=b.r2;r++){
     if(hidden.has(r))continue;
     destinations.push(r);
-    const cells=[];for(let c=b.c1;c<=b.c2;c++)cells.push(structuredClone(sheet.cells[address(r,c)]));
+    const cells=[];for(let c=b.c1;c<=b.c2;c++)cells.push(cloneData(sheet.cells[address(r,c)]));
     rows.push({r,cells,value:filterValue(sheet,evaluate,r,column)});
   }
   rows.sort((a,b)=>compareFilterValues(a.value,b.value,desc));
@@ -129,6 +131,21 @@ export function sortFilterRange(book,sheet,column,desc){
     if(cell.raw.startsWith('='))cell.raw=shiftFormula(cell.raw,r-row.r,0);
     sheet.cells[key]=cell;
   }));f.sort={column,desc};
+}
+
+export function sortRange(book,sheet,b,column,desc){
+  if(!b||![b.r1,b.r2,b.c1,b.c2].every(Number.isInteger)||b.r1<0||b.c1<0||b.r2>=1048576||b.c2>=16384||b.r2<b.r1||b.c2<b.c1||(b.r2-b.r1+1)*(b.c2-b.c1+1)>MAX_DOCUMENT_CELLS)throw Error('정렬 범위는 최대 1,000,000셀입니다.');
+  if(sheet.merges?.some(m=>{const [a,z]=m.split(':').map(parseAddress);return a.r<=b.r2&&z.r>=b.r1&&a.c<=b.c2&&z.c>=b.c1;}))throw Error('병합 셀이 포함된 범위는 정렬할 수 없습니다.');
+  const evaluate=createEvaluator(book,sheet.id),rows=[];
+  for(let r=b.r1;r<=b.r2;r++){
+    const cells=[];for(let c=b.c1;c<=b.c2;c++)cells.push(sheet.cells[address(r,c)]);
+    rows.push({r,cells,value:filterValue(sheet,evaluate,r,column)});
+  }
+  rows.sort((a,b)=>compareFilterValues(a.value,b.value,desc)||a.r-b.r);
+  rows.forEach((row,i)=>row.cells.forEach((source,c)=>{
+    const ref=address(b.r1+i,b.c1+c);if(!source){delete sheet.cells[ref];return;}
+    sheet.cells[ref]=source.raw?.startsWith('=')?{...source,raw:shiftFormula(source.raw,b.r1+i-row.r,0)}:source;
+  }));
 }
 export function shiftAutoFilter(sheet,axis,index,delta){
   const f=sheet.autoFilter;if(!f)return;const b=f.range,lo=axis==='r'?'r1':'c1',hi=axis==='r'?'r2':'c2';

@@ -245,7 +245,7 @@ export function createFunctionRuntime(h) {
       if(name==='LARGE'||name==='SMALL'){
         const k=name==='LARGE'?Math.ceil(num(1)):Math.floor(num(1));if(k<1||k>values.length)fail('#NUM!');values.sort((a,b)=>a-b);return values[name==='LARGE'?values.length-k:k-1];
       }
-      if(name.startsWith('PERCENTRANK')&&(num(1)<Math.min(...values)||num(1)>Math.max(...values)))fail('#N/A');
+      if(name.startsWith('PERCENTRANK')&&(num(1)<values.reduce((a,b)=>Math.min(a,b),Infinity)||num(1)>values.reduce((a,b)=>Math.max(a,b),-Infinity)))fail('#N/A');
       return libraryCall(name,[values,...args.slice(1).map(v=>numeric(v))]);
     }
     if(name==='RANK.AVG'||name==='RANK.EQ')return libraryCall(name,[num(0),numericItems([args[1]]),args.length>2?num(2):0]);
@@ -317,7 +317,7 @@ export function createFunctionRuntime(h) {
       if(name==='XNPV'){if(num(0)<=-1)fail('#NUM!');return finite(npv(num(0)));}
       if(!values.some(v=>v>0)||!values.some(v=>v<0))fail('#NUM!');
       let rate=omitted(2)?0.1:num(2);if(rate<=-1)fail('#NUM!');
-      const tolerance=1e-10*Math.max(1,...values.map(Math.abs));
+      const tolerance=1e-10*values.reduce((n,v)=>Math.max(n,Math.abs(v)),1);
       for(let i=0;i<100;i++){
         const value=npv(rate);if(Math.abs(value)<tolerance)return rate;
         const derivative=-sum(values.map((v,i)=>times[i]*v/(1+rate)**(times[i]+1)));

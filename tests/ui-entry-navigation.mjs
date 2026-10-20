@@ -35,7 +35,7 @@ try{
  await entered('E5','hidden column','ArrowRight','G5');await entered('E5','hidden row','ArrowDown','E7');
  await entered('H10','merged right','ArrowRight','J10');await entered('H10','merged down','ArrowDown','H12');
  await entered('A1','left edge','ArrowLeft','A1');await entered('A1','top edge','ArrowUp','A1');
- await entered('B22','=1+2','ArrowDown','B23');assert.equal(await page.evaluate(()=>sheetStudio.evaluate('B22')),3);
+ await entered('B22','=1+2','ArrowDown','B23');assert.equal(await page.evaluate(()=>sheetStudio.evaluateAsync('B22')),3);
  // A formula awaiting a reference still points to cells instead of committing.
  await go('D22');await page.keyboard.type('=');await editor.press('ArrowLeft');assert.equal(await editor.inputValue(),'=C22');assert.equal(await raw('D22'),undefined);await editor.press('Escape');
  // F2 and double-click are explicit text editing, including after another input event.

@@ -8,6 +8,15 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   saveFile: payload => ipcRenderer.invoke('sheet:save-file', payload),
   setTitle: title => ipcRenderer.send('sheet:set-title', String(title)),
   editText: action => ipcRenderer.invoke('sheet:edit-text', action),
+  onBeforeClose: listener => {
+    const handler = async (_event, id) => {
+      try { await listener(); ipcRenderer.send('sheet:close-ready', {id}); }
+      catch (error) { ipcRenderer.send('sheet:close-ready', {id, error: error.message}); }
+    };
+    ipcRenderer.on('sheet:before-close', handler);
+    ipcRenderer.send('sheet:recovery-ready');
+    return () => ipcRenderer.removeListener('sheet:before-close', handler);
+  },
   onWindowBlur: listener => {
     if (typeof listener !== 'function') throw new TypeError('A window listener is required.');
     const handler = () => listener();

@@ -4,6 +4,8 @@
 
 현재 배포 버전은 **0.7.16**입니다. 색 기준 필터(셀 채우기색·글자색·채우기 없음), 가로로 선택한 값의 차트 누락 수정, 세로 막대형의 항목명·색·간격 정리를 포함합니다. 숫자 연속 자동 채우기, 범례 가운데 정렬과 첫 한글 조합 입력 수정도 포함합니다. [이번 릴리즈 안내](docs/releases/v0.7.16.md)를 확인하세요.
 
+현재 소스의 **0.7.17 개발판**은 문서 전체 100만 셀과 변경분 실행 취소·IndexedDB 자동 복구·작업 스레드 처리를 지원합니다. 공개 0.7.16 다운로드에는 아직 포함되지 않았습니다. [대용량 문서의 범위와 사용법](docs/CAPACITY.md)을 확인하세요.
+
 설치된 Microsoft Excel의 네이티브 실행 파일과 한국어 UI를 분석하고, 익숙한 작업 흐름을 독립적으로 구현한 Windows·macOS 스프레드시트 앱입니다. Microsoft Excel의 원본 코드 복원이나 전체 기능의 동일성을 주장하지 않습니다.
 
 ## 실행
@@ -18,7 +20,7 @@ npm run runtime:install
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.16/win-x64/Sheet-Studio-0.7.16-Windows-x64-Setup.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.17/win-x64/Sheet-Studio-0.7.17-Windows-x64-Setup.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
 **Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS arm64의 실제 실행과 시트 수명주기 회귀 테스트를 확인했습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 
@@ -57,7 +59,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 ## 범위와 차이
 
-독립 VBA 런타임, Power Query 편집기, 공동 편집, 외부 연결, 동적 배열, 전체 열 수식(`A:A`), Excel 전체 함수 및 모든 계산 규칙은 구현하지 않았습니다. VBA는 설치된 Excel에서 실행합니다. 큰 문서의 호환성이나 Excel과의 모든 경계 조건 일치는 보장하지 않습니다. 선택 편집/수식 범위는 최대 100,000셀, 저장 모델은 최대 200,000개의 기록된 셀로 제한합니다. XLSM 원본과 실행 결과는 각각 최대 15 MB입니다.
+독립 VBA 런타임, Power Query 편집기, 공동 편집, 외부 연결, 동적 배열, 전체 열 수식(`A:A`), Excel 전체 함수 및 모든 계산 규칙은 구현하지 않았습니다. VBA는 설치된 Excel에서 실행합니다. 큰 문서의 호환성이나 Excel과의 모든 경계 조건 일치는 보장하지 않습니다. 0.7.17 소스는 기록된 셀과 수식 범위를 최대 1,000,000셀, 선택 편집·붙여넣기·채우기를 한 번에 최대 100,000셀로 제한합니다. XLSM 원본과 실행 결과는 각각 최대 15 MB이며 Excel 연결의 셀 변경 계획은 200,000개 이하입니다. [기능별 제한](docs/CAPACITY.md)을 참조하세요.
 
 차트 테두리의 조절점을 끌면 크기가 바뀝니다. 조절점에 키보드 포커스를 두고 방향키로 10px, Shift+방향키로 1px씩 조절할 수 있습니다. Esc로 드래그를 취소합니다.
 

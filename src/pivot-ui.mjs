@@ -1,3 +1,4 @@
+import {cloneData} from './clone.mjs';
 import {sourceData,buildPivot,applyPivot,aggregations,scalarKey,pivotLabel} from './pivot.mjs';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -6,7 +7,7 @@ export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,
     const book=getWorkbook(),target=getSheet().pivot?getSheet():null;
     const sources=book.sheets.filter(s=>!s.pivot);
     if(!sources.length)return toast('먼저 원본 데이터 시트를 만드세요.');
-    let draft=target?structuredClone(target.pivot):{version:1,sourceSheetId:getSheet().id,sourceRange:getRange(),rows:[],columns:[],values:[],filters:[],totals:true,sort:'asc'};
+    let draft=target?cloneData(target.pivot):{version:1,sourceSheetId:getSheet().id,sourceRange:getRange(),rows:[],columns:[],values:[],filters:[],totals:true,sort:'asc'};
     let data=null,loadedKey='',timer;
     const el=modal(target?'피벗테이블 편집':'피벗테이블 만들기',`
       <p class="pivot-intro">머리글이 있는 원본에서 필드를 배치하세요. 결과는 별도 시트에 표시됩니다.</p>
@@ -21,7 +22,7 @@ export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,
           const output=buildPivot(book,draft);
           if(!target&&book.sheets.length>=100)throw new Error('시트는 최대 100개까지 지원합니다.');
           let n=1;while(book.sheets.some(s=>s.name===`피벗 ${n}`))n++;
-          const next=target?structuredClone(target):{id:crypto.randomUUID(),name:`피벗 ${n}`,cells:{},columnWidths:{},rowHeights:{},merges:[],charts:[]};
+          const next=target?cloneData(target):{id:crypto.randomUUID(),name:`피벗 ${n}`,cells:{},columnWidths:{},rowHeights:{},merges:[],charts:[]};
           applyPivot(book,next,draft,output);checkpoint();
           if(target)Object.assign(target,next);else book.sheets.push(next);
           el.remove();clearTimeout(timer);switchSheet(next.id);toast(`${output.matched.toLocaleString()}개 데이터 행을 집계했습니다.`);
@@ -79,7 +80,7 @@ export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,
     const book=getWorkbook(),targets=all?book.sheets.filter(s=>s.pivot):[getSheet()].filter(s=>s.pivot);
     if(!targets.length)return toast('새로 고칠 피벗테이블이 없습니다.');
     try{
-      const copies=structuredClone(book);
+      const copies=cloneData(book);
       for(const target of targets)applyPivot(copies,copies.sheets.find(s=>s.id===target.id),target.pivot);
       checkpoint();for(const target of targets)Object.assign(target,copies.sheets.find(s=>s.id===target.id));
       changed({rebuild:true});toast(`${targets.length}개 피벗테이블을 새로 고쳤습니다.`);

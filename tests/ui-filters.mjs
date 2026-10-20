@@ -11,9 +11,9 @@ const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUT
 const page=await app.firstWindow(),errors=[],modifier=process.platform==='darwin'?'Meta':'Control';page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
 const book=fixture();delete book.sheets[0].autoFilter;
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');};
-const model=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);
+const model=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());return page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);};
 const hidden=async()=> (await model()).autoFilter.hiddenRows;
-const value=a=>page.evaluate(a=>sheetStudio.evaluate(a),a);
+const value=a=>page.evaluate(a=>sheetStudio.evaluateAsync(a),a);
 const arrow=c=>page.locator(`[data-filter-column="${c}"]`),ok=async()=>{await page.locator('#filter-ok').click();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));};
 let savedClipboard;
 try{
@@ -44,7 +44,7 @@ try{
   await arrow(2).click();await page.locator('[data-sort="desc"]').click();assert.equal((await model()).cells.C4.raw,'90');assert.equal((await model()).cells.B3.raw,'지역');
   await arrow(1).click();await page.locator('#filter-search').fill('서울');await ok();
   await page.getByRole('button',{name:'새 시트',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.filter-arrow').length===0);assert.equal(await page.locator('.filter-arrow').count(),0);await page.locator('.sheet-tab').filter({hasText:/^Sheet1$/}).click();await page.locator('.filter-arrow').first().waitFor();assert.equal(await page.locator('.filter-arrow').count(),3);
-  await page.reload();await arrow(1).waitFor();assert.ok((await hidden()).length>0);assert.equal(await value('D15'),100);
+  await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await arrow(1).waitFor();assert.ok((await hidden()).length>0);assert.equal(await value('D15'),100);
   await page.getByRole('button',{name:'데이터',exact:true}).click();await go('C6');await page.keyboard.press('F2');await page.locator('#editor').fill('999');await page.locator('#editor').press('Enter');
   await arrow(2).click();await page.locator('.filter-condition-menu summary').click();await page.locator('[data-condition="greaterThan"]').click();await page.locator('#filter-value-0').fill('500');await ok();
   await go('C6');await page.keyboard.press('F2');await page.locator('#editor').fill('1');await page.locator('#editor').press('Enter');assert.ok(! (await hidden()).includes(5));await page.getByRole('button',{name:'다시 적용',exact:true}).click();assert.ok((await hidden()).includes(5));

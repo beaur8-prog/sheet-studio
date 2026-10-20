@@ -1,3 +1,5 @@
+import {MAX_DOCUMENT_CELLS, MAX_DOCUMENT_TEXT_CHARS, MAX_FORMULA_CELLS} from './limits.mjs';
+import {unwrap} from './clone.mjs';
 import {validateBorders} from './borders.mjs';
 import {validateFreeze,validateConditionalRules} from './worksheet-schema.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
@@ -8,11 +10,13 @@ import {normalizeFunctionName,XLSX_FUTURE_FUNCTIONS} from './function-catalog.mj
 /** A small, original spreadsheet evaluator. No JavaScript evaluation is used. */
 const MAX_ROWS = 1048576;
 const MAX_COLS = 16384;
-const MAX_RANGE_CELLS = 100000;
-const MAX_STEPS = 200000;
+const MAX_RANGE_CELLS = MAX_FORMULA_CELLS;
+const MAX_STEPS = 8_000_000;
 const MAX_DEPTH = 160;
 const BLANK = Symbol('blank');
 const DAY_MS = 86400000;
+const externalEvaluators = new WeakMap();
+export function setExternalEvaluator(workbook, evaluator) { externalEvaluators.set(unwrap(workbook), evaluator); }
 
 class FormulaError extends Error {
   constructor(code) { super(code); this.code = code; }
@@ -274,6 +278,9 @@ function readCell(ctx, sheet, ref) {
   const pos = parseAddress(ref);
   if (!pos) return new FormulaError('#REF!');
   ref = address(pos.r, pos.c);
+  const raw = sheet.cells?.[ref]?.raw ?? '';
+  // Literal values are cheap; caching a million of them duplicates the model.
+  if (typeof raw !== 'string' || !raw.startsWith('=')) return literal(raw);
   const key = `${sheet.id}!${ref}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key);
   if (ctx.active.has(key)) return new FormulaError('#CYCLE!');
@@ -284,8 +291,8 @@ function readCell(ctx, sheet, ref) {
   const original = ctx.sheet, originalPosition=ctx.position;
   try {
     ctx.sheet = sheet;ctx.position=pos;
-    const raw = sheet.cells?.[ref]?.raw ?? '';
-    value = typeof raw === 'string' && raw.startsWith('=') ? checked(evaluateNode(new Parser(raw).parse(), ctx, 0)) : literal(raw);
+    const external = externalEvaluators.get(unwrap(ctx.workbook));
+    value = typeof raw === 'string' && raw.startsWith('=') ? (external ? external(sheet.id, ref) : checked(evaluateNode(new Parser(raw).parse(), ctx, 0))) : literal(raw);
     if (value === BLANK && raw.startsWith('=')) value = 0;
   } catch (error) {
     value = error instanceof FormulaError ? error : new FormulaError('#VALUE!');
@@ -1012,7 +1019,26 @@ export function toCSV(rows) {
   }).join(',')).join('\r\n');
 }
 
-function validateWorkbook(data) {
+export function validateCell(ref, cell) {
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
+  if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+  if (cell.style) {
+    if (cell.style.borders !== undefined) validateBorders(cell.style.borders);
+    for (const field of ['bold', 'italic', 'underline', 'wrap', 'border']) if (cell.style[field] !== undefined && typeof cell.style[field] !== 'boolean') throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+    for (const field of ['fontFamily', 'color', 'background', 'align', 'verticalAlign', 'format', 'numberFormat']) if (cell.style[field] !== undefined && (typeof cell.style[field] !== 'string' || cell.style[field].length > 512)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+    if (cell.style.fontSize !== undefined && (typeof cell.style.fontSize !== 'number' || !Number.isFinite(cell.style.fontSize) || cell.style.fontSize <= 0 || cell.style.fontSize > 4096)) throw new Error(`글꼴 크기가 올바르지 않습니다: ${ref}`);
+    if (cell.style.decimals !== undefined && (!Number.isInteger(cell.style.decimals) || cell.style.decimals < 0 || cell.style.decimals > 12)) throw new Error(`소수점 자릿수가 올바르지 않습니다: ${ref}`);
+    for (const field of ['color', 'background']) if (cell.style[field] && !/^(?:#[\da-f]{3,8}|[a-z]+|(?:rgb|hsl)a?\([\d.%+,\s/-]+\))$/i.test(cell.style[field])) throw new Error(`셀 색상이 올바르지 않습니다: ${ref}`);
+    if (cell.style.fontFamily && /[;{}<>]/.test(cell.style.fontFamily)) throw new Error(`글꼴 이름이 올바르지 않습니다: ${ref}`);
+  }
+}
+
+export function validateWorkbookMetadata(book) {
+  return validateWorkbook({...book,sheets:book.sheets.map(sheet=>({...sheet,cells:{}}))});
+}
+
+export function validateWorkbook(data) {
   const object = value => value && typeof value === 'object' && !Array.isArray(value);
   const validRange = value => {
     if (typeof value !== 'string') return false;
@@ -1024,7 +1050,7 @@ function validateWorkbook(data) {
   if (!object(data) || !Array.isArray(data.sheets) || data.sheets.length < 1 || data.sheets.length > 100) throw new Error('유효한 통합 문서가 아닙니다.');
   if (typeof data.name !== 'string' || data.name.length > 255) throw new Error('통합 문서 이름이 올바르지 않습니다.');
   const ids = new Set(), names = new Set();
-  let cellCount = 0;
+  let cellCount = 0, textCount = 0;
   for (const sheet of data.sheets) {
     if (!object(sheet) || typeof sheet.id !== 'string' || !sheet.id || ids.has(sheet.id)) throw new Error('시트 ID가 올바르지 않습니다.');
     if (typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 31 || /[:\\/?*\[\]]/.test(sheet.name) || names.has(sheet.name.toLowerCase())) throw new Error('시트 이름이 올바르지 않습니다.');
@@ -1038,18 +1064,9 @@ function validateWorkbook(data) {
     if (sheet.pivot !== undefined) { validatePivot(sheet.pivot); if (sheet.pivot.sourceSheetId === sheet.id) throw new Error('피벗 원본은 다른 시트여야 합니다.'); }
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
     for (const [ref, cell] of Object.entries(sheet.cells)) {
-      if (++cellCount > 200000) throw new Error('통합 문서의 셀 수가 제한을 초과했습니다.');
-      if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
-      if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
-      if (cell.style) {
-        if (cell.style.borders !== undefined) validateBorders(cell.style.borders);
-        for (const field of ['bold', 'italic', 'underline', 'wrap', 'border']) if (cell.style[field] !== undefined && typeof cell.style[field] !== 'boolean') throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
-        for (const field of ['fontFamily', 'color', 'background', 'align', 'verticalAlign', 'format', 'numberFormat']) if (cell.style[field] !== undefined && (typeof cell.style[field] !== 'string' || cell.style[field].length > 512)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
-        if (cell.style.fontSize !== undefined && (typeof cell.style.fontSize !== 'number' || !Number.isFinite(cell.style.fontSize) || cell.style.fontSize <= 0 || cell.style.fontSize > 4096)) throw new Error(`글꼴 크기가 올바르지 않습니다: ${ref}`);
-        if (cell.style.decimals !== undefined && (!Number.isInteger(cell.style.decimals) || cell.style.decimals < 0 || cell.style.decimals > 12)) throw new Error(`소수점 자릿수가 올바르지 않습니다: ${ref}`);
-        for (const field of ['color', 'background']) if (cell.style[field] && !/^(?:#[\da-f]{3,8}|[a-z]+|(?:rgb|hsl)a?\([\d.%+,\s/-]+\))$/i.test(cell.style[field])) throw new Error(`셀 색상이 올바르지 않습니다: ${ref}`);
-        if (cell.style.fontFamily && /[;{}<>]/.test(cell.style.fontFamily)) throw new Error(`글꼴 이름이 올바르지 않습니다: ${ref}`);
-      }
+      if (++cellCount > MAX_DOCUMENT_CELLS) throw new Error('통합 문서의 셀 수가 제한을 초과했습니다.');
+      validateCell(ref, cell);
+      if((textCount+=cell.raw.length)>MAX_DOCUMENT_TEXT_CHARS)throw Error('문서의 셀 텍스트 총량이 제한을 초과했습니다.');
     }
     for (const field of ['columnWidths', 'rowHeights']) {
       if (sheet[field] === undefined) sheet[field] = {};

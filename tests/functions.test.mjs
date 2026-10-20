@@ -85,7 +85,8 @@ test('reference functions retain coordinates, sheet identity and dependency cycl
   assert.equal(calc('=ISREF(2)'),false);
   assert.equal(calc('=INDIRECT("SUM(A1:A5)")'),'#REF!');
   assert.equal(calc('=OFFSET(A1,-1,0)'),'#REF!');
-  assert.equal(calc('=SUM(OFFSET(A1,0,0,100001,1))'),'#NUM!');
+  assert.equal(calc('=SUM(OFFSET(A1,0,0,100001,1))'),15);
+  assert.equal(calc('=SUM(OFFSET(A1,0,0,1000001,1))'),'#NUM!');
   assert.equal(calc('=SUBTOTAL(9,A1:A6)',{A6:'=SUBTOTAL(9,A1:A5)'}),15);
   assert.equal(calc('=SUM(A1:A6)',{A6:'=SUBTOTAL(9,A1:A5)'}),30);
 });

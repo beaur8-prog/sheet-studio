@@ -43,7 +43,7 @@ async function smoke() {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [paths.source] });
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: paths.destination });
     }, { source, destination });
-    const opened = await page.evaluate(() => window.desktop.openFile());
+    const opened = await page.evaluate(async () => {const file=await window.desktop.openFile();return {...file,data:Array.from(file.data)};});
     assert.equal(opened.name, 'source.csv');
     assert.equal(Buffer.from(opened.data).toString('utf8'), '이름,금액\r\n테스트,42');
     const saved = await page.evaluate(data => window.desktop.saveFile({ name: 'saved.csv', data }), opened.data);

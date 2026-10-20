@@ -12,7 +12,7 @@ const page=await app.firstWindow(),errors=[],modifier=process.platform==='darwin
 const book=createWorkbook();book.sheets[0].cells=Object.fromEntries([1,2,3,4,5].map((n,i)=>['A'+(i+1),{raw:String(n)}]));
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');};
 const raw=a=>page.evaluate(a=>sheetStudio.getWorkbook().sheets[0].cells[a]?.raw||'',a);
-const value=a=>page.evaluate(a=>sheetStudio.evaluate(a),a);
+const value=a=>page.evaluate(a=>sheetStudio.evaluateAsync(a),a);
 const draft=async(a,text)=>{await go(a);await page.keyboard.press('F2');await page.locator('#editor').fill(text);};
 try {
   await page.locator('.cell').first().waitFor();await page.locator('#file-input').setInputFiles({name:'functions.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(book))});
@@ -45,6 +45,6 @@ try {
   await draft('C7','=1+');await page.getByRole('button',{name:'함수 삽입',exact:true}).click();await page.locator('#function-search').fill('PI');await page.locator('#function-list [role=option]').filter({has:page.locator('strong',{hasText:/^PI$/})}).click();await page.getByRole('button',{name:'수식에 삽입'}).click();
   assert.equal(await page.locator('#editor').inputValue(),'=1+PI()');await page.locator('#editor').press('Enter');assert.equal(await value('C7'),1+Math.PI);
   await draft('C8','=SU');await page.locator('#editor').dispatchEvent('compositionstart');assert.equal(await page.locator('#function-assist').isVisible(),false);await page.locator('#editor').dispatchEvent('keydown',{key:'Tab',isComposing:true});assert.equal(await raw('C8'),'');await page.locator('#editor').dispatchEvent('compositionend');await page.locator('#editor').press('Escape');await page.locator('#editor').press('Escape');
-  await page.reload();await page.locator('.cell').first().waitFor();assert.equal(await value('C1'),12);assert.equal(await value('C3'),0.5);assert.deepEqual(errors,[]);
+  await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('.cell').first().waitFor();assert.equal(await value('C1'),12);assert.equal(await value('C3'),0.5);assert.deepEqual(errors,[]);
   console.log('Function UI passed: library/category/search/empty results, syntax/examples, draft insert/undo, keyboard and pointer completion, argument help, formula bar, nested insertion, Escape, IME, recalculation and persistence.');
 } catch(error){await page.screenshot({path:path.join(root,'test-results/function-failure.png')});throw error;} finally {await app.close();}

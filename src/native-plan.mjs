@@ -1,10 +1,11 @@
+import {cloneData} from './clone.mjs';
 import {conditionalFormula,shiftWorksheetFeatures} from './conditional.mjs';
 import {nativeFilterPlan} from './filter-native.mjs';
 import {shiftAutoFilter} from './filters.mjs';
 import {chartSeries} from './chart-model.mjs';
 import {address, parseAddress, transformFormulaReferences} from './engine.mjs';
 
-const clone=value=>structuredClone(value);
+const clone=value=>cloneData(value);
 const equal=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null);
 const nativeTypes={bar:[51,52,53],'bar-horizontal':[57,58,59],line:[4,63,64],area:[1,76,77],pie:[5],doughnut:[-4120],scatter:[-4169],bubble:[15],radar:[-4151],combo:[51]};
 function chartPlan(sheet,before,workbook){

@@ -9,7 +9,7 @@ const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes
 const dataDir=path.join(root,'.package','chart-selection-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);
-const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 const get=()=>page.evaluate(()=>sheetStudio.getWorkbook());
 const bars=()=>page.locator('.chart-card>svg rect:has(title)');
 const titles=()=>bars().locator('title').allTextContents();
@@ -42,7 +42,7 @@ try{
  await settings();assert.equal(await page.locator('#chart-first-column').isChecked(),false);await page.locator('#chart-first-column').check();await apply();assert.equal(await bars().count(),2);assert.ok((await titles()).includes('매출 · 2024: 10'));
  await page.locator('#undo').click();await settle();assert.equal(await bars().count(),4);await page.locator('#redo').click();await settle();assert.equal(await bars().count(),2);
  await settings();await page.locator('#chart-first-column').uncheck();await page.getByRole('button',{name:'닫기',exact:true}).click();assert.equal((await get()).sheets[0].charts[0].firstColumnAsLabels,true);
- await page.reload();await page.locator('.chart-card').waitFor();await settle();assert.equal(await bars().count(),2);assert.ok((await titles()).includes('매출 · 2024: 10'));
+ await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('.chart-card').waitFor();await settle();assert.equal(await bars().count(),2);assert.ok((await titles()).includes('매출 · 2024: 10'));
  await page.screenshot({path:'test-results/chart-selection-labels.png'});
  // Numeric headings are supported by opting in to the first-row setting.
  await load([[2024,2025],[10,20],[30,40]]);await insert('A1:B3');assert.equal(await bars().count(),6);await settings();await page.locator('#chart-first-row').check();await apply();assert.equal(await bars().count(),4);assert.ok((await titles()).includes('2024 · 1: 10'));

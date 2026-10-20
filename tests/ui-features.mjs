@@ -5,7 +5,7 @@ const context=await browser.newContext({viewport:{width:1540,height:950},permiss
 const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');await page.waitForTimeout(70)};
 const enter=async(a,v)=>{await go(a);await page.keyboard.press('F2');await page.locator('#editor').fill(v);await page.locator('#editor').press('Enter');await page.waitForTimeout(70)};
-const val=async a=>page.evaluate(a=>sheetStudio.evaluate(a),a);
+const val=async a=>page.evaluate(a=>sheetStudio.evaluateAsync(a),a);
 try{
 await page.goto('http://127.0.0.1:5192');await page.locator('.cell').first().waitFor();
 await enter('A1','7');await enter('B1','=A1*3');await go('B1');await page.getByRole('button',{name:'복사',exact:true}).click();await go('B2');await page.getByRole('button',{name:'붙여넣기',exact:true}).click();await page.waitForTimeout(150);assert.equal(await val('B2'),0);await enter('A2','4');assert.equal(await val('B2'),12);

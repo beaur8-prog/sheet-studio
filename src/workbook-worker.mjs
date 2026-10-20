@@ -1,0 +1,116 @@
+import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress} from './engine.mjs';
+import {createConditionalEvaluator} from './conditional.mjs';
+import {readSpreadsheet, writeSpreadsheet} from './io.mjs';
+import {openRecoveryStore, workbookMetadata} from './recovery-store.mjs';
+import {applyFilters, filterOptions, filterPredicates, valueKey, sortFilterRange, sortRange, inferFilterRange} from './filters.mjs';
+
+let book = createWorkbook(), revision = 0, store, prepared = null, evaluators = new Map(), conditionals = new Map();
+let dirty = new Map(), replacements = new Set(), needsSave = false, metadataDirty = false;
+function changed() { evaluators = new Map(); conditionals = new Map(); needsSave = true; }
+const evaluator = id => {
+  if (!evaluators.has(id)) evaluators.set(id, createEvaluator(book, id));
+  return evaluators.get(id);
+};
+const cellDescription = cells => {let textLength=0,count=0;for(const ref in cells){count++;textLength+=cells[ref].raw.length;}return {count,textLength,bytes:JSON.stringify(cells).length*2};};
+const describe = book => ({bytes: JSON.stringify(book).length * 2, sheets: book.sheets.map(sheet => ({id: sheet.id,...cellDescription(sheet.cells)}))});
+async function handle(type, data) {
+  if (type === 'load') {
+    store = await openRecoveryStore();
+    const recovered = await store.load();
+    if (recovered) book = validateWorkbook(recovered);
+    else if (data.legacy) {
+      book = parseWorkbook(data.legacy);
+      await store.save(book, new Map(), new Set(book.sheets.map(sheet => sheet.id)));
+    }
+    return {book, description: describe(book), migrated: !!data.legacy, revision};
+  }
+  if (type === 'import') {
+    if (data.bytes.byteLength > 100 * 1024 * 1024) throw Error('100 MB 이하의 파일을 선택하세요.');
+    const loaded = /\.json$/i.test(data.name) ? parseWorkbook(new TextDecoder().decode(data.bytes)) : validateWorkbook(await readSpreadsheet(data.bytes, data.name));
+    const token = crypto.randomUUID(); prepared = {token, book: loaded};
+    return {book: loaded, description: describe(loaded), token};
+  }
+  if (type === 'sync') {
+    const metadata=data.metadata||workbookMetadata(book);
+    metadataDirty ||= !!data.metadata;
+    if(data.metadata)validateWorkbookMetadata(metadata);
+    for(const update of data.sheets)for(const [ref,cell] of update.entries||[])if(cell!==null)validateCell(ref,cell);
+    const old = new Map(book.sheets.map(sheet => [sheet.id, sheet.cells]));
+    if (data.token) {
+      if (prepared?.token !== data.token) throw Error('파일 가져오기 작업이 만료되었습니다. 다시 열어 주세요.');
+      for (const sheet of prepared.book.sheets) { if (old.get(sheet.id) !== sheet.cells) replacements.add(sheet.id); old.set(sheet.id, sheet.cells); }
+      prepared = null;
+    }
+    const updates = new Map(data.sheets.map(sheet => [sheet.id, sheet]));
+    if(data.sheets.some(sheet=>sheet.cells))validateWorkbook({...metadata,sheets:metadata.sheets.map(sheet=>({...sheet,cells:updates.get(sheet.id)?.cells||old.get(sheet.id)||{}}))});
+    const next = {...metadata, sheets: metadata.sheets.map(metadata => {
+      const update = updates.get(metadata.id);
+      const cells = update?.cells || old.get(metadata.id) || {};
+      if (update?.cells) replacements.add(metadata.id);
+      if (update?.entries) {
+        if (!dirty.has(metadata.id)) dirty.set(metadata.id, new Set());
+        for (const [ref, cell] of update.entries) {
+          if (cell === null) delete cells[ref]; else cells[ref] = cell;
+          dirty.get(metadata.id).add(ref);
+        }
+      }
+      return {...metadata, cells};
+    })};
+    book=next;
+    revision = data.revision; changed(); return {revision};
+  }
+  if (type === 'flush') {
+    if (!needsSave) return {revision, chunksWritten: 0, fullSheets: 0, metadataWritten: false};
+    const result = await store.save(book, dirty, replacements, metadataDirty);
+    dirty = new Map(); replacements = new Set(); needsSave = false; metadataDirty=false;
+    return {...result, revision};
+  }
+  if (data.revision !== revision) throw Error('문서가 변경되었습니다. 작업을 다시 실행하세요.');
+  if (type === 'calculate') return {revision, values: data.refs.map(([id, ref]) => {
+    const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),value=evaluate(ref),position=parseAddress(ref);
+    if(!conditionals.has(id))conditionals.set(id,sheet?createConditionalEvaluator(book,sheet,evaluate):()=>({}));
+    return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{}];
+  })};
+  if (type === 'export') {
+    if (data.format === 'json') return {data: new TextEncoder().encode(serializeWorkbook(book)), mime: 'application/json', extension: 'sheet.json'};
+    return writeSpreadsheet(book, data.format, data.options);
+  }
+  const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
+  if (!sheet) throw Error('시트를 찾을 수 없습니다.');
+  if (type === 'infer-filter') return inferFilterRange(sheet, data.selection);
+  if (type === 'filter-options') {
+    const options = filterOptions(book, sheet, data.column), rule = sheet.autoFilter.columns[data.column];
+    const own = rule?.type !== 'color' && filterPredicates(book, sheet, evaluator(sheet.id)).find(predicate => predicate.column === data.column);
+    const original = rule?.type === 'values' ? rule.values.map(valueKey) : options.values.filter(value => !own || own.test(value.value)).map(value => value.key);
+    return {options, original};
+  }
+  if (type === 'filter') {
+    const target = {...sheet, autoFilter: structuredClone(sheet.autoFilter)};
+    if (data.column !== undefined) {
+      if (data.rule) target.autoFilter.columns[data.column] = data.rule; else delete target.autoFilter.columns[data.column];
+    }
+    applyFilters({...book, sheets: book.sheets.map(item => item.id === sheet.id ? target : item)}, target);
+    return target.autoFilter;
+  }
+  if (type === 'sort-filter' || type === 'sort') {
+    const target = structuredClone(sheet);
+    const next = {...book, sheets: book.sheets.map(item => item.id === sheet.id ? target : item)};
+    if(type==='sort-filter')sortFilterRange(next, target, data.column, data.desc);
+    else sortRange(next, target, data.range, data.column, data.desc);
+    validateWorkbook(next);
+    const token=crypto.randomUUID();prepared={token,book:next};
+    return {cells: target.cells, autoFilter: target.autoFilter, token, description:cellDescription(target.cells)};
+  }
+  throw Error('알 수 없는 문서 작업입니다.');
+}
+
+let queue = Promise.resolve();
+self.onmessage = ({data: {id, type, payload}}) => {
+  queue = queue.then(async () => {
+    try {
+      const value = await handle(type, payload || {});
+      const transfers = value?.data instanceof Uint8Array ? [value.data.buffer] : [];
+      self.postMessage({id, value}, transfers);
+    } catch (error) { self.postMessage({id, error: error.message || String(error)}); }
+  });
+};

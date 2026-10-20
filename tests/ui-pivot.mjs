@@ -12,7 +12,7 @@ else{browser=await chromium.launch({headless:true,channel:'msedge'});page=await 
 const errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 const go=async address=>{await page.locator('#name-box').fill(address);await page.locator('#name-box').press('Enter');};
-const value=addr=>page.evaluate(a=>sheetStudio.evaluate(a),addr);
+const value=addr=>page.evaluate(a=>sheetStudio.evaluateAsync(a),addr);
 const enter=async(addr,raw)=>{await go(addr);await page.keyboard.press('F2');await page.locator('#editor').fill(raw);await page.locator('#editor').press('Enter');};
 try{
  if(!desktop)await page.goto('http://127.0.0.1:5192');await page.locator('#cells .cell').first().waitFor();
@@ -32,7 +32,7 @@ try{
  await page.locator('#pivot-bar').getByRole('button',{name:'필드 편집',exact:true}).click();
  await dialog.getByLabel('집계 방식 1',{exact:true}).selectOption('average');await dialog.getByRole('button',{name:'적용',exact:true}).click();assert.equal(await value('D4'),47.5);
  await page.screenshot({path:'test-results/pivot-report.png'});
- await page.reload();await page.locator('#pivot-bar').waitFor();assert.equal(await value('D4'),47.5);
+ await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('#pivot-bar').waitFor();assert.equal(await value('D4'),47.5);
  let saved;
  if(desktop){const file=path.join(root,'.package','pivot-ui-export.xlsx');await application.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},file);await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');saved=await fs.readFile(file);}
  else{const downloadPromise=page.waitForEvent('download');await page.locator('#save').click();const download=await downloadPromise;saved=await fs.readFile(await download.path());}

@@ -1,3 +1,5 @@
+import {cloneData} from './clone.mjs';
+import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 import {address,parseAddress,createEvaluator,transformFormulaReferences} from './engine.mjs';
 import {aggregations,scalarKey,pivotLabel,validatePivot} from './pivot-schema.mjs';
 export {aggregations,scalarKey,pivotLabel};
@@ -87,9 +89,9 @@ export function pivotCells(output,spec){
 export function applyPivot(book,target,spec,output=buildPivot(book,spec)){
   const cells=pivotCells(output,spec);
   const other=book.sheets.filter(s=>s.id!==target.id).reduce((n,s)=>n+Object.keys(s.cells).length,0);
-  if(other+Object.keys(cells).length>200000)fail('통합 문서의 200,000셀 제한을 초과합니다.');
+  if(other+Object.keys(cells).length>MAX_DOCUMENT_CELLS)fail('통합 문서의 1,000,000셀 제한을 초과합니다.');
   target.cells=cells;target.merges=[];target.rowHeights={0:44};target.columnWidths=Object.fromEntries(output.matrix[0].map((_,i)=>[i,i<Math.max(1,spec.rows.length)?145:190]));
-  target.pivot=structuredClone(spec);delete target.pivotError;
+  target.pivot=cloneData(spec);delete target.pivotError;
   return output;
 }
 

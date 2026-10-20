@@ -1,3 +1,5 @@
+import {cloneData} from './clone.mjs';
+import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 import {cellBorders,borderSides,borderStyles} from './borders.mjs';
 import {restoreWorksheetParts,addWorksheetParts} from './worksheet-xlsx.mjs';
 import {importConditional,exportConditional,shiftWorksheetFeatures} from './conditional.mjs';
@@ -12,7 +14,7 @@ import {applyPivot,sourceData} from './pivot.mjs';
 import {restoreChartParts,addChartParts} from './chart-xlsx.mjs';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const MAX_CELLS = 200_000;
+const MAX_CELLS = MAX_DOCUMENT_CELLS;
 const DAY = 86_400_000;
 const formats = {
   general: 'General', number: '#,##0.00', currency: '₩#,##0.00',
@@ -104,7 +106,7 @@ function parseDelimited(text, delimiter) {
       else field += char;
     } else if (!quoted && (char === delimiter || char === '\n' || char === '\r')) {
       row.push(field); field = '';
-      if (++cellCount > MAX_CELLS) throw new Error('200,000개 이하의 셀이 있는 파일을 선택하세요.');
+      if (++cellCount > MAX_CELLS) throw new Error('1,000,000개 이하의 셀이 있는 파일을 선택하세요.');
       if (char !== delimiter) {
         rows.push(row); row = [];
         if (char === '\r' && text[i + 1] === '\n') i++;
@@ -113,7 +115,7 @@ function parseDelimited(text, delimiter) {
   }
   if (quoted) throw new Error('CSV의 따옴표가 닫히지 않았습니다.');
   if (field !== '' || row.length) {
-    if (++cellCount > MAX_CELLS) throw new Error('200,000개 이하의 셀이 있는 파일을 선택하세요.');
+    if (++cellCount > MAX_CELLS) throw new Error('1,000,000개 이하의 셀이 있는 파일을 선택하세요.');
     row.push(field); rows.push(row);
   }
   return rows;
@@ -139,16 +141,22 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if (data.byteLength > 100 * 1024 * 1024) throw new Error('100 MB 이하의 파일을 선택하세요.');
   if (/\.(csv|tsv)$/i.test(filename)) return readDelimited(data, filename);
   if (!/\.xls[xm]$/i.test(filename)) throw new Error('XLSX, XLSM, CSV 또는 TSV 파일을 선택하세요.');
+  let colorZip;
+  try{colorZip=await JSZip.loadAsync(data);}catch(error){throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.',{cause:error});}
+  let expanded=0;
+  // JSZip 3.10.2 exposes the central-directory size on its pinned compressed
+  // entry. Check before ExcelJS inflates cell XML into its in-memory model.
+  for(const file of Object.values(colorZip.files))if(!file.dir){const size=file._data?.uncompressedSize;if(!Number.isSafeInteger(size)||size<0)throw Error('XLSX 압축 정보를 읽을 수 없습니다.');expanded+=size;if(expanded>512*1024*1024)throw Error('압축 해제 후 512 MB 이하인 XLSX 파일을 선택하세요.');}
   const book = new ExcelJS.Workbook();
   try { await book.xlsx.load(data); }
   catch (error) { throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.', { cause: error }); }
-  const colorZip=await JSZip.loadAsync(data),resolveColor=createColorResolver(await colorZip.file('xl/theme/theme1.xml')?.async('string'),await colorZip.file('xl/styles.xml')?.async('string'));
+  const resolveColor=createColorResolver(await colorZip.file('xl/theme/theme1.xml')?.async('string'),await colorZip.file('xl/styles.xml')?.async('string'));
   let cellCount = 0;
   const sheets = book.worksheets.map(source => {
     const sheet = newSheet(source.name);
     const importCell = cell => {
       if (cell.isMerged && cell.master.address !== cell.address) return;
-      if (++cellCount > MAX_CELLS) throw new Error('200,000개 이하의 셀이 있는 파일을 선택하세요.');
+      if (++cellCount > MAX_CELLS) throw new Error('1,000,000개 이하의 셀이 있는 파일을 선택하세요.');
       const style = readStyle(cell,resolveColor);
       let raw = '';
       const value = cell.value;
@@ -173,11 +181,12 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
     // ExcelJS skips null-valued styled cells (and rows containing only those
     // cells) in eachRow/eachCell. Walk the sparse model to retain empty borders
     // and fills without expanding a sheet's potentially million-row extent.
-    for (const row of source.model.rows || []) for (const model of row.cells || []) {
+    const sparseRows=source.model.rows||[];
+    for (const row of sparseRows) for (const model of row.cells || []) {
       if (!sheet.cells[model.address] && Object.keys(model.style || {}).length) importCell(source.getCell(model.address));
     }
     // Rows with only a custom height can be omitted by eachRow(includeEmpty:false).
-    for (const row of source.model.rows || []) {if (row.height) sheet.rowHeights[row.number - 1] = row.height * 4 / 3;if(row.hidden)sheet.rowHeights[row.number-1]=0;}
+    for (const row of sparseRows) {if (row.height) sheet.rowHeights[row.number - 1] = row.height * 4 / 3;if(row.hidden)sheet.rowHeights[row.number-1]=0;}
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
     for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
     const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
@@ -257,7 +266,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if (!workbook?.sheets?.length) throw new Error('통합 문서에 시트가 없습니다.');
   if (workbook.nativeSource && !options.allowMacroLoss) throw new Error('VBA 보존을 위해 XLSM 저장을 사용하세요. 일반 형식 변환에는 매크로 제외 확인이 필요합니다.');
   if (!['xlsx', 'csv', 'tsv'].includes(kind)) throw new Error('지원되지 않는 저장 형식입니다.');
-  const evaluate = await evaluator();
+  const evaluate = await evaluator(),styleCache=new Map();
   if (kind === 'csv' || kind === 'tsv') {
     const sheet = workbook.sheets.find(item => item.id === workbook.activeSheetId) || workbook.sheets[0];
     let maxRow = -1, maxCol = -1;
@@ -287,7 +296,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     return { data: new TextEncoder().encode('\uFEFF' + rows.join('\r\n')), mime: kind === 'csv' ? 'text/csv;charset=utf-8' : 'text/tab-separated-values;charset=utf-8', extension: kind };
   }
   // Export a consistent snapshot: cached result cells and native pivot cache use the same source.
-  if(workbook.sheets.some(s=>s.pivot)){workbook=structuredClone(workbook);for(const s of workbook.sheets)if(s.pivot){try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
+  if(workbook.sheets.some(s=>s.pivot)){workbook=cloneData(workbook);for(const s of workbook.sheets)if(s.pivot){try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
   const book = new ExcelJS.Workbook();
   book.creator = 'Sheet Studio';
   book.created = new Date(); book.modified = new Date();
@@ -301,7 +310,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     if(sheet.freeze?.rows||sheet.freeze?.cols)target.views=[{state:'frozen',xSplit:sheet.freeze.cols,ySplit:sheet.freeze.rows,topLeftCell:address(sheet.freeze.cols,sheet.freeze.rows),activeCell:'A1'}];
     exportNames.set(sheet.id,target.name);
     const pageFilters=sheet.pivot?.filters.filter(f=>!sheet.pivot.rows.includes(f.field)&&!sheet.pivot.columns.includes(f.field))||[];
-    const conditionalSheet=pageFilters.length?structuredClone(sheet):sheet;if(pageFilters.length)for(let i=0;i<pageFilters.length+1;i++)shiftWorksheetFeatures(conditionalSheet,'r',0,1);exportConditional(target,conditionalSheet);
+    const conditionalSheet=pageFilters.length?cloneData(sheet):sheet;if(pageFilters.length)for(let i=0;i<pageFilters.length+1;i++)shiftWorksheetFeatures(conditionalSheet,'r',0,1);exportConditional(target,conditionalSheet);
     pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
     for (const [addr, cell] of Object.entries(sheet.cells || {})) {
       if (!coordinates(addr)) continue;
@@ -313,8 +322,10 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
         for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
         targetCell.value = { formula: formulaForXlsx(formula).slice(1), ...(result === undefined ? {} : { result }) };
       } else targetCell.value = toScalar(cell.raw);
-      applyStyle(targetCell, cell.style);
-      if (typeof cell.raw === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim()) && (!cell.style?.format || cell.style.format === 'general')) targetCell.numFmt = '0.00%';
+      const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!cell.style?.format||cell.style.format==='general');
+      const key=JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
+      if(cachedStyle)targetCell.style=cachedStyle;
+      else{applyStyle(targetCell,cell.style);if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);}
       if (typeof cell.note === 'string') targetCell.note = cell.note;
     }
     for (const [index, width] of Object.entries(sheet.columnWidths || {})) {

@@ -9,7 +9,7 @@ const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes
 const dataDir=path.join(root,'.package','autofill-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow(),errors=[];await page.setViewportSize({width:1280,height:900});page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);
-const settle=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 const cells=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells);
 const raw=async refs=>{const c=await cells();return refs.map(ref=>c[ref]?.raw);};
 const select=async range=>{await page.locator('#name-box').fill(range);await page.locator('#name-box').press('Enter');await settle();};
@@ -37,6 +37,6 @@ try{
  await load({A1:c(1),A2:c(2)});const original=await cells();await drag('A1:A2','A6',{cancel:true});assert.deepEqual(await cells(),original);assert.equal(await page.locator('#name-box').inputValue(),'A1:A2');
  // Ctrl/Cmd+D remains a copy-down command, distinct from dragging a series.
  await select('A1:A6');await page.keyboard.press('ControlOrMeta+d');assert.deepEqual(await raw(['A1','A2','A3','A4','A5','A6']),['1','1','1','1','1','1']);
- await load({A1:c(1),A2:c(2)});await drag('A1:A2','A6');await page.reload();await page.locator('.cell').first().waitFor();assert.equal((await cells()).A6.raw,'6');assert.deepEqual(errors,[]);
+ await load({A1:c(1),A2:c(2)});await drag('A1:A2','A6');await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('.cell').first().waitFor();assert.equal((await cells()).A6.raw,'6');assert.deepEqual(errors,[]);
  console.log('PASS: actual typed seeds and handle drag, horizontal/vertical/reverse series, steps/decimals, multiple lanes, styles, undo/redo, hidden protection, formulas/text/single values, cancel, copy-down and reload');
 }catch(e){await page.screenshot({path:'test-results/autofill-failure.png'});throw e;}finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

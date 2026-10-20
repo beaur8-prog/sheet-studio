@@ -62,7 +62,7 @@ try{
   await page.mouse.move(title.x+40,title.y+12);await page.mouse.down();await page.mouse.move(title.x+60,title.y+37,{steps:5});await page.mouse.up();
   assert.equal((await chart()).x,beforeMove.x+20);assert.equal((await chart()).y,beforeMove.y+25);
   await drag('se',-900,-600);assert.equal((await chart()).width,280);assert.equal((await chart()).height,180);await undo();
-  const saved=await chart();await page.reload();await page.locator('.chart-card').waitFor();assert.deepEqual(await chart(),saved);
+  const saved=await chart();await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('.chart-card').waitFor();assert.deepEqual(await chart(),saved);
   // Save through the UI and reopen the JSON document, including legacy charts without sizes.
   let json;
   if(application){const file=path.join(root,'.package/chart-document.sheet.json');await application.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},file);await page.locator('[data-tab="파일"]').click();await page.locator('[data-action="save-json"]').click();await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');json=await fs.readFile(file);}
