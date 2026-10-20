@@ -7,7 +7,7 @@
 ## 패키지와 검증
 
 1. 버전·설치법·수정 내역을 정리하고 Git에 커밋/푸시합니다. 버전 태그와 GitHub 초안 릴리즈를 만든 뒤 `release.yml`을 실행합니다.
-2. Mac arm64, Windows x64, Ubuntu·Debian amd64를 제공합니다. Mac Intel 빌드는 제외합니다.
+2. Windows x64, Mac arm64, Ubuntu·Debian amd64를 제공합니다. 다운로드 목록과 안내 표는 Windows → Mac → Linux 순서로 표시합니다. Mac Intel 빌드는 제외합니다.
 3. 세 OS의 패키지·설치 검사가 통과해야 공개합니다. 설치 파일을 다시 내려받아 manifest·SHA-256을 대조하고 Mac 앱의 서명 무결성과 실행 코드 일치를 확인합니다. 통합 `SHA256SUMS.txt`도 제공합니다.
 
 ## 리토스의 같은 링크 갱신
