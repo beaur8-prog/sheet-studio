@@ -30,7 +30,7 @@ async function smoke() {
       body: document.body.innerText.slice(0, 350),
     }));
     assert.equal(state.nodeIntegration, 'undefined');
-    assert.deepEqual(state.bridge, ['editText', 'onMenuAction', 'onWindowBlur', 'openFile', 'pasteClipboard', 'saveFile', 'setTitle', 'vbaCancel', 'vbaCommand', 'vbaProbe', 'vbaResult', 'vbaStart', 'vbaStatus', 'writeClipboard']);
+    assert.deepEqual(state.bridge, ['editText', 'onBeforeClose', 'onMenuAction', 'onWindowBlur', 'openFile', 'pasteClipboard', 'saveFile', 'setTitle', 'vbaCancel', 'vbaCommand', 'vbaProbe', 'vbaResult', 'vbaStart', 'vbaStatus', 'writeClipboard']);
     assert.equal(typeof (await page.evaluate(() => window.desktop.vbaProbe())).available, 'boolean');
     assert.ok(state.cells > 0, 'Spreadsheet grid rendered');
     await page.evaluate(() => window.desktop.setTitle('Sheet Studio – smoke test'));
