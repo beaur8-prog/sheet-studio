@@ -6,7 +6,7 @@
 
 선택 편집·붙여넣기·채우기는 한 번에 10만 셀까지입니다. 큰 문서의 첫 전달과 XLSX 열기·저장에는 시간이 걸릴 수 있습니다. [대용량 문서의 범위와 사용법](docs/CAPACITY.md)을 확인하세요.
 
-현재 소스의 **0.7.18 개발판**은 XLSX 기본·숨김 행 높이와 외부 표 붙여넣기·복사의 높이 보존을 보완했습니다. 공개 0.7.17에는 아직 포함되지 않습니다. [행 높이 점검 결과](docs/ROW-HEIGHT.md)를 확인하세요.
+현재 소스의 **0.7.19 개발판**은 열기·저장 창에서 현재 파일 폴더를 우선 표시하고, 새 문서의 마지막 사용 폴더와 재시작 후 위치를 기억합니다. 0.7.18의 XLSX 기본·숨김 행 높이와 외부 표 높이 보존 수정도 포함합니다. 공개 0.7.17에는 아직 포함되지 않습니다. [행 높이 점검 결과](docs/ROW-HEIGHT.md)를 확인하세요.
 
 설치된 Microsoft Excel의 네이티브 실행 파일과 한국어 UI를 분석하고, 익숙한 작업 흐름을 독립적으로 구현한 Windows·macOS 스프레드시트 앱입니다. Microsoft Excel의 원본 코드 복원이나 전체 기능의 동일성을 주장하지 않습니다.
 
@@ -22,7 +22,7 @@ npm run runtime:install
 npm run desktop
 ```
 
-Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.18/win-x64/Sheet-Studio-0.7.18-Windows-x64-Setup.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
+Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `release/0.7.19/win-x64/Sheet-Studio-0.7.19-Windows-x64-Setup.exe`입니다. `npm run package:dir`은 같은 폴더 아래 `win-unpacked/`을 생성하며 이 폴더 전체가 필요합니다.
 
 **Mac 빌드:** Mac에서 `SHEET_STUDIO_ADHOC=1 npm run package:mac -- --arch=arm64`(Apple Silicon)를 사용합니다. DMG/ZIP 경로, 기본 메뉴, 서명 및 GitHub Actions 사용법은 [macOS 빌드 안내](docs/MACOS.md)를 참조하세요. macOS arm64의 실제 실행과 시트 수명주기 회귀 테스트를 확인했습니다. 빌드 결과와 설치된 의존성은 Git 저장소에 포함하지 않습니다.
 

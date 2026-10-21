@@ -6,6 +6,7 @@ const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const vba = require('./vba.cjs');
 const { applicationMenu } = require('./menu.cjs');
+const { createFileLocations } = require('./file-locations.cjs');
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const filters = [
@@ -24,22 +25,25 @@ if (process.platform === 'linux') app.setDesktopName('sheet-studio.desktop');
 // Match the installer shortcut identity so Windows can group and pin this app.
 if (process.platform === 'win32') app.setAppUserModelId('local.lattice.sheetstudio');
 if (process.env.SHEET_STUDIO_DATA) app.setPath('userData', path.resolve(process.env.SHEET_STUDIO_DATA));
+const fileLocations = createFileLocations({ stateFile: path.join(app.getPath('userData'), 'file-locations.json'), documents: app.getPath('documents') });
 
 function trusted(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame ||
       event.senderFrame.url.split('#')[0] !== rendererURL) throw new Error('허용되지 않는 앱 요청입니다.');
 }
 
-ipcMain.handle('sheet:open-file', async event => {
+ipcMain.handle('sheet:open-file', async (event, documentId) => {
   trusted(event);
-  const result = await dialog.showOpenDialog(win, { title: '통합 문서 열기', properties: ['openFile'], filters });
+  const result = await dialog.showOpenDialog(win, { title: '통합 문서 열기', defaultPath: await fileLocations.directory(documentId), properties: ['openFile'], filters });
   if (result.canceled || !result.filePaths.length) return null;
   const file = result.filePaths[0];
   if ((await fs.stat(file)).size > MAX_FILE_BYTES) throw new Error('100 MB 이하의 통합 문서를 선택하세요.');
   const data=await fs.readFile(file);
   const originToken=/\.xlsm$/i.test(file)?await vba.rememberFile(file,data):undefined;
-  return { name: path.basename(file), data: new Uint8Array(data), ...(originToken?{originToken}:{}) };
+  return { name: path.basename(file), data: new Uint8Array(data), locationToken: fileLocations.stage(file), ...(originToken?{originToken}:{}) };
 });
+
+ipcMain.handle('sheet:confirm-file', async (event, payload) => { trusted(event); await fileLocations.confirm(payload); });
 
 ipcMain.handle('sheet:save-file', async (event, payload) => {
   trusted(event);
@@ -50,7 +54,7 @@ ipcMain.handle('sheet:save-file', async (event, payload) => {
   const basename = path.basename(payload.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || '통합 문서.xlsx';
   const extension = basename.toLowerCase().endsWith('.sheet.json') ? 'json' : path.extname(basename).slice(1);
   const result = await dialog.showSaveDialog(win, {
-    title: '통합 문서 저장', defaultPath: path.join(app.getPath('documents'), basename),
+    title: '통합 문서 저장', defaultPath: path.join(await fileLocations.directory(payload.documentId), basename),
     filters: [{ name: extension === 'xlsx' ? 'Excel 통합 문서' : extension.toUpperCase(), extensions: [extension || 'xlsx'] }],
   });
   if (result.canceled || !result.filePath) return null;
@@ -64,6 +68,7 @@ ipcMain.handle('sheet:save-file', async (event, payload) => {
     await fs.unlink(tempPath).catch(() => {});
     throw error;
   }
+  await fileLocations.remember(payload.documentId, result.filePath);
   return result.filePath;
 });
 

@@ -1,7 +1,7 @@
 import {buildNativePlan} from './native-plan.mjs';
 import {readSpreadsheet} from './io.mjs';
 
-export function createVbaUI({getWorkbook,commitEdit,replaceWorkbook,toast}){
+export function createVbaUI({getWorkbook,getDocumentId,commitEdit,replaceWorkbook,toast}){
   let panel=null,session=null,stopped=false;
   async function open(mode='interactive'){
     if(panel)return;
@@ -16,7 +16,7 @@ export function createVbaUI({getWorkbook,commitEdit,replaceWorkbook,toast}){
     const close=()=>{if(panel!==container)return;panel?.remove();panel=null;session=null;stopped=true;};
     async function finish(){const file=await window.desktop.vbaResult(session);if(!active())return;const loaded=await readSpreadsheet(new Uint8Array(file.data),file.name);if(!active())return;loaded.nativeSource.originToken=file.originToken;loaded.name=book.name;
       replaceWorkbook(loaded);
-      if(mode==='save'){const filename=book.name.replace(/[<>:"/\\|?*]/g,'_')+'.xlsm';const saved=await window.desktop.saveFile({name:filename,data:file.data,originToken:file.originToken});if(saved)toast('VBA를 유지한 XLSM 파일을 저장했습니다.');}
+      if(mode==='save'){const filename=book.name.replace(/[<>:"/\\|?*]/g,'_')+'.xlsm';const saved=await window.desktop.saveFile({name:filename,data:file.data,originToken:file.originToken,documentId:getDocumentId()});if(saved)toast('VBA를 유지한 XLSM 파일을 저장했습니다.');}
       else toast('Excel 매크로 실행 결과를 가져왔습니다.');close();}
     async function poll(){while(active()&&session){const s=await window.desktop.vbaStatus(session);if(!active())return;set(s.state,commandError||s.message);if(s.state==='completed'){await finish();return;}if(s.state==='error'||s.state==='cancelled'){buttons.cancel.textContent='닫기';return;}await new Promise(resolve=>setTimeout(resolve,400));}}
     async function start(){set('starting','현재 편집 내용을 Excel 작업 사본에 반영하고 있습니다.');try{const started=await window.desktop.vbaStart({mode,source:{base64:book.nativeSource.base64,filename:book.nativeSource.filename,originToken:book.nativeSource.originToken},plan:buildNativePlan(book)});if(!active()){await window.desktop.vbaCancel(started.id);return;}session=started.id;await poll();}catch(error){if(active())set('error',error.message);}}
