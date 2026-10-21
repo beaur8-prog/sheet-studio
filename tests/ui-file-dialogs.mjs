@@ -74,6 +74,10 @@ async function save(file, format = 'xlsx') {
 }
 try {
   await launch();
+  if (process.platform === 'linux') {
+    assert.equal(await app.evaluate(({ app }) => app.commandLine.getSwitchValue('xdg-portal-required-version')), '4');
+    checks.push('older Linux portals fall back to a chooser that supports defaultPath');
+  }
   await inspectDirectory(documents, 'first use falls back to Documents');
   await open(path.join(a, 'first.csv'), '첫 문서'); const firstId = await id();
   await inspectDirectory(a, 'opened workbook folder and canceled dialogs');
