@@ -154,6 +154,8 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   let cellCount = 0;
   const sheets = book.worksheets.map(source => {
     const sheet = newSheet(source.name);
+    const defaultHeight=source.properties?.defaultRowHeight*4/3;
+    if(Number.isFinite(defaultHeight)&&defaultHeight>=1&&defaultHeight<=10000)sheet.defaultRowHeight=defaultHeight;
     const importCell = cell => {
       if (cell.isMerged && cell.master.address !== cell.address) return;
       if (++cellCount > MAX_CELLS) throw new Error('1,000,000개 이하의 셀이 있는 파일을 선택하세요.');
@@ -186,7 +188,11 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       if (!sheet.cells[model.address] && Object.keys(model.style || {}).length) importCell(source.getCell(model.address));
     }
     // Rows with only a custom height can be omitted by eachRow(includeEmpty:false).
-    for (const row of sparseRows) {if (row.height) sheet.rowHeights[row.number - 1] = row.height * 4 / 3;if(row.hidden)sheet.rowHeights[row.number-1]=0;}
+    for (const row of sparseRows) {
+      const r=row.number-1;
+      if(row.height)sheet.rowHeights[r]=row.height*4/3;
+      if(row.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.rows[r]=sheet.rowHeights[r]||sheet.defaultRowHeight||25;sheet.rowHeights[r]=0;}
+    }
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
     for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
     const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
@@ -332,7 +338,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if (/^\d+$/.test(index) && Number(index) < 16384 && Number.isFinite(Number(width))) target.getColumn(Number(index) + 1).width = Math.max(1, ((width===0?sheet.hiddenSizes?.cols?.[index]||90:Number(width)) - 5) / 7);
     }
     for (const [index, height] of Object.entries(sheet.rowHeights || {})) {
-      if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, (height===0?sheet.hiddenSizes?.rows?.[index]||25:Number(height)) * 3 / 4);
+      if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, (height===0?sheet.hiddenSizes?.rows?.[index]||sheet.defaultRowHeight||25:Number(height)) * 3 / 4);
     }
     for(const [c,width] of Object.entries(sheet.columnWidths||{}))if(width===0)target.getColumn(+c+1).hidden=true;
     for(const r of sheet.autoFilter?.hiddenRows||[])target.getRow(r+1+(pageFilters.length?pageFilters.length+1:0)).hidden=true;

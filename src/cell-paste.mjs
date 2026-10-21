@@ -43,5 +43,14 @@ export function pastePlan(sheet, clip, start, options={}) {
     }
     updates.push({key,cell});
   }
-  return {updates,height:rect.r2-start.r+1,width:rect.c2-start.c+1,merges};
+  const rowHeightUpdates=[];
+  // External table rows are minimum heights. A shorter table frame must never
+  // compress them, and an existing taller worksheet row must remain tall.
+  if(mode==='all'&&!transpose&&operation==='none'&&Array.isArray(clip.rowHeights))for(let r=0;r<height;r++){
+    const sourceHeight=clip.rowHeights[r%h],row=targetRows[r],current=sheet.rowHeights?.[row]??sheet.defaultRowHeight??25;
+    if(typeof sourceHeight!=='number'||!Number.isFinite(sourceHeight)||sourceHeight<1||sourceHeight>10000||current===0)continue;
+    if(skipBlanks&&!clip.data[r%h]?.some(cell=>(cell?.raw??'')!==''))continue;
+    if(sourceHeight>current)rowHeightUpdates.push({row,height:sourceHeight});
+  }
+  return {updates,rowHeightUpdates,height:rect.r2-start.r+1,width:rect.c2-start.c+1,merges};
 }

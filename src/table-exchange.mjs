@@ -16,5 +16,5 @@ export function spreadsheetTable(html){
   return {r:0,c:0,data:table.cells.map(row=>row.map(cell=>{
     const style={...cell.style,border:false,borders:{}};for(const [side,edge] of Object.entries(cell.style.borders||{}))style.borders[side]=edge?{style:edge.line==='double'?'double':edge.line==='dotted'?'dotted':edge.line==='dashed'?'dashed':edge.width>=3?'thick':edge.width>=2?'medium':'thin',color:edge.color==='transparent'?'#ffffff':edge.color}:null;
     return {raw:scalarRaw(cell.text),style};
-  })),merges:table.merges.map(m=>`${address(m.row,m.column)}:${address(m.row+m.rowSpan-1,m.column+m.columnSpan-1)}`)};
+  })),rowHeights:table.rowHeights,merges:table.merges.map(m=>`${address(m.row,m.column)}:${address(m.row+m.rowSpan-1,m.column+m.columnSpan-1)}`)};
 }
