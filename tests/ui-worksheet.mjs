@@ -7,7 +7,7 @@ import platform from '../scripts/platform.cjs';
 import {worksheetFixture} from './fixtures/worksheet.mjs';
 const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes('--packaged'),version=createRequire(import.meta.url)('../package.json').version;
 const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package/worksheet-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:packaged?[]:[root],env});
+const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow(),errors=[],mod=process.platform==='darwin'?'Meta':'Control';page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');};
 const model=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);
