@@ -5,13 +5,11 @@
 
 > **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
 
-v0.7.17 기준 · 2026년 10월 20일
+v0.7.20 기준 · 2026년 10월 20일
 
-**100만 셀 지원:** 0.7.17은 모든 시트를 합쳐 기록된 셀 1,000,000개를 지원합니다. 선택 편집·붙여넣기·채우기는 한 번에 100,000셀까지이며, 큰 문서의 첫 전달과 XLSX 열기·저장에는 지연이 남을 수 있습니다. 자동 복구 이전·종료 시 저장 대기와 기능별 한도는 [대용량 문서 안내](CAPACITY.md)를 참조하세요.
+**100만 셀 지원:** 0.7.20은 잘라내기 후 문서·원본 변경 시 데이터 보호, 저장 중 편집 보호, 현재 파일 폴더 우선 표시·위치 기억과 XLSX·외부 표 행 높이 보존을 포함합니다. 변경분 실행 취소·셀 묶음 자동 복구, 색 필터·차트·자동 채우기·한글 입력과 Studio 표 교환도 지원합니다.
 
-0.7.17은 변경분 실행 취소·셀 묶음 자동 복구와 파일·계산·필터·정렬의 작업 스레드 처리를 지원합니다. 기존 셀 채우기색·글자색 필터, 가로 선택값의 차트 누락 수정, 세로 막대형의 항목명·색·간격 정리를 포함합니다. 숫자 연속 자동 채우기, 범례 가운데 정렬·첫 한글 조합 입력, Windows 설치 마법사·Ubuntu 아이콘 수정도 포함합니다.
-
-[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.17) · [버전별 변경 내역](CHANGELOG.md)
+[다운로드·릴리즈 페이지](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.20) · [버전별 변경 내역](CHANGELOG.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -27,26 +25,17 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.17)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.20)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.17-Windows-x64-Setup.exe` |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.17-macOS-arm64.dmg` 또는 `.zip` |
-| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.17-Linux-amd64.deb` |
-
-### Mac
-
-1. Apple 메뉴 → **이 Mac에 관하여**에서 칩을 확인합니다. Mac 배포본은 Apple Silicon(M 시리즈, arm64)용입니다.
-2. Apple Silicon용 DMG를 열고 **Sheet Studio.app**을 **응용 프로그램(Applications)** 폴더로 복사합니다. ZIP은 압축을 풀어 `.app` 전체를 복사합니다.
-3. 복사한 앱을 실행합니다. DMG는 복사 후 추출해도 됩니다.
-4. 다음부터는 응용 프로그램 폴더 또는 Spotlight에서 **Sheet Studio**를 실행합니다.
-
-이 릴리즈의 Mac 앱은 로컬 ad-hoc 서명이며 Apple Developer ID 서명·공증을 받지 않았습니다. 따라서 macOS가 실행을 차단할 수 있습니다. 다운로드 출처를 확인하고 macOS의 보안 안내에 따라 사용자가 실행 여부를 결정해야 합니다. 회사 정책으로 차단된 경우 관리자에게 문의하세요. 보안 기능을 일괄 해제하는 명령은 필요하지 않습니다.
+| Windows 64비트 x64 | `Sheet-Studio-0.7.20-Windows-x64-Setup.exe` |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.20-macOS-arm64.dmg` 또는 `.zip` |
+| Linux Ubuntu·Debian 계열 x64 | `Sheet-Studio-0.7.20-Linux-amd64.deb` |
 
 ### Windows
 
-1. `Sheet-Studio-0.7.17-Windows-x64-Setup.exe`를 다운로드합니다.
+1. `Sheet-Studio-0.7.20-Windows-x64-Setup.exe`를 다운로드합니다.
 2. Setup EXE를 실행하고 한국어 또는 영어를 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 기본 경로는 `%LOCALAPPDATA%\Programs\Sheet Studio`입니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
@@ -59,12 +48,21 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이나 조직 보안 정책이 경고 또는 차단할 수 있습니다. 배포 저장소와 파일명을 확인하고 조직 정책을 따르세요. 기본 표 편집에는 Microsoft Excel 설치가 필요하지 않습니다. VBA 연결에만 Windows 데스크톱 Excel이 필요합니다.
 
+### Mac
+
+1. Apple 메뉴 → **이 Mac에 관하여**에서 칩을 확인합니다. Mac 배포본은 Apple Silicon(M 시리즈, arm64)용입니다.
+2. Apple Silicon용 DMG를 열고 **Sheet Studio.app**을 **응용 프로그램(Applications)** 폴더로 복사합니다. ZIP은 압축을 풀어 `.app` 전체를 복사합니다.
+3. 복사한 앱을 실행합니다. DMG는 복사 후 추출해도 됩니다.
+4. 다음부터는 응용 프로그램 폴더 또는 Spotlight에서 **Sheet Studio**를 실행합니다.
+
+이 릴리즈의 Mac 앱은 로컬 ad-hoc 서명이며 Apple Developer ID 서명·공증을 받지 않았습니다. 따라서 macOS가 실행을 차단할 수 있습니다. 다운로드 출처를 확인하고 macOS의 보안 안내에 따라 사용자가 실행 여부를 결정해야 합니다. 회사 정책으로 차단된 경우 관리자에게 문의하세요. 보안 기능을 일괄 해제하는 명령은 필요하지 않습니다.
+
 ### Linux (Ubuntu·Debian 계열 x64)
 
-`Sheet-Studio-0.7.17-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
+`Sheet-Studio-0.7.20-Linux-amd64.deb`를 다운로드한 폴더에서 설치합니다.
 
 ```sh
-sudo apt install ./Sheet-Studio-0.7.17-Linux-amd64.deb
+sudo apt install ./Sheet-Studio-0.7.20-Linux-amd64.deb
 sheet-studio
 ```
 
@@ -105,6 +103,8 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 - 0.7.11부터 셀을 선택하고 바로 글자·숫자를 입력하면 **방향키로 입력을 확정하고 해당 방향의 셀로 이동**합니다. 숨김 행·열은 건너뛰고 병합 셀은 바깥으로 이동합니다. **F2·더블클릭·수식 입력줄**로 편집할 때는 방향키가 글자 사이 커서를 이동합니다. 수식에서 참조를 기다리는 위치의 방향키는 셀 참조를 지정합니다.
 - 열·행 머리글 경계를 드래그해 크기를 조절합니다. 경계를 더블클릭하면 자동 맞춤합니다.
 - **보기 → 틀 고정**으로 제목 행·열을 고정합니다.
+- 잘라낸 뒤 다른 문서를 열거나 원본 셀·행 구조를 바꾸면 안전한 복사로 전환합니다. 현재 원본 셀은 삭제하지 않습니다. 같은 문서의 시트 간 잘라내기는 이동으로 동작합니다.
+- 열기·저장 창은 현재 파일 폴더를 먼저 표시하고, 새 문서는 마지막 사용 폴더를 사용합니다. 재시작 후에도 위치를 기억합니다.
 - **홈 → 선택하여 붙여넣기**에서 값·수식·서식만 붙이거나 행과 열을 바꿉니다.
 - 시트 삭제는 실행 취소할 수 있습니다. 삭제한 시트의 수식 참조는 `#REF!`가 되며 같은 이름으로 새 시트를 만들어도 되살아나지 않습니다.
 
@@ -192,7 +192,7 @@ Windows VBA 작업은 XLSM 열기 → **개발 도구 → Excel에서 매크로 
 ```sh
 git clone https://github.com/beaur8-prog/sheet-studio.git
 cd sheet-studio
-git checkout v0.7.17
+git checkout v0.7.20
 npm ci
 npm run runtime:install
 npm run desktop
