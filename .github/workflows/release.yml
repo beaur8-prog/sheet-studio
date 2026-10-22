@@ -64,6 +64,7 @@ jobs:
           if [ "${{ matrix.platform }}" = linux ]; then
             xvfb-run -a node scripts/check-linux-desktop.cjs
             xvfb-run -a node scripts/electron-smoke.cjs --packaged
+            xvfb-run -a node tests/ui-user-journeys.mjs --packaged
             xvfb-run -a node tests/ui-file-dialogs.mjs --packaged
             xvfb-run -a node tests/ui-recovery.mjs --packaged
             xvfb-run -a node tests/ui-capacity.mjs --packaged
@@ -86,6 +87,7 @@ jobs:
             xvfb-run -a node tests/ui-parity-audit.mjs --packaged
           else
             node scripts/electron-smoke.cjs --packaged
+            node tests/ui-user-journeys.mjs --packaged
             node tests/ui-file-dialogs.mjs --packaged
             node tests/ui-recovery.mjs --packaged
             node tests/ui-capacity.mjs --packaged
