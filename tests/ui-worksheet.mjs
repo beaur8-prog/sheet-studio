@@ -9,10 +9,10 @@ const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes
 const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package/worksheet-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
 const page=await app.firstWindow(),errors=[],mod=process.platform==='darwin'?'Meta':'Control';page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
-const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');};
+const go=async a=>{await settle();await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');await settle();};
 const model=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0]);
 const cell=a=>page.getByRole('gridcell',{name:a,exact:true});
-const settle=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 // Read an attached element in one renderer task; renderGrid replaces nodes.
 const rect=a=>cell(a).evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y};});
 const act=async a=>{await page.locator(`[data-action="${a}"]`).last().click();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));};
@@ -22,7 +22,12 @@ try{
   await page.waitForFunction(()=>sheetStudio.getWorkbook().sheets[0].cells.A1?.raw==='상품'&&document.querySelector('.cell[aria-label="A1"]')?.textContent==='상품');await settle();
   const before=await rect('A1');await page.locator('#grid').evaluate(el=>{el.scrollTop=500;el.scrollLeft=500;});await page.waitForFunction(()=>{const g=document.querySelector('#grid');return g.scrollTop===500&&g.scrollLeft===500;});await settle();
   const after=await rect('A1');assert.equal(after.x,before.x);assert.equal(after.y,before.y);assert.equal(await cell('F1').count(),0);assert.equal(await cell('A9').count(),0);
-  await go('B3');assert.equal((await rect('B3')).x>=before.x+130,true);await cell('A1').click();await page.waitForFunction(()=>document.querySelector('#name-box').value==='A1');
+  await go('B3');
+  // Check rendered neighbors, allowing subpixel rounding, after the scroll and
+  // worker-driven redraw. An old absolute x coordinate is not a visual edge.
+  const navigation=await page.evaluate(()=>{const a=document.querySelector('.cell[aria-label="A1"]').getBoundingClientRect(),b=document.querySelector('.cell[aria-label="B3"]').getBoundingClientRect();return {frozenLeft:a.left,frozenRight:a.right,targetLeft:b.left,scrollLeft:document.querySelector('#grid').scrollLeft};});
+  console.log('Frozen navigation geometry:',JSON.stringify({before,...navigation}));
+  assert.ok(navigation.targetLeft>=navigation.frozenRight-.5,JSON.stringify(navigation));await cell('A1').click();await page.waitForFunction(()=>document.querySelector('#name-box').value==='A1');
   await page.getByRole('button',{name:'보기',exact:true}).click();await act('freeze-menu');await act('freeze-none');assert.deepEqual((await model()).freeze,{rows:0,cols:0});
   await go('C3');await act('freeze-menu');await act('freeze-selection');assert.deepEqual((await model()).freeze,{rows:2,cols:2});await page.locator('#grid').evaluate(el=>{el.scrollTop=250;el.scrollLeft=250;});await page.waitForTimeout(100);assert.ok(await cell('B2').isVisible());
   await act('freeze-menu');await act('freeze-first-row');assert.deepEqual((await model()).freeze,{rows:1,cols:0});
@@ -39,4 +44,4 @@ try{
   await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/worksheet-features.png')});
   await act('conditional');await page.getByRole('button',{name:'새 규칙',exact:true}).click();const dialog=await page.getByRole('dialog').boundingBox();assert.ok(dialog.y>=0&&dialog.y+dialog.height<=await page.evaluate(()=>innerHeight));await page.screenshot({path:path.join(root,'test-results/conditional-rule.png')});
   assert.deepEqual(errors,[]);console.log('Worksheet UI passed: freeze scroll/picking, Ctrl+Enter, paste special, copy outline, hide/unhide, live conditional rules and reload.');
-}finally{await app.close();}
+}finally{await app.close();await fs.rm(env.SHEET_STUDIO_DATA,{recursive:true,force:true});}
