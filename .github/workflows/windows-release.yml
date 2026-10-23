@@ -1,0 +1,53 @@
+name: Windows release package
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft release tag
+        required: true
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Check draft version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node -e "if(process.env.RELEASE_TAG!=='v'+require('./package.json').version)throw Error('Tag/version mismatch')"
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:updates
+      - run: npm run package:win
+      - name: Verify Windows installation
+        shell: pwsh
+        run: ./scripts/check-windows-install.ps1
+      - name: Prepare release assets
+        shell: bash
+        env:
+          TARGET_PLATFORM: win
+          TARGET_ARCH: x64
+        run: node scripts/release-assets.cjs
+      - name: Upload verified draft assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" release-assets/* --clobber
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-release-evidence
+          path: test-results/
