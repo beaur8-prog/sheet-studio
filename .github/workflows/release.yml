@@ -49,6 +49,7 @@ jobs:
       - run: npm ci
       - run: npm run runtime:install
       - run: npm test
+      - run: npm run test:updates
       - run: npm run package -- --${{ matrix.platform }} --arch=${{ matrix.arch }}
       - name: Install Linux DEB
         if: matrix.platform == 'linux'

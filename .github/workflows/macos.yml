@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - run: npm run runtime:install
       - run: npm test
+      - run: npm run test:updates
       - run: npm run package:mac -- --arch=${{ matrix.arch }}
       - run: node scripts/electron-smoke.cjs --packaged
       - run: node tests/ui-charts.mjs --packaged

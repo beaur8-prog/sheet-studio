@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, shell, Notification } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url');
 const vba = require('./vba.cjs');
 const { applicationMenu } = require('./menu.cjs');
 const { createFileLocations } = require('./file-locations.cjs');
+const { createStudioUpdater } = require('./studio-updater.cjs');
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const filters = [
@@ -30,6 +31,13 @@ if (process.platform === 'linux') {
 if (process.platform === 'win32') app.setAppUserModelId('local.lattice.sheetstudio');
 if (process.env.SHEET_STUDIO_DATA) app.setPath('userData', path.resolve(process.env.SHEET_STUDIO_DATA));
 const fileLocations = createFileLocations({ stateFile: path.join(app.getPath('userData'), 'file-locations.json'), documents: app.getPath('documents') });
+const updates = createStudioUpdater({ app, dialog, shell, Notification, id: 'sheet', getWindow: () => win });
+function installMenu() {
+  const template = applicationMenu(process.platform, action => win?.webContents.send('sheet:menu-action', action)) || [];
+  template.push({ label: '도움말', submenu: updates.menuTemplate() });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+updates.onChange(installMenu);
 
 function trusted(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame ||
@@ -91,6 +99,7 @@ ipcMain.on('sheet:close-ready', (event, result) => {
   clearTimeout(closing.timer); const mode = closing.mode; closing = null;
   if (result.error) {
     quitting = false;
+    void updates.cancelInstall();
     dialog.showErrorBox('자동 복구 저장 실패', '문서를 파일로 저장한 뒤 다시 종료하세요.\n' + String(result.error).slice(0, 500));
     return;
   }
@@ -125,8 +134,7 @@ async function createWindow() {
       nodeIntegration: false, sandbox: true, webviewTag: false,
     },
   });
-  const menu = applicationMenu(process.platform, action => win?.webContents.send('sheet:menu-action', action));
-  Menu.setApplicationMenu(menu ? Menu.buildFromTemplate(menu) : null);
+  installMenu();
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -137,6 +145,7 @@ async function createWindow() {
     const id = randomUUID();
     const timer = setTimeout(() => {
       closing = null; quitting = false;
+      void updates.cancelInstall();
       dialog.showErrorBox('자동 복구 저장 대기', '저장을 마치지 못해 창을 유지했습니다. 문서를 파일로 저장한 뒤 다시 종료하세요.');
     }, 60000);
     closing = {id, timer, mode}; window.webContents.send('sheet:before-close', id);
@@ -152,7 +161,7 @@ async function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
-app.whenReady().then(createWindow).catch(error => {
+app.whenReady().then(async () => { await createWindow(); await updates.start(); }).catch(error => {
   console.error(error);
   dialog.showErrorBox('Sheet Studio를 시작할 수 없습니다', error.message);
   app.exit(1);
