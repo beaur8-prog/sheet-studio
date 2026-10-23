@@ -29,6 +29,7 @@ jobs:
           node -e "if(process.env.RELEASE_TAG!=='v'+require('./package.json').version)throw Error('Tag/version mismatch')"
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
       - run: npm ci
+      - run: npm run runtime:install
       - run: npm test
       - run: npm run test:updates
       - run: npm run package:win
