@@ -1,6 +1,6 @@
 {
   "name": "lattice-sheet-studio",
-  "version": "0.7.21",
+  "version": "0.7.22",
   "description": "Independent local spreadsheet editor with formulas and XLSX exchange",
   "author": "Sheet Studio",
   "private": true,
