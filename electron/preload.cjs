@@ -5,6 +5,13 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   writeClipboard: payload => ipcRenderer.invoke('sheet:write-clipboard', payload),
   pasteClipboard: () => ipcRenderer.invoke('sheet:paste-clipboard'),
   openFile: documentId => ipcRenderer.invoke('sheet:open-file', documentId),
+  takeRequestedFile: () => ipcRenderer.invoke('sheet:take-requested-file'),
+  onOpenRequested: listener => {
+    if (typeof listener !== 'function') throw new TypeError('A file-open listener is required.');
+    const handler = () => listener();
+    ipcRenderer.on('sheet:open-requested', handler);
+    return () => ipcRenderer.removeListener('sheet:open-requested', handler);
+  },
   confirmFile: payload => ipcRenderer.invoke('sheet:confirm-file', payload),
   saveFile: payload => ipcRenderer.invoke('sheet:save-file', payload),
   setTitle: title => ipcRenderer.send('sheet:set-title', String(title)),

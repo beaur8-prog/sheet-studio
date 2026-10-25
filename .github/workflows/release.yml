@@ -67,6 +67,7 @@ jobs:
             xvfb-run -a node scripts/electron-smoke.cjs --packaged
             xvfb-run -a node tests/ui-user-journeys.mjs --packaged
             xvfb-run -a node tests/ui-file-dialogs.mjs --packaged
+            xvfb-run -a node tests/ui-file-associations.mjs --packaged
             xvfb-run -a node tests/ui-recovery.mjs --packaged
             xvfb-run -a node tests/ui-capacity.mjs --packaged
             xvfb-run -a node tests/ui-capacity.mjs --packaged --tall
@@ -90,6 +91,7 @@ jobs:
             node scripts/electron-smoke.cjs --packaged
             node tests/ui-user-journeys.mjs --packaged
             node tests/ui-file-dialogs.mjs --packaged
+            node tests/ui-file-associations.mjs --packaged
             node tests/ui-recovery.mjs --packaged
             node tests/ui-capacity.mjs --packaged
             node tests/ui-capacity.mjs --packaged --tall

@@ -8,6 +8,7 @@ const vba = require('./vba.cjs');
 const { applicationMenu } = require('./menu.cjs');
 const { createFileLocations } = require('./file-locations.cjs');
 const { createStudioUpdater } = require('./studio-updater.cjs');
+const { FileOpenRequests } = require('./file-open-requests.cjs');
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const filters = [
@@ -17,6 +18,8 @@ const filters = [
   { name: 'Sheet Studio', extensions: ['sheet.json', 'json'] },
 ];
 let win, quitting = false, closing = null, recoveryReady = false;
+let nativeOperationPending = false;
+const fileOpenRequests = new FileOpenRequests();
 const rendererPath = path.join(__dirname, '../dist/index.html');
 const rendererURL = pathToFileURL(rendererPath).href;
 app.setName('Sheet Studio');
@@ -44,21 +47,50 @@ function trusted(event) {
       event.senderFrame.url.split('#')[0] !== rendererURL) throw new Error('허용되지 않는 앱 요청입니다.');
 }
 
-ipcMain.handle('sheet:open-file', async (event, documentId) => {
+function notifyFileOpenRequests() {
+  if (fileOpenRequests.size && win && !win.isDestroyed()) win.webContents.send('sheet:open-requested');
+}
+
+function showEditorForFileOpen() {
+  if (!app.isReady()) return;
+  if (!win) { void createWindow().catch(startupError); return; }
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus(); notifyFileOpenRequests();
+}
+
+async function withNativeOperation(event, operation) {
   trusted(event);
+  if (nativeOperationPending) throw Error('다른 파일 작업이 끝난 후 다시 시도하세요.');
+  nativeOperationPending = true;
+  try { return await operation(); }
+  finally { nativeOperationPending = false; notifyFileOpenRequests(); }
+}
+
+async function readWorkbookFile(file) {
+  const stat = await fs.stat(file);
+  if (!stat.isFile()) throw Error('통합 문서 파일을 선택하세요.');
+  if (stat.size > MAX_FILE_BYTES) throw new Error('100 MB 이하의 통합 문서를 선택하세요.');
+  const data = await fs.readFile(file);
+  const originToken = /\.xlsm$/i.test(file) ? await vba.rememberFile(file, data) : undefined;
+  return { name: path.basename(file), data: new Uint8Array(data), locationToken: fileLocations.stage(file), ...(originToken ? { originToken } : {}) };
+}
+
+ipcMain.handle('sheet:take-requested-file', (event, ...args) => {
+  trusted(event);
+  if (args.length) throw TypeError('파일 열기 요청에는 경로나 인수가 필요하지 않습니다.');
+  if (!fileOpenRequests.size || nativeOperationPending || closing) return null;
+  return withNativeOperation(event, () => readWorkbookFile(fileOpenRequests.take()));
+});
+
+ipcMain.handle('sheet:open-file', (event, documentId) => withNativeOperation(event, async () => {
   const result = await dialog.showOpenDialog(win, { title: '통합 문서 열기', defaultPath: await fileLocations.directory(documentId), properties: ['openFile'], filters });
   if (result.canceled || !result.filePaths.length) return null;
-  const file = result.filePaths[0];
-  if ((await fs.stat(file)).size > MAX_FILE_BYTES) throw new Error('100 MB 이하의 통합 문서를 선택하세요.');
-  const data=await fs.readFile(file);
-  const originToken=/\.xlsm$/i.test(file)?await vba.rememberFile(file,data):undefined;
-  return { name: path.basename(file), data: new Uint8Array(data), locationToken: fileLocations.stage(file), ...(originToken?{originToken}:{}) };
-});
+  return readWorkbookFile(result.filePaths[0]);
+}));
 
 ipcMain.handle('sheet:confirm-file', async (event, payload) => { trusted(event); await fileLocations.confirm(payload); });
 
-ipcMain.handle('sheet:save-file', async (event, payload) => {
-  trusted(event);
+ipcMain.handle('sheet:save-file', (event, payload) => withNativeOperation(event, async () => {
   if (!payload || typeof payload.name !== 'string' || !(payload.data instanceof Uint8Array || Array.isArray(payload.data)) ||
       payload.data.length > MAX_FILE_BYTES || Array.isArray(payload.data) && payload.data.some(value => !Number.isInteger(value) || value < 0 || value > 255)) {
     throw new Error('저장할 파일 데이터가 올바르지 않습니다.');
@@ -82,7 +114,7 @@ ipcMain.handle('sheet:save-file', async (event, payload) => {
   }
   await fileLocations.remember(payload.documentId, result.filePath);
   return result.filePath;
-});
+}));
 
 for(const [name,handler] of Object.entries({vbaProbe:()=>vba.probe(),vbaStart:payload=>vba.start(payload),vbaStatus:id=>vba.status(id),vbaCommand:payload=>vba.command(payload.id,payload.command),vbaResult:id=>vba.result(id),vbaCancel:id=>vba.cancel(id)})){
   ipcMain.handle('sheet:'+name,async(event,payload)=>{trusted(event);return handler(payload);});
@@ -161,11 +193,27 @@ async function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
-app.whenReady().then(async () => { await createWindow(); await updates.start(); }).catch(error => {
+function startupError(error) {
   console.error(error);
   dialog.showErrorBox('Sheet Studio를 시작할 수 없습니다', error.message);
   app.exit(1);
-});
-app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
-app.on('before-quit', () => { quitting = true; });
-app.on('window-all-closed', () => { if(process.platform!=='darwin')vba.closeAll().finally(()=>app.quit()); });
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  // Finder may send open-file before ready or before the renderer subscribes.
+  app.on('open-file', (event, filename) => {
+    event.preventDefault();
+    if (fileOpenRequests.add(filename)) showEditorForFileOpen();
+  });
+  fileOpenRequests.addArguments(process.argv, process.cwd());
+  app.on('second-instance', (_event, argv, workingDirectory) => {
+    fileOpenRequests.addArguments(argv, workingDirectory);
+    showEditorForFileOpen();
+  });
+  app.whenReady().then(async () => { await createWindow(); await updates.start(); }).catch(startupError);
+  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) void createWindow().catch(startupError); });
+  app.on('before-quit', () => { quitting = true; });
+  app.on('window-all-closed', () => { if(process.platform!=='darwin')vba.closeAll().finally(()=>app.quit()); });
+}

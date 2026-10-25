@@ -6,6 +6,7 @@ const { createIcon, createLinuxIcons, brandExecutable } = require('./branding.cj
 const { verifyRuntime } = require('./runtime-proof.cjs');
 const { generateManifest } = require('./artifacts.cjs');
 const { buildTarget, findRuntime, runtimeLocations, outputDir } = require('./platform.cjs');
+const { fileAssociations } = require('../electron/file-open-requests.cjs');
 
 async function packageApp() {
   const target = buildTarget(process.argv.slice(2));
@@ -40,6 +41,7 @@ async function packageApp() {
     targets: (mac ? Platform.MAC : linux ? Platform.LINUX : Platform.WINDOWS).createTarget(target.directory ? 'dir' : mac ? ['dmg', 'zip'] : linux ? 'deb' : 'nsis', Arch[target.arch]),
     config: {
       appId: 'local.lattice.sheetstudio', productName: 'Sheet Studio', publish: null,
+      fileAssociations,
       electronVersion: runtime.version, ...(reuseRuntime ? { electronDist: path.join(electronRoot, 'dist') } : {}),
       npmRebuild: false, asar: true,
       directories: { output },
