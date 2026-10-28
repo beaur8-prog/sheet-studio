@@ -1,5 +1,14 @@
 # 검증 기록
 
+## 2026-10-28 · 0.7.28 설치 시 지원 앱 등록 (배포 전)
+
+- 설치 시 XLSX·XLSM·CSV·TSV를 지원하는 앱으로 등록합니다. Windows는 확장자별 `OpenWithProgids`, 실행 파일의 `SupportedTypes`, `RegisteredApplications`·`Capabilities`를 등록해 연결 프로그램 및 기본 앱 목록에 표시합니다. 실행 파일·인수·아이콘 경로를 인용하며 기존 확장자 기본값과 `UserChoice`는 쓰지 않습니다. NSIS의 기본 등록 매크로는 Windows에서 사용하지 않습니다.
+- 이전 설치 프로그램이 사용한 형식 이름의 ProgID는 기존 처리기가 없는 경우에만 호환 별칭으로 복구합니다. 다른 앱이 해당 이름을 소유하면 변경하지 않습니다. 제거할 때는 Sheet Studio의 등록과 소유권·실행 명령이 일치하는 호환 별칭만 삭제하며 사용자 문서·복구 자료와 다른 지원 앱은 보존합니다. 지원하지 않는 XLS 및 일반 JSON은 등록하지 않습니다.
+- [설치 검증 CI 40675723354](https://github.com/beaur8-prog/sheet-studio/actions/runs/40675723354), 소스 `be5fcef`: **Windows x64·Mac arm64·Ubuntu 22.04 x64 모두 통과**했습니다. 단위 검사는 Windows 182개, Mac·Linux 각각 181개 통과 및 Windows 전용 1개 제외입니다. 세 OS에서 검증 패키지를 새로 빌드하고 파일 연결 열기 회귀 검사도 실행했습니다.
+- Windows 실제 NSIS 설치·재설치·제거 검사에서 네 확장자 모두 Explorer의 `SHAssocEnumHandlers` 결과에 Sheet Studio가 표시되는 것을 확인했습니다. 기본 앱 목록 등록, 다른 기본값·지원 앱 보존, 이전 Sheet Studio 연결 복구, 제거 시 등록 정리, 한글·공백 설치 경로와 명령 인용, 설치 앱 실행·파일 열기, 사용자 자료 보존을 통과했습니다. 구형 WScript의 `TargetPath`는 한글을 `?`로 읽을 수 있어 실제 바로가기는 Unicode `IShellLinkW`로 확인했습니다.
+- Mac은 `Editor`·`Alternate` 선언 및 Launch Services의 네 확장자 지원 앱 목록을 확인했고, 격리 CI 계정에서 명시적으로 선택한 기존 앱이 보존되는 것을 검증했습니다. 사용자가 기본 앱을 고르지 않은 경우의 자동 추천 변경은 명시적 선택 변경과 구분합니다. Linux DEB 설치 후 `.desktop`의 MIME·파일 인수 전달과 실제 GIO 지원 앱 목록, 아이콘·창 식별자를 확인했습니다.
+- 로컬 단위·업데이트 검사 **198개 통과·Windows 전용 1개 제외**, 프로덕션 빌드와 Mac arm64 0.7.28 패키지의 문서 형식 선언·ad-hoc 서명 무결성 검사를 통과했습니다. 잠긴 화면의 기존 앱·문서를 유지했으며 검증한 Mac 빌드는 `SheetStudioBuild/0.7.28/mac-arm64`에 준비했습니다. 임시 패키징 스테이징은 제거했습니다. GitHub 공개 릴리즈 및 리토스는 갱신하지 않았습니다.
+
 ## 2026-10-25 · 0.7.25 파일 연결로 통합 문서 열기 수정 (배포 전)
 
 - Slide Studio의 `6d67e1a` 수정과 비교해 Sheet Studio에도 같은 결함이 있음을 확인했습니다. 수정 전 소스 Electron에서 XLSX를 실행 인수로 전달해도 무시되고 `open-file` 이벤트 리스너가 없는 것을 재현했습니다.
