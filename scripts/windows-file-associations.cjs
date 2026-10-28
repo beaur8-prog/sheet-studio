@@ -11,7 +11,19 @@ const description = 'Spreadsheet editor for XLSX, XLSM, CSV and TSV files';
 const endIf = '${EndIf}';
 const write = (key, name, value) => `  WriteRegStr SHELL_CONTEXT "${key}" "${name}" '${value}'`;
 const remove = (key, name) => `  DeleteRegValue SHELL_CONTEXT "${key}" "${name}"`;
-const prune = keys => keys.map(key => `  DeleteRegKey /ifempty SHELL_CONTEXT "${key}"`).join('\n');
+// The bundled NSIS can treat /ifempty as "no subkeys", even when values
+// remain. Explicitly enumerate BOTH before considering a key for deletion.
+const prune = keys => keys.map(key => `
+  ClearErrors
+  EnumRegValue $0 SHELL_CONTEXT "${key}" 0
+  \${If} \${Errors}
+    ClearErrors
+    EnumRegKey $0 SHELL_CONTEXT "${key}" 0
+    \${If} \${Errors}
+      DeleteRegKey /ifempty SHELL_CONTEXT "${key}"
+    ${endIf}
+  ${endIf}
+  ClearErrors`).join('\n');
 
 // Do not remove a value another installer changed, or its added verbs/data.
 const removeMatching = (key, name, value) => `
