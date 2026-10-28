@@ -1,10 +1,27 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
 
 // Query the same association handlers used by Explorer's Open With menu.
 // This helper runs only on the disposable installer CI runner.
 public static class SheetFileSupport {
+    [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellLinkW {
+        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int capacity, IntPtr findData, uint flags);
+    }
+
+    public static string ShortcutTarget(string filename) {
+        var link = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046")));
+        try {
+            ((IPersistFile)link).Load(filename, 0);
+            var path = new StringBuilder(32768);
+            ((IShellLinkW)link).GetPath(path, path.Capacity, IntPtr.Zero, 4);
+            return path.ToString();
+        } finally { Marshal.ReleaseComObject(link); }
+    }
+
     [ComImport, Guid("F04061AC-1659-4A3F-A954-775AA57FC083"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IAssocHandler {
         void GetName([MarshalAs(UnmanagedType.LPWStr)] out string name);

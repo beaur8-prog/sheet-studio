@@ -58,6 +58,10 @@ function Assert-FileSupport {
     $handlers = [SheetFileSupport]::Applications(".$extension")
     if ($handlers -notcontains 'Sheet Studio') { throw "Explorer does not offer Sheet Studio for .$extension : $handlers" }
   }
+  $legacy = Get-Item 'HKCU:/Software/Classes/Excel Workbook/shell/open/command'
+  if ($legacy.GetValue('') -ne $command) { throw 'Previous Sheet Studio default ProgID no longer opens this app' }
+  $otherLegacy = Get-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command'
+  if ($otherLegacy.GetValue('') -ne 'OTHER EDITOR COMMAND') { throw 'Overwrote another app legacy handler' }
   if ($supported.GetValueNames() -contains '.json' -or $supported.GetValueNames() -contains '.xls') { throw 'Registered an unsupported broad file type' }
   Assert-AssociationsPreserved
 }
@@ -75,6 +79,9 @@ function Assert-FileSupportRemoved {
     if ($openWith.GetValueNames() -contains $progId) { throw "Left .$extension Open With entry" }
   }
   Assert-AssociationsPreserved
+  if (Test-Path 'HKCU:/Software/Classes/Excel Workbook') { throw 'Left app-owned legacy alias' }
+  $otherLegacy = Get-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command'
+  if ($otherLegacy.GetValue('') -ne 'OTHER EDITOR COMMAND') { throw 'Removed another app legacy handler' }
 }
 
 function Run-Installer([string] $file, [string[]] $arguments) {
@@ -93,8 +100,13 @@ function Assert-Installed {
   $actual = (Get-Item $executable).VersionInfo.ProductVersion
   if ($actual -ne $version) { throw "Installed version $actual does not match $version" }
   $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($startLink)
-  if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ne [IO.Path]::GetFullPath($executable)) {
-    throw "Start menu shortcut target '$($shortcut.TargetPath)' differs from '$executable'."
+  $unicodeTarget = [SheetFileSupport]::ShortcutTarget($startLink)
+  $report.shortcutTargetWSH = $shortcut.TargetPath
+  $report.shortcutTargetUnicode = $unicodeTarget
+  New-Item -ItemType Directory -Path (Split-Path $reportPath -Parent) -Force | Out-Null
+  Copy-Item $startLink (Join-Path (Split-Path $reportPath -Parent) 'installed-start-menu.lnk') -Force
+  if ([IO.Path]::GetFullPath($unicodeTarget) -ne [IO.Path]::GetFullPath($executable)) {
+    throw "Unicode shell shortcut target '$unicodeTarget' differs from '$executable'."
   }
   $explorer = New-Object -ComObject Shell.Application
   $item = $explorer.NameSpace((Split-Path $startLink)).ParseName((Split-Path $startLink -Leaf))
@@ -128,6 +140,12 @@ try {
     New-Item "HKCU:/Software/Classes/.$extension/OpenWithProgids" -Force | Out-Null
     New-ItemProperty "HKCU:/Software/Classes/.$extension/OpenWithProgids" -Name 'SheetStudio.QA.OtherEditor' -Value '' -PropertyType String | Out-Null
   }
+  # Simulate an older Sheet Studio choice whose ProgID was removed by its
+  # uninstaller, plus a generic legacy name now owned by a different editor.
+  (Get-Item 'HKCU:/Software/Classes/.xlsx').SetValue('', 'Excel Workbook')
+  $defaults['xlsx'] = 'Excel Workbook'
+  New-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command' -Force | Out-Null
+  (Get-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command').SetValue('', 'OTHER EDITOR COMMAND')
   New-Item -ItemType Directory -Path (Split-Path $recovery -Parent), (Split-Path $document -Parent) -Force | Out-Null
   Set-Content $recovery 'PRESERVE SHEET STUDIO USER DATA'
   Set-Content $document 'PRESERVE SHEET STUDIO USER DATA'
@@ -139,6 +157,7 @@ try {
   $report.defaultAppsRegistration = $true
   $report.previousDefaultsAndOtherAppsPreserved = $true
   $report.quotedUnicodeInstallPath = $true
+  $report.previousSheetStudioHandlerPreserved = $true
   $report.freshInstall = $true
   $report.shortcuts = $true
   $report.installedAppsEntry = $true
