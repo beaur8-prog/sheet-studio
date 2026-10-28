@@ -1,5 +1,12 @@
 # 검증 기록
 
+## 2026-10-28 · 공유 레지스트리의 다른 앱 정보 보존 강화 (0.7.28 배포 전)
+
+- 제거 범위를 재확인해 구버전 호환 별칭의 소유권만 보고 전체 키를 삭제하던 처리를 제거했습니다. 전용 ProgID·실행 파일·Capabilities도 설치 시 기록한 값과 현재 값이 일치할 때만 해당 값을 지우고, 다른 앱이 추가한 메뉴·설정·변경한 실행 명령과 아이콘은 남깁니다. 이미 있는 구버전 별칭의 아이콘은 설치 시 덮어쓰지 않으며, 직접 만든 아이콘에만 소유권을 기록합니다.
+- 패키지의 NSIS에서 `/ifempty` 단독 사용 후 다른 앱의 값이 손실되는 재설치 회귀 실패를 확인했습니다. `EnumRegValue`·`EnumRegKey`로 **값과 하위 키가 모두 없는지** 먼저 확인하는 처리로 수정했고, 생성 스크립트에 무조건적인 전체 키 삭제가 없는지도 검사합니다. 기본 앱 선택과 다른 확장자 지원 앱 등록은 변경하지 않습니다.
+- [최종 설치 검증 CI 40687065631](https://github.com/beaur8-prog/sheet-studio/actions/runs/40687065631), 소스 `7fad1d6`: **Windows·Mac·Ubuntu 모두 통과**했습니다. Windows 실제 설치·재설치·제거에서 기존 다른 앱의 일반 형식 처리기, 구버전 공통 키의 아이콘·편집 메뉴, 설치 후 추가한 메타데이터·전용 ProgID와 Applications 아래의 메뉴·Capabilities의 외부 확장자, 나중에 변경된 명령·아이콘 등 **별도 정보 12개**가 보존됐습니다. 원래 확장자 공유 목록과 기본값, 다른 RegisteredApplications 항목도 보존됐으며 Sheet Studio의 등록값·소유권 표시는 정리됐습니다.
+- CI 단위 검사는 Windows 183개, Mac·Linux 각각 182개 통과 및 Windows 전용 1개 제외입니다. 세 OS의 패키지 빌드·파일 연결 열기와 Mac Launch Services·Linux MIME 검사도 통과했습니다. Git에 반영했으며 공개 릴리즈·리토스는 갱신하지 않았습니다.
+
 ## 2026-10-28 · 0.7.28 설치 시 지원 앱 등록 (배포 전)
 
 - 설치 시 XLSX·XLSM·CSV·TSV를 지원하는 앱으로 등록합니다. Windows는 확장자별 `OpenWithProgids`, 실행 파일의 `SupportedTypes`, `RegisteredApplications`·`Capabilities`를 등록해 연결 프로그램 및 기본 앱 목록에 표시합니다. 실행 파일·인수·아이콘 경로를 인용하며 기존 확장자 기본값과 `UserChoice`는 쓰지 않습니다. NSIS의 기본 등록 매크로는 Windows에서 사용하지 않습니다.
