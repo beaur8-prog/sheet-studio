@@ -8,7 +8,7 @@ if ($env:CI -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
 $root = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content (Join-Path $root 'package.json') | ConvertFrom-Json).version
 $setup = Join-Path $root "release/$version/win-x64/Sheet-Studio-$version-Windows-x64-Setup.exe"
-$installDir = Join-Path $env:LOCALAPPDATA 'Programs/한글 설치 경로/Sheet Studio'
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\한글 설치 경로\Sheet Studio'
 $executable = Join-Path $installDir 'Sheet Studio.exe'
 $profile = Join-Path $env:APPDATA 'Sheet Studio'
 $recovery = Join-Path $profile 'recovery/installer-preservation-test.sheet.json'
@@ -93,7 +93,9 @@ function Assert-Installed {
   $actual = (Get-Item $executable).VersionInfo.ProductVersion
   if ($actual -ne $version) { throw "Installed version $actual does not match $version" }
   $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($startLink)
-  if ($shortcut.TargetPath -ne $executable) { throw 'Start menu shortcut points to another executable.' }
+  if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ne [IO.Path]::GetFullPath($executable)) {
+    throw "Start menu shortcut target '$($shortcut.TargetPath)' differs from '$executable'."
+  }
   $explorer = New-Object -ComObject Shell.Application
   $item = $explorer.NameSpace((Split-Path $startLink)).ParseName((Split-Path $startLink -Leaf))
   if ($item.ExtendedProperty('System.AppUserModel.ID') -ne 'local.lattice.sheetstudio') { throw 'Shortcut AppUserModelID mismatch' }
