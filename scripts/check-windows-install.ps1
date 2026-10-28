@@ -142,10 +142,12 @@ try {
   }
   # Simulate an older Sheet Studio choice whose ProgID was removed by its
   # uninstaller, plus a generic legacy name now owned by a different editor.
-  (Get-Item 'HKCU:/Software/Classes/.xlsx').SetValue('', 'Excel Workbook')
+  $legacy = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Classes\.xlsx')
+  try { $legacy.SetValue('', 'Excel Workbook') } finally { $legacy.Dispose() }
   $defaults['xlsx'] = 'Excel Workbook'
   New-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command' -Force | Out-Null
-  (Get-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command').SetValue('', 'OTHER EDITOR COMMAND')
+  $legacy = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Classes\CSV Spreadsheet\shell\open\command')
+  try { $legacy.SetValue('', 'OTHER EDITOR COMMAND') } finally { $legacy.Dispose() }
   New-Item -ItemType Directory -Path (Split-Path $recovery -Parent), (Split-Path $document -Parent) -Force | Out-Null
   Set-Content $recovery 'PRESERVE SHEET STUDIO USER DATA'
   Set-Content $document 'PRESERVE SHEET STUDIO USER DATA'
