@@ -8,7 +8,7 @@ if ($env:CI -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
 $root = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content (Join-Path $root 'package.json') | ConvertFrom-Json).version
 $setup = Join-Path $root "release/$version/win-x64/Sheet-Studio-$version-Windows-x64-Setup.exe"
-$installDir = Join-Path $env:LOCALAPPDATA 'Programs/Sheet Studio'
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs/한글 설치 경로/Sheet Studio'
 $executable = Join-Path $installDir 'Sheet Studio.exe'
 $profile = Join-Path $env:APPDATA 'Sheet Studio'
 $recovery = Join-Path $profile 'recovery/installer-preservation-test.sheet.json'
@@ -17,6 +17,65 @@ $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Sheet Studio
 $startLink = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs/Sheet Studio.lnk'
 $reportPath = Join-Path $root 'test-results/windows-installer.json'
 $report = [ordered]@{ version = $version; passed = $false }
+$extensions = @('xlsx', 'xlsm', 'csv', 'tsv')
+$defaults = @{}
+$choices = @{}
+Add-Type -TypeDefinition (Get-Content (Join-Path $PSScriptRoot 'windows-file-support.cs') -Raw)
+
+function Get-UserChoice([string] $extension) {
+  $key = "HKCU:/Software/Microsoft/Windows/CurrentVersion/Explorer/FileExts/.$extension/UserChoice"
+  if (-not (Test-Path $key)) { return '' }
+  $value = Get-Item $key
+  return (@($value.GetValueNames() | Sort-Object | ForEach-Object { @($_, $value.GetValue($_)) }) | ConvertTo-Json -Compress)
+}
+
+function Assert-AssociationsPreserved {
+  foreach ($extension in $extensions) {
+    $key = Get-Item "HKCU:/Software/Classes/.$extension"
+    if ($key.GetValue('') -ne $defaults[$extension]) { throw "Changed existing .$extension default" }
+    if ((Get-UserChoice $extension) -ne $choices[$extension]) { throw "Changed .$extension UserChoice" }
+    $other = Get-Item "HKCU:/Software/Classes/.$extension/OpenWithProgids"
+    if ($other.GetValueNames() -notcontains 'SheetStudio.QA.OtherEditor') { throw "Removed another .$extension supporting app" }
+  }
+}
+
+function Assert-FileSupport {
+  $registered = Get-Item 'HKCU:/Software/RegisteredApplications'
+  if ($registered.GetValue('Sheet Studio') -ne 'Software\Sheet Studio\Capabilities') { throw 'Missing Default apps registration' }
+  $supported = Get-Item 'HKCU:/Software/Classes/Applications/Sheet Studio.exe/SupportedTypes'
+  $capabilities = Get-Item 'HKCU:/Software/Sheet Studio/Capabilities/FileAssociations'
+  $command = '"' + $executable + '" "%1"'
+  $appCommand = Get-Item 'HKCU:/Software/Classes/Applications/Sheet Studio.exe/shell/open/command'
+  if ($appCommand.GetValue('') -ne $command) { throw 'Application command must quote executable and filename' }
+  foreach ($extension in $extensions) {
+    $progId = "SheetStudio.$extension"
+    if ($supported.GetValueNames() -notcontains ".$extension") { throw "Missing .$extension SupportedTypes" }
+    if ($capabilities.GetValue(".$extension") -ne $progId) { throw "Missing .$extension capability" }
+    $openWith = Get-Item "HKCU:/Software/Classes/.$extension/OpenWithProgids"
+    if ($openWith.GetValueNames() -notcontains $progId) { throw "Missing .$extension OpenWithProgids" }
+    $open = Get-Item "HKCU:/Software/Classes/$progId/shell/open/command"
+    if ($open.GetValue('') -ne $command) { throw "Incorrect .$extension open command" }
+    $handlers = [SheetFileSupport]::Applications(".$extension")
+    if ($handlers -notcontains 'Sheet Studio') { throw "Explorer does not offer Sheet Studio for .$extension : $handlers" }
+  }
+  if ($supported.GetValueNames() -contains '.json' -or $supported.GetValueNames() -contains '.xls') { throw 'Registered an unsupported broad file type' }
+  Assert-AssociationsPreserved
+}
+
+function Assert-FileSupportRemoved {
+  foreach ($key in @('HKCU:/Software/Classes/Applications/Sheet Studio.exe', 'HKCU:/Software/Sheet Studio/Capabilities')) {
+    if (Test-Path $key) { throw "Left registration after uninstall: $key" }
+  }
+  $registered = Get-Item 'HKCU:/Software/RegisteredApplications'
+  if ($registered.GetValueNames() -contains 'Sheet Studio') { throw 'Left Default apps registration' }
+  foreach ($extension in $extensions) {
+    $progId = "SheetStudio.$extension"
+    if (Test-Path "HKCU:/Software/Classes/$progId") { throw "Left .$extension ProgID" }
+    $openWith = Get-Item "HKCU:/Software/Classes/.$extension/OpenWithProgids"
+    if ($openWith.GetValueNames() -contains $progId) { throw "Left .$extension Open With entry" }
+  }
+  Assert-AssociationsPreserved
+}
 
 function Run-Installer([string] $file, [string[]] $arguments) {
   $process = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
@@ -57,12 +116,27 @@ function Assert-Preserved {
 
 if (Test-Path $installDir) { throw 'This runner already has Sheet Studio installed.' }
 try {
+  # Seed independent defaults and another supporting app on this CI runner.
+  # TSV exercises the case where there is no extension default to begin with.
+  foreach ($extension in $extensions) {
+    $key = New-Item "HKCU:/Software/Classes/.$extension" -Force
+    if ($extension -ne 'tsv') { $key.SetValue('', "SheetStudio.QA.Previous.$extension") }
+    $defaults[$extension] = $key.GetValue('')
+    $choices[$extension] = Get-UserChoice $extension
+    New-Item "HKCU:/Software/Classes/.$extension/OpenWithProgids" -Force | Out-Null
+    New-ItemProperty "HKCU:/Software/Classes/.$extension/OpenWithProgids" -Name 'SheetStudio.QA.OtherEditor' -Value '' -PropertyType String | Out-Null
+  }
   New-Item -ItemType Directory -Path (Split-Path $recovery -Parent), (Split-Path $document -Parent) -Force | Out-Null
   Set-Content $recovery 'PRESERVE SHEET STUDIO USER DATA'
   Set-Content $document 'PRESERVE SHEET STUDIO USER DATA'
-  Run-Installer $setup @('/S', '/currentuser')
+  Run-Installer $setup @('/S', '/currentuser', "/D=$installDir")
   Assert-Installed
   Assert-Preserved
+  Assert-FileSupport
+  $report.openWith = $extensions
+  $report.defaultAppsRegistration = $true
+  $report.previousDefaultsAndOtherAppsPreserved = $true
+  $report.quotedUnicodeInstallPath = $true
   $report.freshInstall = $true
   $report.shortcuts = $true
   $report.installedAppsEntry = $true
@@ -70,11 +144,14 @@ try {
   $env:SHEET_STUDIO_EXECUTABLE = $executable
   & node (Join-Path $root 'scripts/electron-smoke.cjs') --packaged
   if ($LASTEXITCODE -ne 0) { throw 'Installed Windows application smoke test failed.' }
+  & node (Join-Path $root 'tests/ui-file-associations.mjs') --packaged
+  if ($LASTEXITCODE -ne 0) { throw 'Installed Windows file-open regression failed.' }
   $report.installedApplication = $true
 
-  Run-Installer $setup @('/S', '/currentuser')
+  Run-Installer $setup @('/S', '/currentuser', "/D=$installDir")
   Assert-Installed
   Assert-Preserved
+  Assert-FileSupport
   $report.reinstall = $true
 
   $uninstaller = @(Get-ChildItem $installDir -Filter '*Uninstall*.exe')
@@ -97,6 +174,8 @@ try {
     Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -eq 'Sheet Studio' })
   if ($remaining.Count -ne 0) { throw 'Uninstall left the installed-app registration.' }
   Assert-Preserved
+  Assert-FileSupportRemoved
+  $report.fileSupportRemovedOnUninstall = $true
   $report.uninstall = $true
   $report.userDataPreserved = $true
   $report.passed = $true

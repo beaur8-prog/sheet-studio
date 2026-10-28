@@ -8,6 +8,7 @@ const {execFileSync}=require('node:child_process');
 const {_electron}=require('playwright');
 const asar=require('@electron/asar');
 const manifest=require('../package.json');
+const {fileAssociations}=require('../electron/file-open-requests.cjs');
 
 async function check(){
   assert.equal(process.platform,'linux');
@@ -55,6 +56,8 @@ async function check(){
     const entries=Object.fromEntries(desktop.split('\n').filter(line=>line.includes('=')).map(line=>[line.slice(0,line.indexOf('=')),line.slice(line.indexOf('=')+1)]));
     assert.equal(entries.Name,'Sheet Studio');assert.equal(entries.StartupWMClass,manifest.desktopName);assert.equal(entries.Icon,'sheet-studio');
     assert.equal(entries.Type,'Application');assert.equal(entries.Terminal,'false');assert.ok(entries.Exec.includes(executable));
+    assert.match(entries.Exec,/%[fFuU]/,'Desktop launch command forwards the selected file');
+    for(const type of fileAssociations)assert.ok(entries.MimeType.split(';').includes(type.mimeType),`Missing supported MIME type: ${type.mimeType}`);
     for(const size of [16,24,32,48,64,128,256,512,1024]){
       const png=await fs.readFile(`/usr/share/icons/hicolor/${size}x${size}/apps/${entries.Icon}.png`);
       assert.equal(png.readUInt32BE(16),size);assert.equal(png.readUInt32BE(20),size);
@@ -66,6 +69,8 @@ gi.require_version('Gtk','3.0')
 from gi.repository import Gio,Gtk
 app=Gio.DesktopAppInfo.new('${manifest.desktopName}.desktop')
 assert app is not None and app.should_show()
+for mime in ${JSON.stringify(fileAssociations.map(type=>type.mimeType))}:
+ assert any(candidate.get_id() == app.get_id() for candidate in Gio.AppInfo.get_all_for_type(mime)), mime
 theme=Gtk.IconTheme.get_default()
 icons={}
 for size in [16,32,48,64,128,256,512]:

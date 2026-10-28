@@ -7,6 +7,7 @@ const { verifyRuntime } = require('./runtime-proof.cjs');
 const { generateManifest } = require('./artifacts.cjs');
 const { buildTarget, findRuntime, runtimeLocations, outputDir } = require('./platform.cjs');
 const { fileAssociations } = require('../electron/file-open-requests.cjs');
+const { windowsFileAssociations } = require('./windows-file-associations.cjs');
 
 async function packageApp() {
   const target = buildTarget(process.argv.slice(2));
@@ -34,6 +35,8 @@ async function packageApp() {
     : outputDir(root, manifest.version, target.platform, target.arch);
   const mac = target.platform === 'darwin', linux = target.platform === 'linux';
   const linuxIcons = linux ? await createLinuxIcons(path.join(stage, 'linux-icons')) : null;
+  const windowsInclude = path.join(stage, 'file-associations.nsh');
+  if (target.platform === 'win32') await fs.writeFile(windowsInclude, windowsFileAssociations());
   let appOutDir;
   const artifacts = await build({
     projectDir: stage,
@@ -41,7 +44,9 @@ async function packageApp() {
     targets: (mac ? Platform.MAC : linux ? Platform.LINUX : Platform.WINDOWS).createTarget(target.directory ? 'dir' : mac ? ['dmg', 'zip'] : linux ? 'deb' : 'nsis', Arch[target.arch]),
     config: {
       appId: 'local.lattice.sheetstudio', productName: 'Sheet Studio', publish: null,
-      fileAssociations,
+      // NSIS's built-in associations also overwrite extension defaults. Use
+      // explicit candidate registration on Windows, preserving user choices.
+      fileAssociations: target.platform === 'win32' ? [] : fileAssociations,
       electronVersion: runtime.version, ...(reuseRuntime ? { electronDist: path.join(electronRoot, 'dist') } : {}),
       npmRebuild: false, asar: true,
       directories: { output },
@@ -52,6 +57,7 @@ async function packageApp() {
         maintainer: 'beaur8-prog <beaur8-prog@users.noreply.github.com>' },
       win: { target: 'nsis', signAndEditExecutable: false, icon },
       nsis: {
+        ...(target.platform === 'win32' ? { include: windowsInclude } : {}),
         artifactName: 'Sheet-Studio-${version}-Windows-${arch}-Setup.exe',
         oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
         createDesktopShortcut: true, createStartMenuShortcut: true,

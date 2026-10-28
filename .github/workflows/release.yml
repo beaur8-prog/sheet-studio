@@ -116,6 +116,9 @@ jobs:
         if: matrix.platform == 'win'
         shell: pwsh
         run: ./scripts/check-windows-install.ps1
+      - name: Verify Mac supported applications
+        if: matrix.platform == 'mac'
+        run: node scripts/check-mac-file-support.cjs
       - name: Prepare download assets
         shell: bash
         env:

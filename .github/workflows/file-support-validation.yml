@@ -1,0 +1,68 @@
+name: Installed file type support
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: win
+            arch: x64
+          - runner: macos-15
+            platform: mac
+            arch: arm64
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      SHEET_STUDIO_ADHOC: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install Linux desktop test tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb x11-utils desktop-file-utils python3-gi gir1.2-gtk-3.0 hicolor-icon-theme fonts-noto-cjk
+      - run: npm ci
+      - run: npm run runtime:install
+      - run: npm test
+      - name: Build verification package
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            npm run package -- --mac --arch=arm64 --dir
+          else
+            npm run package -- --${{ matrix.platform }} --arch=${{ matrix.arch }}
+          fi
+      - name: Verify Windows Open With, defaults, reinstall and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/check-windows-install.ps1
+      - name: Verify Mac supported applications and file opening
+        if: runner.os == 'macOS'
+        run: |
+          node scripts/check-mac-file-support.cjs
+          node tests/ui-file-associations.mjs --packaged
+      - name: Verify installed Linux MIME support and file opening
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./release/*/linux-x64/*.deb
+          export SHEET_STUDIO_EXECUTABLE='/opt/Sheet Studio/sheet-studio'
+          xvfb-run -a node scripts/check-linux-desktop.cjs
+          xvfb-run -a node tests/ui-file-associations.mjs --packaged
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: file-support-${{ matrix.platform }}
+          path: |
+            test-results/
+            release/**/artifact-manifest.json
+          if-no-files-found: ignore
