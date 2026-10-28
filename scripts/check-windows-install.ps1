@@ -20,7 +20,27 @@ $report = [ordered]@{ version = $version; passed = $false }
 $extensions = @('xlsx', 'xlsm', 'csv', 'tsv')
 $defaults = @{}
 $choices = @{}
+$foreignValues = [System.Collections.Generic.List[object]]::new()
 Add-Type -TypeDefinition (Get-Content (Join-Path $PSScriptRoot 'windows-file-support.cs') -Raw)
+
+function Add-ForeignValue([string] $key, [string] $name, [string] $value) {
+  $handle = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($key)
+  try { $handle.SetValue($name, $value) } finally { $handle.Dispose() }
+  $foreignValues.Add(@{ Key = $key; Name = $name; Value = $value })
+}
+
+function Assert-ForeignValues {
+  foreach ($item in $foreignValues) {
+    $key = Get-Item ("HKCU:/" + $item.Key)
+    if ($key.GetValue($item.Name) -ne $item.Value) { throw "Changed another app's data: $($item.Key) / $($item.Name)" }
+  }
+}
+
+function Assert-ValueAbsent([string] $key, [string] $name) {
+  if (Test-Path ("HKCU:/" + $key)) {
+    if ((Get-Item ("HKCU:/" + $key)).GetValueNames() -contains $name) { throw "Left an owned registry value: $key / $name" }
+  }
+}
 
 function Get-UserChoice([string] $extension) {
   $key = "HKCU:/Software/Microsoft/Windows/CurrentVersion/Explorer/FileExts/.$extension/UserChoice"
@@ -37,6 +57,7 @@ function Assert-AssociationsPreserved {
     $other = Get-Item "HKCU:/Software/Classes/.$extension/OpenWithProgids"
     if ($other.GetValueNames() -notcontains 'SheetStudio.QA.OtherEditor') { throw "Removed another .$extension supporting app" }
   }
+  Assert-ForeignValues
 }
 
 function Assert-FileSupport {
@@ -67,19 +88,28 @@ function Assert-FileSupport {
 }
 
 function Assert-FileSupportRemoved {
-  foreach ($key in @('HKCU:/Software/Classes/Applications/Sheet Studio.exe', 'HKCU:/Software/Sheet Studio/Capabilities')) {
-    if (Test-Path $key) { throw "Left registration after uninstall: $key" }
-  }
+  Assert-ValueAbsent 'Software\Classes\Applications\Sheet Studio.exe' 'FriendlyAppName'
+  Assert-ValueAbsent 'Software\Classes\Applications\Sheet Studio.exe\shell\open\command' ''
+  foreach ($name in @('ApplicationName', 'ApplicationDescription', 'ApplicationIcon')) { Assert-ValueAbsent 'Software\Sheet Studio\Capabilities' $name }
   $registered = Get-Item 'HKCU:/Software/RegisteredApplications'
   if ($registered.GetValueNames() -contains 'Sheet Studio') { throw 'Left Default apps registration' }
   foreach ($extension in $extensions) {
     $progId = "SheetStudio.$extension"
-    if (Test-Path "HKCU:/Software/Classes/$progId") { throw "Left .$extension ProgID" }
+    Assert-ValueAbsent "Software\Classes\$progId" ''
+    Assert-ValueAbsent "Software\Classes\$progId\shell\open\command" ''
+    Assert-ValueAbsent "Software\Classes\$progId\DefaultIcon" ''
+    Assert-ValueAbsent "Software\Classes\$progId\Application" 'ApplicationName'
+    Assert-ValueAbsent 'Software\Classes\Applications\Sheet Studio.exe\SupportedTypes' ".$extension"
+    Assert-ValueAbsent 'Software\Sheet Studio\Capabilities\FileAssociations' ".$extension"
     $openWith = Get-Item "HKCU:/Software/Classes/.$extension/OpenWithProgids"
     if ($openWith.GetValueNames() -contains $progId) { throw "Left .$extension Open With entry" }
   }
   Assert-AssociationsPreserved
-  if (Test-Path 'HKCU:/Software/Classes/Excel Workbook') { throw 'Left app-owned legacy alias' }
+  Assert-ValueAbsent 'Software\Classes\Excel Workbook\shell\open\command' ''
+  foreach ($type in @('Excel Workbook', 'Excel Macro-Enabled Workbook', 'TSV Spreadsheet')) {
+    Assert-ValueAbsent "Software\Classes\$type" 'SheetStudioLegacyOwner'
+    Assert-ValueAbsent "Software\Classes\$type" 'SheetStudioLegacyIconOwner'
+  }
   $otherLegacy = Get-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command'
   if ($otherLegacy.GetValue('') -ne 'OTHER EDITOR COMMAND') { throw 'Removed another app legacy handler' }
 }
@@ -148,6 +178,9 @@ try {
   New-Item 'HKCU:/Software/Classes/CSV Spreadsheet/shell/open/command' -Force | Out-Null
   $legacy = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Classes\CSV Spreadsheet\shell\open\command')
   try { $legacy.SetValue('', 'OTHER EDITOR COMMAND') } finally { $legacy.Dispose() }
+  Add-ForeignValue 'Software\RegisteredApplications' 'Other Editor' 'Software\OtherEditor\Capabilities'
+  Add-ForeignValue 'Software\Classes\TSV Spreadsheet\DefaultIcon' '' 'PREEXISTING OTHER EDITOR ICON'
+  Add-ForeignValue 'Software\Classes\TSV Spreadsheet\shell\edit\command' '' 'PREEXISTING OTHER EDIT VERB'
   New-Item -ItemType Directory -Path (Split-Path $recovery -Parent), (Split-Path $document -Parent) -Force | Out-Null
   Set-Content $recovery 'PRESERVE SHEET STUDIO USER DATA'
   Set-Content $document 'PRESERVE SHEET STUDIO USER DATA'
@@ -177,6 +210,17 @@ try {
   Assert-FileSupport
   $report.reinstall = $true
 
+  # Other apps can extend or replace handlers after Sheet Studio is installed.
+  Add-ForeignValue 'Software\Classes\Excel Workbook' 'OtherEditorMetadata' 'PRESERVE'
+  Add-ForeignValue 'Software\Classes\Excel Workbook\shell\edit\command' '' 'ADDED OTHER EDIT VERB'
+  Add-ForeignValue 'Software\Classes\Excel Macro-Enabled Workbook\shell\open\command' '' 'REPLACED BY OTHER EDITOR'
+  Add-ForeignValue 'Software\Classes\Excel Macro-Enabled Workbook\DefaultIcon' '' 'REPLACED OTHER ICON'
+  Add-ForeignValue 'Software\Classes\SheetStudio.xlsx' 'OtherEditorMetadata' 'PRESERVE'
+  Add-ForeignValue 'Software\Classes\SheetStudio.xlsx\shell\edit\command' '' 'ADDED PROGID VERB'
+  Add-ForeignValue 'Software\Classes\Applications\Sheet Studio.exe\shell\edit\command' '' 'ADDED APPLICATION VERB'
+  Add-ForeignValue 'Software\Sheet Studio\Capabilities' 'OtherEditorMetadata' 'PRESERVE'
+  Add-ForeignValue 'Software\Sheet Studio\Capabilities\FileAssociations' '.foreign' 'OtherEditor.Document'
+
   $uninstaller = @(Get-ChildItem $installDir -Filter '*Uninstall*.exe')
   if ($uninstaller.Count -ne 1) { throw 'Expected exactly one uninstaller.' }
   Run-Installer $uninstaller[0].FullName @('/S', '/currentuser')
@@ -199,6 +243,7 @@ try {
   Assert-Preserved
   Assert-FileSupportRemoved
   $report.fileSupportRemovedOnUninstall = $true
+  $report.foreignRegistryValuesPreserved = $foreignValues.Count
   $report.uninstall = $true
   $report.userDataPreserved = $true
   $report.passed = $true

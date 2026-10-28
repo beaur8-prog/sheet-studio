@@ -4,6 +4,18 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { FileOpenRequests, fileAssociations } from '../electron/file-open-requests.cjs';
 import { installRequestedFileOpener } from '../src/file-open-requests.mjs';
+import { windowsFileAssociations } from '../scripts/windows-file-associations.cjs';
+
+test('file-association cleanup never recursively deletes a registry key', () => {
+  const script = windowsFileAssociations();
+  const deletions = script.split('\n').map(line => line.trim()).filter(line => line.startsWith('DeleteRegKey'));
+  assert.ok(deletions.length);
+  assert.ok(deletions.every(line => line.startsWith('DeleteRegKey /ifempty ')));
+  assert.ok(!script.includes('UserChoice'));
+  for (const ext of ['xlsx', 'xlsm', 'csv', 'tsv']) {
+    assert.ok(script.includes(`DeleteRegValue SHELL_CONTEXT "Software\\Classes\\.${ext}\\OpenWithProgids" "SheetStudio.${ext}"`));
+  }
+});
 
 test('OS paths and launch arguments preserve order and coalesce pending duplicates', () => {
   const queue = new FileOpenRequests(), directory = path.resolve('한글 폴더');
