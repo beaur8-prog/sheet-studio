@@ -1,3 +1,6 @@
+import {validateStoredParts} from './xlsx-part-store.mjs';
+import {validateTables,filteredRowsForSheet} from './table-schema.mjs';
+import {readStructuredToken,resolveStructuredReference} from './table-references.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 import {validatePreservedData,validatePreservedXML} from './xlsx-preservation-schema.mjs';
 import {MAX_DOCUMENT_CELLS, MAX_DOCUMENT_TEXT_CHARS, MAX_FORMULA_CELLS} from './limits.mjs';
@@ -124,6 +127,7 @@ function tokenize(input) {
       push(quote === '"' ? 'string' : 'sheet', value, start, at);
       continue;
     }
+    if(ch==='['){const token=readStructuredToken(input,at);if(!token)fail('#VALUE!');push('structured',token.value,start,token.end);at=token.end;continue;}
     const rest = input.slice(at);
     const error = /^(#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|CYCLE!|SPILL!))/i.exec(rest);
     if (error) { at += error[0].length; push('error', error[0].toUpperCase(), start, at); continue; }
@@ -208,7 +212,7 @@ class Parser {
     let node=this.referenceRange();
     while(true){
       const previous=this.tokens[this.at-1],next=this.tokens[this.at];
-      if((['word','sheet','error'].includes(next.type)||this.peek('('))&&next.start>previous.end){node={type:'referenceOp',op:' ',left:node,right:this.referenceRange()};continue;}
+      if((['word','sheet','error','structured'].includes(next.type)||this.peek('('))&&next.start>previous.end){node={type:'referenceOp',op:' ',left:node,right:this.referenceRange()};continue;}
       return node;
     }
   }
@@ -230,6 +234,7 @@ class Parser {
     const token = this.tokens[this.at++];
     if (token.type === 'number' || token.type === 'string') return { type: 'literal', value: token.value };
     if (token.type === 'error') return { type: 'error', value: token.value };
+    if(token.type==='structured')return {type:'structured',selector:token.value};
     if (token.type !== 'word' && token.type !== 'sheet') fail('#VALUE!');
     if (token.type === 'word' && this.accept('(')) {
       const args = [];
@@ -250,6 +255,7 @@ class Parser {
       reference = ref.value;
     } else if (token.type === 'sheet') fail('#NAME?');
     if (!sheet && /^(true|false)$/i.test(reference)) return { type: 'literal', value: /^true$/i.test(reference) };
+    if(this.tokens[this.at].type==='structured')return {type:'structured',tableName:reference,sheet,selector:this.tokens[this.at++].value};
     const pos = parseAddress(reference);
     if (!pos) {
       return {type:'name',name:reference,sheet};
@@ -278,7 +284,7 @@ function resolveSheet(ctx, name) {
 function withNamedNode(node,ctx,callback){
   const scope=resolveSheet(ctx,node.sheet),names=ctx.workbook.chartNames||[],key=node.name.toLocaleLowerCase();
   const named=names.find(n=>n.sheetId===scope.id&&n.name.toLocaleLowerCase()===key)||names.find(n=>!n.sheetId&&n.name.toLocaleLowerCase()===key);
-  if(!named)fail(/^\$?[A-Za-z]+\$?\d+$/.test(node.name)?'#REF!':'#NAME?');
+  if(!named){if(ctx.workbook.sheets.some(s=>s.tables?.some(t=>t.name.toLocaleLowerCase()===key)))return callback({type:'structured',tableName:node.name,sheet:node.sheet,selector:'[#Data]'});fail(/^\$?[A-Za-z]+\$?\d+$/.test(node.name)?'#REF!':'#NAME?');}
   const id=(named.sheetId||'')+'!'+key,active=ctx.namedActive??=new Set();if(active.has(id))fail('#CYCLE!');if(active.size>=MAX_DEPTH)fail('#NUM!');
   const frame=ctx.frame??ctx,cache=frame.namedAsts??=new Map();let definition=cache.get(id);
   if(!definition){
@@ -381,6 +387,7 @@ function evaluateNodeUncached(node, ctx, depth) {
   if (node.type === 'literal') return node.value;
   if (node.type === 'error') fail(node.value);
   if(node.type==='name')return withNamedNode(node,ctx,definition=>evaluateNode(definition,ctx,depth+1));
+  if(node.type==='structured'){const ref=resolveStructuredReference(ctx.workbook,ctx.sheet,ctx.position,node.tableName,node.selector,node.sheet);if(ref.error)fail(ref.error);if(ref.empty)return {...ref,kind:'range',values:[]};if(ref.areas){const values=[];for(const area of ref.areas)for(const value of getRange(ctx,area.sheet,area.top,area.left,area.rows,area.cols).values)values.push(value);return {kind:'range',rows:values.length,cols:1,values};}return getRange(ctx,ref.sheet,ref.top,ref.left,ref.rows,ref.cols);}
   if (node.type === 'ref') {
     const sheet=resolveSheet(ctx,node.sheet);
     return { kind:'reference',sheet,top:node.pos.r,left:node.pos.c,rows:1,cols:1,value:readCell(ctx,sheet,address(node.pos.r,node.pos.c)) };
@@ -556,6 +563,7 @@ function getRange(ctx,sheet,top,left,rows,cols) {
 // Metadata functions must not read cells: ROW(A1) in A1 is not a cycle.
 function referenceMetadata(node,ctx,evaluate){
     if(node.type==='name')return withNamedNode(node,ctx,definition=>referenceMetadata(definition,ctx,evaluate));
+    if(node.type==='structured'){const ref=resolveStructuredReference(ctx.workbook,ctx.sheet,ctx.position,node.tableName,node.selector,node.sheet);if(ref.error)fail(ref.error);if(ref.areas)fail('#VALUE!');return ref;}
     if(node.type==='ref')return {sheet:resolveSheet(ctx,node.sheet),top:node.pos.r,left:node.pos.c,rows:1,cols:1};
     if(node.type==='referenceOp'&&node.op!==','){const a=referenceMetadata(node.left,ctx,evaluate),b=referenceMetadata(node.right,ctx,evaluate);if(!a.sheet||a.sheet.id!==b.sheet?.id)fail('#REF!');const intersection=node.op===' ',top=(intersection?Math.max:Math.min)(a.top,b.top),left=(intersection?Math.max:Math.min)(a.left,b.left),bottom=(intersection?Math.min:Math.max)(a.top+a.rows-1,b.top+b.rows-1),right=(intersection?Math.min:Math.max)(a.left+a.cols-1,b.left+b.cols-1);if(bottom<top||right<left)fail('#NULL!');return {sheet:a.sheet,top,left,rows:bottom-top+1,cols:right-left+1};}
     if(node.type==='range')return {sheet:resolveSheet(ctx,node.sheet),top:Math.min(node.start.r,node.end.r),left:Math.min(node.start.c,node.end.c),rows:Math.abs(node.start.r-node.end.r)+1,cols:Math.abs(node.start.c-node.end.c)+1};
@@ -592,7 +600,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
       const split=text.lastIndexOf('!');text=text.slice(0,split+1)+text.slice(split+1).split(':').map(convert).join(':');
     }
     let node;try{node=new Parser(text).parse();}catch{fail('#REF!');}
-    if(!['ref','range','referenceOp','name'].includes(node.type))fail('#REF!');const value=evaluate(node);if(!isRef(value)&&!(isRange(value)&&value.sheet))fail('#REF!');return value;
+    if(!['ref','range','referenceOp','name','structured'].includes(node.type))fail('#REF!');const value=evaluate(node);if(!isRef(value)&&!(isRange(value)&&value.sheet))fail('#REF!');return value;
   }
   if(name==='OFFSET'){
     const ref=metadata(nodes[0]);if(!ref.sheet)fail('#VALUE!');
@@ -608,7 +616,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
       const key=JSON.stringify([code,ref.sheet.id,ref.top,ref.left,ref.rows,ref.cols]);
       const cache=ctx.frame?(ctx.frame.subtotals??=new Map()):new Map();
       let progress=cache.get(key);
-      if(!progress){progress={next:0,values:[],hidden:new Set(ref.sheet.autoFilter?.hiddenRows||[])};cache.set(key,progress);}
+      if(!progress){progress={next:0,values:[],hidden:filteredRowsForSheet(ref.sheet)};cache.set(key,progress);}
       for(;progress.next<ref.rows*ref.cols;progress.next++){
         const r=ref.top+Math.floor(progress.next/ref.cols),c=ref.left+progress.next%ref.cols;
         const raw=ref.sheet.cells?.[address(r,c)]?.raw??'';
@@ -1192,6 +1200,7 @@ export function validateWorkbook(data) {
     if(sheet.hiddenSizes!==undefined){if(!object(sheet.hiddenSizes))throw Error('숨김 크기가 올바르지 않습니다.');for(const k of ['rows','cols']){if(!object(sheet.hiddenSizes[k]))throw Error('숨김 크기가 올바르지 않습니다.');for(const [i,v] of Object.entries(sheet.hiddenSizes[k]))if(!/^\d+$/.test(i)||+i>=(k==='rows'?1048576:16384)||!Number.isFinite(v)||v<0||v>10000)throw Error('숨김 크기가 올바르지 않습니다.');}}
     if(sheet.xlsxProtectionDefaults!==undefined){if(!object(sheet.xlsxProtectionDefaults)||!object(sheet.xlsxProtectionDefaults.rows)||!object(sheet.xlsxProtectionDefaults.columns))throw Error('행·열 잠금 설정이 올바르지 않습니다.');validatePreservedData(sheet.xlsxProtectionDefaults,16_000_000);}
     if(sheet.xlsxFeatures!==undefined){if(!object(sheet.xlsxFeatures))throw Error('보존된 시트 정보가 올바르지 않습니다.');for(const key of ['dataValidations','sheetProtection'])if(sheet.xlsxFeatures[key]!==undefined)validatePreservedXML(sheet.xlsxFeatures[key],key);if(sheet.xlsxFeatures.conditionalFormatting!==undefined){const rules=sheet.xlsxFeatures.conditionalFormatting;if(!Array.isArray(rules)||rules.length>10000)throw Error('보존된 조건부 서식이 올바르지 않습니다.');for(const rule of rules)validatePreservedXML(rule,'conditionalFormatting');}}
+    if(sheet.tables!==undefined)validateTables(sheet.tables);
     if(sheet.freeze!==undefined)validateFreeze(sheet.freeze);
     if(sheet.conditionalRules!==undefined)validateConditionalRules(sheet.conditionalRules);
     if(sheet.unsupportedConditionalCount!==undefined&&(!Number.isInteger(sheet.unsupportedConditionalCount)||sheet.unsupportedConditionalCount<0||sheet.unsupportedConditionalCount>10000))throw Error('조건부 서식 개수가 올바르지 않습니다.');
@@ -1222,6 +1231,9 @@ export function validateWorkbook(data) {
     }
   }
   if (typeof data.activeSheetId !== 'string' || !ids.has(data.activeSheetId)) throw new Error('활성 시트가 없습니다.');
+  const tableNames=new Set();for(const sheet of data.sheets)for(const table of sheet.tables||[]){const name=table.name.toLocaleLowerCase();if(tableNames.has(name))throw Error('통합 문서의 표 이름은 중복될 수 없습니다.');tableNames.add(name);}
+  if(data.xlsxConnections!==undefined){const c=data.xlsxConnections;if(!object(c)||typeof c.root!=='string'||typeof c.type!=='string'||!c.type.endsWith('/connections')||!c.parts?.[c.root])throw Error('원래 데이터 연결 정보가 올바르지 않습니다.');validateStoredParts(c.parts);}
+  if(data.xlsxTableStyles!==undefined){if(!Array.isArray(data.xlsxTableStyles)||data.xlsxTableStyles.length>10000)throw Error('원래 표 스타일이 올바르지 않습니다.');for(const style of data.xlsxTableStyles)validatePreservedXML(style,'tableStyle');}
   if(data.xlsxStyles!==undefined){if(!Array.isArray(data.xlsxStyles)||data.xlsxStyles.length>65536||data.xlsxStyles.some(s=>!object(s)||!object(s.style)||!object(s.baseline)))throw Error('보존된 Excel 서식 목록이 올바르지 않습니다.');validatePreservedData(data.xlsxStyles,32_000_000);}
   if(data.xlsxDxfs!==undefined){if(!Array.isArray(data.xlsxDxfs)||data.xlsxDxfs.length>65536)throw Error('보존된 Excel 조건부 서식이 올바르지 않습니다.');for(const rule of data.xlsxDxfs)validatePreservedXML(rule,'dxf');}
   if(data.chartTheme!==undefined&&(typeof data.chartTheme!=='string'||data.chartTheme.length>2000000||/<!DOCTYPE|<!ENTITY/i.test(data.chartTheme)))throw new Error('차트 테마가 올바르지 않습니다.');

@@ -1,3 +1,4 @@
+import {tableAt,tableBounds} from './table-schema.mjs';
 import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
 import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress,formulaReference} from './engine.mjs';
@@ -102,7 +103,7 @@ async function handle(type, data) {
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
   if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);
-  if (type === 'infer-region') return currentRegion(sheet,data.selection);
+  if (type === 'infer-region'){const table=tableAt(sheet,data.selection.r1,data.selection.c1);if(table){const b=tableBounds(table.range);return {...b,r2:b.r2-(table.totalsRow?1:0)};}return currentRegion(sheet,data.selection);}
   if (type === 'sort-plan') return inferSortPlan(book,sheet,data.selection,data.column);
   if (type === 'infer-filter') return inferFilterRange(sheet, data.selection);
   if (type === 'filter-options') {
@@ -120,14 +121,15 @@ async function handle(type, data) {
     return target.autoFilter;
   }
   if (type === 'sort-filter' || type === 'sort') {
-    const range=type==='sort-filter'?{...sheet.autoFilter.range,r1:sheet.autoFilter.range.r1+1}:data.range;assertSortAllowed(book,sheet,range);
+    const table=data.tableId?sheet.tables?.find(t=>t.id===data.tableId):null;
+    const range=type==='sort-filter'?{...(table?.filter||sheet.autoFilter).range,r1:(table?.filter||sheet.autoFilter).range.r1+1}:data.range;assertSortAllowed(book,sheet,range);
     const target = structuredClone(sheet);
     const next = {...book, sheets: book.sheets.map(item => item.id === sheet.id ? target : item)};
-    if(type==='sort-filter')sortFilterRange(next, target, data.column, data.desc);
+    if(type==='sort-filter'){const filter=table?target.tables.find(t=>t.id===data.tableId).filter:target.autoFilter;sortFilterRange(next,{...target,autoFilter:filter},data.column,data.desc);}
     else sortRange(next, target, data.range, data.column, data.desc);
     validateWorkbook(next);
     const token=crypto.randomUUID();prepared={token,book:next};
-    return {cells: target.cells, autoFilter: target.autoFilter, token, description:cellDescription(target.cells)};
+    return {cells: target.cells, autoFilter: target.autoFilter,...(table?{tableId:table.id,tableFilter:target.tables.find(t=>t.id===table.id).filter}:{}), token, description:cellDescription(target.cells)};
   }
   throw Error('알 수 없는 문서 작업입니다.');
 }

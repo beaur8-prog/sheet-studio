@@ -1,3 +1,4 @@
+import {filteredRowsForSheet} from './table-schema.mjs';
 import {address,parseAddress,createEvaluator,transformFormulaReferences,formatValue,numberFormatKind,formulaReference} from './engine.mjs';
 
 export const chartTypes={bar:'세로 막대형','bar-horizontal':'가로 막대형',line:'꺾은선형',area:'영역형',pie:'원형',doughnut:'도넛형',scatter:'분산형',bubble:'거품형',radar:'방사형',combo:'혼합 (막대·꺾은선)'};
@@ -66,7 +67,7 @@ export function chartNumberFormat(ref,workbook){
 function visiblePoints(ref,workbook){
   const positions=refPositions(ref,workbook),hidden=new Map();
   return positions.map(({sheet,r,c})=>{
-    if(!hidden.has(sheet))hidden.set(sheet,new Set(sheet.autoFilter?.hiddenRows||[]));
+    if(!hidden.has(sheet))hidden.set(sheet,filteredRowsForSheet(sheet));
     return sheet.rowHeights?.[r]!==0&&sheet.columnWidths?.[c]!==0&&!hidden.get(sheet).has(r);
   });
 }

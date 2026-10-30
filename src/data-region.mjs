@@ -1,3 +1,4 @@
+import {tableAt,tableBounds} from './table-schema.mjs';
 import {address,parseAddress,createEvaluator} from './engine.mjs';
 
 const contains=(b,r,c)=>r>=b.r1&&r<=b.r2&&c>=b.c1&&c<=b.c2;
@@ -42,6 +43,7 @@ function headerGuess(sheet,b,evaluate){
   return {headers:false,ambiguous:!!(text||empty)};
 }
 export function inferSortPlan(book,sheet,selection,column=selection.c1){
+  const table=tableAt(sheet,selection.r1,Math.max(selection.c1,Math.min(selection.c2,column)));if(table){const b=tableBounds(table.range),range={...b,r2:b.r2-(table.totalsRow?1:0)};return {range,column:Math.max(b.c1,Math.min(b.c2,column)),headers:table.headerRow,review:false,expandedRange:null,tableId:table.id};}
   const evaluate=createEvaluator(book,sheet.id),single=selection.r1===selection.r2&&selection.c1===selection.c2;
   const region=currentRegion(sheet,{r:selection.r1,c:Math.max(selection.c1,Math.min(selection.c2,column))});
   let range={...selection};

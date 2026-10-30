@@ -1,3 +1,4 @@
+import {filteredRowsForSheet,tableAt} from './table-schema.mjs';
 import {openNamesUI} from './named-ranges.mjs';
 import {refreshConstraintIndexes,protectionAllows,sheetIsProtected,cellIsLocked,cellFormulaHidden,cellProtection,cellEditError,assertCellUpdates,assertStructureAllowed,validateCellUpdates,validationRules} from './cell-constraints.mjs';
 import {createHistory} from './history.mjs';
@@ -99,7 +100,7 @@ function renderRibbon(){let html='';
  $('#ribbon').innerHTML=html;syncToolbar();
 }
 function syncToolbar(){document.querySelector('[data-action=filter]')?.setAttribute('aria-pressed',String(!!sheet().autoFilter));document.querySelector('[data-action=filter]')?.classList.toggle('active',!!sheet().autoFilter);const clear=document.querySelector('[data-action=clear-filter]');if(clear)clear.disabled=!filterActive(sheet());const reapply=document.querySelector('[data-action=reapply-filter]');if(reapply)reapply.disabled=!filterActive(sheet());const style=sheet().cells[address(selection.r,selection.c)]?.style||{};for(const k of ['bold','italic','underline'])document.querySelector(`[data-action="${k}"]`)?.classList.toggle('active',!!style[k]);if($('#font-size'))$('#font-size').value=style.fontSize||11;if($('#font-family'))$('#font-family').value=style.fontFamily||'맑은 고딕';if($('#number-format'))$('#number-format').value=style.format||'general';for(const [id,key,fallback] of [['fill-color','background','#ffffff'],['text-color','color','#222222']]){const input=$('#'+id),value=style[key]||fallback;if(input)input.style.borderBottomColor=/^#[\da-f]{6}$/i.test(value)?value:/^#[\da-f]{3}$/i.test(value)?'#'+[...value.slice(1)].map(c=>c+c).join(''):fallback;}}
-function makeLayout(){const s=sheet(),scale=zoom/100;filteredRows=new Set(s.autoFilter?.hiddenRows||[]);filterEnabled=filterActive(s);const cols=new Float64Array(MAX_COLS+1);for(let c=0;c<MAX_COLS;c++)cols[c+1]=cols[c]+(s.columnWidths?.[c]===0?0:Math.max(26,s.columnWidths?.[c]||s.defaultColumnWidth||90)*scale);const rows=new Float64Array(MAX_ROWS+1);for(let r=0;r<MAX_ROWS;r++)rows[r+1]=rows[r]+(filteredRows.has(r)||s.rowHeights?.[r]===0?0:Math.max(18,s.rowHeights?.[r]||s.defaultRowHeight||25)*scale);layout={cols,rows};$('#surface').style.width=`${cols[MAX_COLS]+HEADER_W}px`;$('#surface').style.height=`${rows[MAX_ROWS]+HEADER_H}px`;}
+function makeLayout(){const s=sheet(),scale=zoom/100;filteredRows=filteredRowsForSheet(s);filterEnabled=filterActive(s)||(s.tables||[]).some(t=>filterActive({autoFilter:t.filter}));const cols=new Float64Array(MAX_COLS+1);for(let c=0;c<MAX_COLS;c++)cols[c+1]=cols[c]+(s.columnWidths?.[c]===0?0:Math.max(26,s.columnWidths?.[c]||s.defaultColumnWidth||90)*scale);const rows=new Float64Array(MAX_ROWS+1);for(let r=0;r<MAX_ROWS;r++)rows[r+1]=rows[r]+(filteredRows.has(r)||s.rowHeights?.[r]===0?0:Math.max(18,s.rowHeights?.[r]||s.defaultRowHeight||25)*scale);layout={cols,rows};$('#surface').style.width=`${cols[MAX_COLS]+HEADER_W}px`;$('#surface').style.height=`${rows[MAX_ROWS]+HEADER_H}px`;}
 function searchOffset(arr,p){let l=0,h=arr.length-1;while(l<h){const m=Math.ceil((l+h)/2);if(arr[m]<=p)l=m;else h=m-1;}return Math.min(l,arr.length-2);}
 function mergeRanges(){return (sheet().merges||[]).map(str=>{try{const [a,b]=str.split(':').map(parseAddress);return {r1:a.r,c1:a.c,r2:b.r,c2:b.c};}catch{return null;}}).filter(Boolean);}
 function freeze(){return sheet().freeze||{rows:0,cols:0};}
@@ -369,7 +370,7 @@ async function toggleFilter(){
  return runBusy('필터 범위를 확인하는 중…',async()=>{const s=sheet(),range=s.autoFilter?null:await tasks.run('infer-filter',{sheetId:s.id,selection:bounds()});checkpoint();if(s.autoFilter)delete s.autoFilter;else s.autoFilter={range,columns:{},hiddenRows:[]};changed({rebuild:true});focusGrid();});
 }
 function clearFilters(){if(!filterActive(sheet()))return;checkpoint();sheet().autoFilter.columns={};sheet().autoFilter.hiddenRows=[];delete sheet().autoFilter.unsupported;changed({rebuild:true});}
-async function sortFiltered(c,desc){if(commitEdit()===false)return;return runBusy('필터 범위를 정렬하는 중…',async()=>{const result=await tasks.run('sort-filter',{sheetId:sheet().id,column:c,desc});checkpoint();sheet().cells=history.acceptCells(result.cells,result.description);sheet().autoFilter=result.autoFilter;pendingImportToken=result.token;changed({rebuild:true});});}
+async function sortFiltered(c,desc,tableId){if(commitEdit()===false)return;return runBusy('필터 범위를 정렬하는 중…',async()=>{const result=await tasks.run('sort-filter',{sheetId:sheet().id,column:c,desc,tableId});checkpoint();sheet().cells=history.acceptCells(result.cells,result.description);sheet().autoFilter=result.autoFilter;if(result.tableId)sheet().tables.find(t=>t.id===result.tableId).filter=result.tableFilter;pendingImportToken=result.token;changed({rebuild:true});});}
 async function applyFilterRule(column,rule){return runBusy('필터를 적용하는 중…',async()=>{const filter=await tasks.run('filter',{sheetId:sheet().id,column,rule});checkpoint();sheet().autoFilter=filter;changed({rebuild:true});});}
 async function openColumnFilter(column,anchor){
  if(commitEdit()===false)return;closeMenu();const s=sheet();if(!s.autoFilter)return;if(s.autoFilter.unsupported?.length)return toast('이 문서의 미지원 아이콘·색 또는 동적 날짜 필터는 Excel에서 편집하거나 지우기를 먼저 사용하세요.');
@@ -384,6 +385,7 @@ async function performSort(range,column,desc,headers){
 }
 async function sortData(desc){
  if(pivotLocked())return;if(commitEdit()===false)return;
+ const selectedTable=tableAt(sheet(),selection.r,selection.c);if(selectedTable?.filter)return sortFiltered(selection.c,desc,selectedTable.id);
  if(sheet().autoFilter){const f=sheet().autoFilter,b=f.range;if(selection.r>=b.r1&&selection.r<=b.r2&&selection.c>=b.c1&&selection.c<=b.c2)return sortFiltered(selection.c,desc);}
  const plan=await runBusy('정렬할 데이터 영역을 확인하는 중…',()=>tasks.run('sort-plan',{sheetId:sheet().id,selection:bounds(),column:selection.c}));if(!plan)return;
  if(!plan.review)return performSort(plan.range,plan.column,desc,plan.headers);

@@ -1,3 +1,5 @@
+import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
+import {applyFilters} from './filters.mjs';
 import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
 import {cloneData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS} from './limits.mjs';
@@ -217,8 +219,11 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if(styleModels.length)result.xlsxStyles=styleModels;
   if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
   await restoreWorksheetParts(data,result);
+  await restoreTables(colorZip,result);
   await restoreFilterParts(data,result);
   await restoreChartParts(data,result);
+  restoreTableFilterVisibility(result);
+  for(const s of result.sheets)if(s.autoFilter&&!s.autoFilter.unsupported?.length)applyFilters(result,s);
   await restorePivotParts(data,result,{refresh:!/\.xlsm$/i.test(filename)});
   return /\.xlsm$/i.test(filename) ? attachNativeSource(result, data, filename) : result;
 }
@@ -375,7 +380,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, (height===0?sheet.hiddenSizes?.rows?.[index]||sheet.defaultRowHeight||25:Number(height)) * 3 / 4);
     }
     for(const [c,width] of Object.entries(sheet.columnWidths||{}))if(width===0)target.getColumn(+c+1).hidden=true;
-    for(const r of sheet.autoFilter?.hiddenRows||[])target.getRow(r+1+(pageFilters.length?pageFilters.length+1:0)).hidden=true;
+    for(const r of new Set([...(sheet.autoFilter?.hiddenRows||[]),...(sheet.tables||[]).flatMap(t=>t.filter?.hiddenRows||[])]))target.getRow(r+1+(pageFilters.length?pageFilters.length+1:0)).hidden=true;
     for(const [r,height] of Object.entries(sheet.rowHeights||{}))if(height===0)target.getRow(+r+1+(pageFilters.length?pageFilters.length+1:0)).hidden=true;
     for (const merge of sheet.merges || []) {
       if (typeof merge !== 'string' || !/^[A-Z]+\d+:[A-Z]+\d+$/i.test(merge)) continue;
@@ -384,5 +389,5 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   }
   const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
-  return { data:await addPreservedFeatures(data,workbook,exportNames), mime: XLSX_MIME, extension: 'xlsx' };
+  return { data:await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames), mime: XLSX_MIME, extension: 'xlsx' };
 }

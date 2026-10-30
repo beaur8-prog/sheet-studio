@@ -2,6 +2,7 @@ import {absoluteFormula,parseAddress} from './engine.mjs';
 
 export function nameError(book,name,sheetId,original){
   if(typeof name!=='string'||!name||name.length>255||!/^[_\p{L}\\][_\p{L}\p{N}.\\]*$/u.test(name)||parseAddress(name)||/^(?:R|C|R\d+C\d+|TRUE|FALSE)$/i.test(name))return '이름은 문자 또는 밑줄로 시작하고, 공백이나 셀 주소를 포함할 수 없습니다. 최대 255자입니다.';
+  if(book.sheets.some(s=>s.tables?.some(t=>t.name.toLocaleLowerCase()===name.toLocaleLowerCase())))return '이 이름은 이미 표에서 사용하고 있습니다.';
   if((book.chartNames||[]).some(n=>n!==original&&(n.sheetId||'')===(sheetId||'')&&n.name.toLocaleLowerCase()===name.toLocaleLowerCase()))return '같은 범위에 이 이름이 이미 있습니다.';
   return null;
 }
