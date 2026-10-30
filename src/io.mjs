@@ -173,7 +173,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       const entry = { raw, style };
       if (typeof cell.note === 'string') entry.note = cell.note;
       else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
-      if (cell.formula && cell.result !== undefined) entry.cachedValue = cell.result?.error || cell.result;
+      if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result?.error || cell.result; entry.cachedFormula = raw; }
       sheet.cells[cell.address] = entry;
     };
     source.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -258,7 +258,7 @@ function safeSheetName(name, used) {
 function cachedResult(evaluate, workbook, sheet, addr, cell) {
   let value;
   try { value = evaluate?.(workbook, sheet.id, addr); } catch { /* Excel can recalculate an unsupported formula. */ }
-  if (value === undefined || value === '#NAME?' || value === '#ERROR!') value = cell.cachedValue;
+  if (value === undefined || value === '#NAME?' || value === '#ERROR!') value = !cell.cachedFormula || cell.cachedFormula === cell.raw ? cell.cachedValue : undefined;
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'number') return Number.isFinite(value) ? value : { error: '#NUM!' };
   if (typeof value === 'boolean') return value;

@@ -16,6 +16,7 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
     <label class="chart-check" id="chart-first-column-option"><input id="chart-first-column" type="checkbox" ${initial.firstColumnAsLabels?'checked':''}><span id="chart-first-column-label">첫 열을 항목 이름으로 사용</span></label>
     <label class="chart-check"><input id="chart-legend" type="checkbox" ${current.legend!==false?'checked':''}>범례 표시</label>
     <label class="chart-check"><input id="chart-labels" type="checkbox" ${current.labels?'checked':''}>데이터 레이블</label>
+    <label class="chart-check"><input id="chart-hidden-data" type="checkbox" ${current.plotVisibleOnly===false?'checked':''}>숨겨진 행·열의 데이터도 표시</label>
     <label>가로축 제목<input id="chart-x-title" value="${esc(current.xTitle||'')}"></label>
     <label>세로축 제목<input id="chart-y-title" value="${esc(current.yTitle||'')}"></label>
     <label class="chart-check"><input id="chart-secondary" type="checkbox" ${current.secondaryAxis!==false?'checked':''}>혼합 차트의 마지막 계열에 보조축 사용</label>
@@ -31,7 +32,7 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
       const error=!retained&&chartRangeError({type,range:selected,...layout},sheet,workbook);
       if(error){get('chart-error').textContent=error;return;}
       if(!retained&&type==='unsupported'){get('chart-error').textContent='새 차트 유형을 선택하세요.';return;}
-      const patch={type,grouping:retained?current.grouping:grouping,title:get('chart-title').value,legend:get('chart-legend').checked,labels:get('chart-labels').checked,xTitle:get('chart-x-title').value,yTitle:get('chart-y-title').value,secondaryAxis:get('chart-secondary').checked};
+      const patch={type,grouping:retained?current.grouping:grouping,title:get('chart-title').value,legend:get('chart-legend').checked,labels:get('chart-labels').checked,plotVisibleOnly:!get('chart-hidden-data').checked,xTitle:get('chart-x-title').value,yTitle:get('chart-y-title').value,secondaryAxis:get('chart-secondary').checked};
       if(!retained)Object.assign(patch,{range:selected,...layout,series:undefined,source:undefined,rebuilt:true,previewNote:undefined,unsupportedReason:undefined});
       onApply(patch);el.remove();
     }}]);
@@ -50,7 +51,7 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
     el.querySelector('#chart-first-column-label').textContent=rows?'첫 열을 계열 이름으로 사용':'첫 열을 항목 이름으로 사용';
     const resolved={...source,firstRowAsHeader:el.querySelector('#chart-first-row').checked,firstColumnAsLabels:el.querySelector('#chart-first-column').checked},series=retained?current.series:chartSeries(resolved,sheet,workbook),count=series?.length||0;
     el.querySelector('#chart-data-help').textContent=source.type==='bubble'?`거품형은 X값 다음에 Y값·크기 ${rows?'행':'열'} 쌍이 필요합니다. 각 항목의 X·Y·크기 자료를 함께 선택하세요.`:source.type==='scatter'?(implicitX?'한 줄의 값은 Y값으로 사용하고 X값은 1, 2, 3…으로 지정합니다.':`첫 ${rows?'행':'열'}은 X값, 나머지 ${rows?'행':'열'}은 Y값입니다. X·Y가 모두 숫자인 점을 표시합니다.`):source.type==='pie'?(count>1?`원형은 첫 번째 계열의 모든 값을 표시합니다. 현재 ${count}개 계열 중 첫 계열만 사용합니다. 여러 계열은 도넛형을 사용하세요.`:'한 계열의 모든 값을 원의 조각으로 표시합니다. 0은 조각을 만들지 않습니다.'):source.type==='bar'&&count===1?'항목 이름은 각 막대 아래 가로축에 표시합니다. 한 계열은 같은 색을 쓰며 중복 범례는 생략합니다.':source.type==='doughnut'?'각 계열은 하나의 고리이며, 계열의 모든 값을 고리의 조각으로 표시합니다.':`숫자로 된 첫 행·첫 열은 값으로 포함합니다. 현재 ${count}개 계열입니다. 행·열 방향과 제목·항목 이름 설정으로 데이터 구성을 바꿀 수 있습니다.`;
-    for(const id of ['chart-title','chart-legend','chart-labels','chart-x-title','chart-y-title'])el.querySelector('#'+id).disabled=!!retained&&current.type==='unsupported';
+    for(const id of ['chart-title','chart-legend','chart-labels','chart-hidden-data','chart-x-title','chart-y-title'])el.querySelector('#'+id).disabled=!!retained&&current.type==='unsupported';
     const simpleColumn=!retained&&source.type==='bar'&&count===1;el.querySelector('#chart-legend').checked=requestedLegend&&!simpleColumn;el.querySelector('#chart-legend').disabled=!!retained&&current.type==='unsupported'||simpleColumn;
     el.querySelector('#chart-secondary').disabled=!!retained||el.querySelector('#chart-type').value!=='combo';
   };

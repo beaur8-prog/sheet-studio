@@ -118,7 +118,8 @@ function Set-Chart($sheet,$patch) {
     foreach($key in @('x','y','width','height')){if(Has-Field $patch $key){$value=[double]$patch.$key*0.75;switch($key){'x'{$object.Left=$value}'y'{$object.Top=$value}'width'{$object.Width=$value}'height'{$object.Height=$value}}}}
     if(Has-Field $patch 'title'){$chart.HasTitle=[bool]$patch.title;if($patch.title){$chart.ChartTitle.Text=[string]$patch.title}}
     if(Has-Field $patch 'legend'){$chart.HasLegend=[bool]$patch.legend}
-    if(Has-Field $patch 'labels'){if($patch.labels){[void]$chart.ApplyDataLabels()}else{foreach($series in $chart.SeriesCollection()){$series.HasDataLabels=$false;Release-Com $series}}}
+    if(Has-Field $patch 'plotVisibleOnly'){$chart.PlotVisibleOnly=[bool]$patch.plotVisibleOnly}
+    if(Has-Field $patch 'labels'){if($patch.labels){[void]$chart.ApplyDataLabels();if($patch.percentLabels){foreach($series in $chart.SeriesCollection()){$labels=$null;try{$labels=$series.DataLabels();$labels.ShowValue=$false;$labels.ShowPercentage=$true}finally{Release-Com $labels;Release-Com $series}}}}else{foreach($series in $chart.SeriesCollection()){$series.HasDataLabels=$false;Release-Com $series}}}
     foreach($field in @('xTitle','yTitle')){if((Has-Field $patch $field) -and $chart.ChartType -notin @(5,-4120,-4151,81,82)){$axisType=1;if($field -eq 'yTitle'){$axisType=2};if($chart.HasAxis($axisType,1)){$axis=$chart.Axes($axisType,1);$axis.HasTitle=[bool]$patch.$field;if($patch.$field){$axis.AxisTitle.Text=[string]$patch.$field};Release-Com $axis}}}
   }finally{Release-Com $chart;Release-Com $object}
 }

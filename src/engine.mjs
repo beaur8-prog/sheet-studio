@@ -720,7 +720,7 @@ export function formulaForXlsx(formula) {
   return formula;
 }
 
-function numberFormatKind(format) {
+export function numberFormatKind(format) {
   if (!format || /^general$/i.test(format)) return 'general';
   const cleaned = format.replace(/"[^"]*"|\\./g, '');
   if (/[ymdhs]/i.test(cleaned.replace(/\[[^\]]*\]/g, '')) || /\[(?:h{1,2}|m{1,2}|s{1,2})\]/i.test(cleaned)) return 'date';
@@ -1023,6 +1023,7 @@ export function validateCell(ref, cell) {
   const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
   if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
   if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
+  if (cell.cachedFormula !== undefined && (typeof cell.cachedFormula !== 'string' || cell.cachedFormula.length > 32768)) throw new Error(`저장된 수식이 올바르지 않습니다: ${ref}`);
   if (cell.style) {
     if (cell.style.borders !== undefined) validateBorders(cell.style.borders);
     for (const field of ['bold', 'italic', 'underline', 'wrap', 'border']) if (cell.style[field] !== undefined && typeof cell.style[field] !== 'boolean') throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);

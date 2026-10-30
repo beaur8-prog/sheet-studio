@@ -1,7 +1,8 @@
 import {worksheetMetadataXML,splitWorksheetXML} from './worksheet-metadata.mjs';
 import JSZip from 'jszip';
-import {chartSeries,chartData,parseChartFormula,refFormula,refValues,referenceSize,chartColors} from './chart-model.mjs';
+import {chartSeries,chartData,parseChartFormula,refFormula,refValues,referenceSize,chartColors,chartNumberFormat} from './chart-model.mjs';
 import {chartRect} from './chart-geometry.mjs';
+import {numberFormatKind} from './engine.mjs';
 import {C,A,R,D,DECL,xmlEscape as esc,xml,stringify,children,child,all,first,attr,val,resolvePart,relPath,relationship,relationships,readRelationships} from './chart-xml.mjs';
 
 const EMU=9525,CHART_TYPE='application/vnd.openxmlformats-officedocument.drawingml.chart+xml',DRAWING_TYPE='application/vnd.openxmlformats-officedocument.drawing+xml';
@@ -16,7 +17,7 @@ function pointCache(node){
   for(const pt of children(cache,'pt')){const i=Number(attr(pt,'idx'));if(i>=0&&i<count){const v=first(pt,'v')?.textContent;out[i]=numeric?(Number.isFinite(Number(v))?Number(v):null):v||'';}}
   return out;
 }
-function readRef(node,workbook){if(!node)return undefined;const formula=first(node,'f')?.textContent,ref=parseChartFormula(formula,workbook);return {...ref,...(formula?{formula}:{}),cache:pointCache(node)};}
+function readRef(node,workbook){if(!node)return undefined;const formula=first(node,'f')?.textContent,ref=parseChartFormula(formula,workbook);return {...ref,...(formula?{formula}:{}),cache:pointCache(node),...(first(node,'formatCode')?{formatCode:first(node,'formatCode').textContent}:{})};}
 function anchorRect(anchor,sheet){
   const point=n=>{const c=asNumber(child(n,'col')?.textContent),r=asNumber(child(n,'row')?.textContent);let x=0,y=0;for(let i=0;i<Math.min(16384,c);i++)x+=sheet.columnWidths[i]||sheet.defaultColumnWidth||64;for(let i=0;i<Math.min(1048576,r);i++)y+=sheet.rowHeights[i]||sheet.defaultRowHeight||20;return {x:x+asNumber(child(n,'colOff')?.textContent)/EMU,y:y+asNumber(child(n,'rowOff')?.textContent)/EMU};};
   const from=child(anchor,'from')?point(child(anchor,'from')):{x:asNumber(attr(child(anchor,'pos'),'x'))/EMU,y:asNumber(attr(child(anchor,'pos'),'y'))/EMU};
@@ -71,12 +72,12 @@ export async function restoreChartParts(bytes,workbook){
         }
         const usedIds=new Set(Array.from(stringify(anchor).matchAll(/\br:(?:id|embed|link)="([^"]+)"/g),m=>m[1])),rels=drawingRels.filter(r=>usedIds.has(r.id)).map(r=>({...r,target:r.mode==='External'?r.target:resolvePart(drawingPart,r.target)}));
         const axisIds=children(base,'axId').map(n=>attr(n,'val')),axisTitle=id=>all(child(axes.find(n=>val(n,'axId')===id),'title'),'t').map(n=>n.textContent).join('');
-        const chart={id:crypto.randomUUID(),type:type==='bar'&&val(base,'barDir')==='bar'?'bar-horizontal':type,range:'A1:B2',title,nativeName:attr(first(anchor,'cNvPr'),'name'),...anchorRect(anchor,sheet),legend,labels:all(sourceXML,'showVal').some(n=>attr(n,'val')==='1'),grouping:val(base,'grouping','clustered'),series,xTitle:axisTitle(axisIds[0]),yTitle:axisTitle(axisIds[1])};
+        const chart={id:crypto.randomUUID(),type:type==='bar'&&val(base,'barDir')==='bar'?'bar-horizontal':type,range:'A1:B2',title,plotVisibleOnly:val(first(sourceXML,'chart'),'plotVisOnly','1')!=='0',nativeName:attr(first(anchor,'cNvPr'),'name'),...anchorRect(anchor,sheet),legend,labels:[...all(sourceXML,'showVal'),...all(sourceXML,'showPercent')].some(n=>attr(n,'val')==='1'),grouping:val(base,'grouping','clustered'),series,xTitle:axisTitle(axisIds[0]),yTitle:axisTitle(axisIds[1])};
         if(groupNodes.some(n=>/3D/.test(n.localName)))chart.previewNote='3D 차트의 2D 미리 보기 · Excel 원본 보존';
         if(series.some(s=>[s.valRef,s.catRef,s.xRef].some(r=>r?.formula&&!r.sheetId)))chart.previewNote='해석할 수 없는 참조는 저장된 차트 값으로 표시합니다.';
         if(known.some(g=>children(g,'ser').length>32))chart.previewNote='미리 보기: 그룹당 최대 32개 계열 · Excel 원본 보존';
         if(type==='unsupported')chart.unsupportedReason='이 Excel 차트 유형은 원본을 유지하며 저장합니다.';
-        chart.source={root:part,rootType:rel.type,anchor:stringify(anchor),rels,parts:await readParts(zip,rels.filter(r=>r.mode!=='External').map(r=>r.target),types),formulas:all(sourceXML,'f').map(n=>({...parseChartFormula(n.textContent,workbook),formula:n.textContent})),original:{title,legend,labels:chart.labels,xTitle:chart.xTitle,yTitle:chart.yTitle,geometry:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}}};
+        chart.source={root:part,rootType:rel.type,anchor:stringify(anchor),rels,parts:await readParts(zip,rels.filter(r=>r.mode!=='External').map(r=>r.target),types),formulas:all(sourceXML,'f').map(n=>({...parseChartFormula(n.textContent,workbook),formula:n.textContent})),original:{title,legend,plotVisibleOnly:chart.plotVisibleOnly,labels:chart.labels,xTitle:chart.xTitle,yTitle:chart.yTitle,geometry:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}}};
         sheet.charts.push(chart);
       }
     }
@@ -84,16 +85,17 @@ export async function restoreChartParts(bytes,workbook){
   if(!number){delete workbook.chartTheme;delete workbook.chartNames;delete workbook.chartNameSheets;}
 }
 
-const cacheXML=(values,numeric)=>`<c:${numeric?'numCache':'strCache'}>${numeric?'<c:formatCode>General</c:formatCode>':''}<c:ptCount val="${values.length}"/>${values.map((v,i)=>v===null||v===undefined||numeric&&!Number.isFinite(Number(v))?'':`<c:pt idx="${i}"><c:v>${esc(numeric?Number(v):v)}</c:v></c:pt>`).join('')}</c:${numeric?'numCache':'strCache'}>`;
+const cacheXML=(values,numeric,format='General')=>`<c:${numeric?'numCache':'strCache'}>${numeric?'<c:formatCode>'+esc(format)+'</c:formatCode>':''}<c:ptCount val="${values.length}"/>${values.map((v,i)=>v===null||v===undefined||numeric&&!Number.isFinite(Number(v))?'':`<c:pt idx="${i}"><c:v>${esc(numeric?Number(v):v)}</c:v></c:pt>`).join('')}</c:${numeric?'numCache':'strCache'}>`;
 function refXML(tag,ref,workbook,names,offsets,numeric=false,fallback=[]){
   const values=ref?refValues(ref,workbook):fallback,formula=ref?.sheetId?refFormula(ref,workbook,names,offsets):ref?.formula;
-  const cache=cacheXML(values,numeric);
+  const cache=cacheXML(values,numeric,chartNumberFormat(ref,workbook));
   return `<c:${tag}>${formula?`<c:${numeric?'numRef':'strRef'}><c:f>${esc(formula)}</c:f>${cache}</c:${numeric?'numRef':'strRef'}>`:cache.replaceAll(numeric?'numCache':'strCache',numeric?'numLit':'strLit')}</c:${tag}>`;
 }
 const richTitle=title=>`<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="ko-KR"/><a:t>${esc(title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`;
-const axis=(id,cross,type,position,title,secondary=false,percent=false)=>`<c:${type}><c:axId val="${id}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="${position}"/>${type==='valAx'?'<c:majorGridlines/>':''}${title?richTitle(title):''}<c:numFmt formatCode="${percent?'0%':'General'}" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${cross}"/><c:crosses val="${secondary?'max':'autoZero'}"/>${type==='catAx'?'<c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/>':'<c:crossBetween val="between"/>'}</c:${type}>`;
+const axis=(id,cross,type,position,title,secondary=false,percent=false,format='General')=>`<c:${type}><c:axId val="${id}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="${position}"/>${type==='valAx'?'<c:majorGridlines/>':''}${title?richTitle(title):''}<c:numFmt formatCode="${esc(percent?'0%':format)}" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${cross}"/><c:crosses val="${secondary?'max':'autoZero'}"/>${type==='catAx'?'<c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/>':type==='dateAx'?'<c:auto val="1"/><c:lblOffset val="100"/><c:baseTimeUnit val="days"/>':'<c:crossBetween val="between"/>'}</c:${type}>`;
 export function newChartXML(chart,sheet,workbook,names,offsets){
   const series=chartSeries(chart,sheet,workbook).slice(0,chart.type==='pie'?1:128),data=chartData(chart,sheet,workbook),byGroup=new Map();
+  const categoryFormat=chartNumberFormat(series[0]?.catRef,workbook),dateCategories=numberFormatKind(categoryFormat)==='date';
   series.forEach((s,i)=>{const type=s.type||chart.type,key=type+':'+!!s.secondary;if(!byGroup.has(key))byGroup.set(key,{type,secondary:!!s.secondary,items:[]});byGroup.get(key).items.push([s,i]);});
   let groupsXML='',needsAxes=false,secondary=false;
   for(const group of byGroup.values()){
@@ -102,9 +104,9 @@ export function newChartXML(chart,sheet,workbook,names,offsets){
     let body=tag==='barChart'?`<c:barDir val="${type==='bar-horizontal'?'bar':'col'}"/><c:grouping val="${grouping}"/>`:['line','area'].includes(type)?`<c:grouping val="${grouping}"/>`:type==='scatter'?'<c:scatterStyle val="marker"/>':type==='radar'?'<c:radarStyle val="marker"/>':'';
     if(['barChart','pieChart','doughnutChart'].includes(tag))body+='<c:varyColors val="'+(['pie','doughnut'].includes(type)?1:0)+'"/>';
     for(const [s,i] of items){const color=(s.color||chartColors[i%chartColors.length]).replace('#','');
-      body+=`<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${s.nameRef?refXML('tx',s.nameRef,workbook,names,offsets):`<c:tx><c:v>${esc(s.name||data[i]?.name||'계열 '+(i+1))}</c:v></c:tx>`}<c:spPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln>${type==='scatter'?'<a:noFill/>':`<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>`}</a:ln></c:spPr>${['line','radar','scatter'].includes(type)?'<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>':''}${isXY?refXML('xVal',s.xRef||s.catRef,workbook,names,offsets,true):refXML('cat',s.catRef,workbook,names,offsets)}${refXML(isXY?'yVal':'val',s.valRef,workbook,names,offsets,true)}${type==='bubble'?refXML('bubbleSize',s.sizeRef,workbook,names,offsets,true):''}</c:ser>`;
+      body+=`<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${s.nameRef?refXML('tx',s.nameRef,workbook,names,offsets):`<c:tx><c:v>${esc(s.name||data[i]?.name||'계열 '+(i+1))}</c:v></c:tx>`}<c:spPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln>${type==='scatter'?'<a:noFill/>':`<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>`}</a:ln></c:spPr>${['line','radar','scatter'].includes(type)?'<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>':''}${Object.entries(s.pointColors||{}).map(([index,color])=>`<c:dPt><c:idx val="${index}"/><c:spPr><a:solidFill><a:srgbClr val="${esc(color.slice(1))}"/></a:solidFill></c:spPr></c:dPt>`).join('')}${isXY?refXML('xVal',s.xRef||s.catRef,workbook,names,offsets,true):refXML('cat',s.catRef,workbook,names,offsets,dateCategories)}${refXML(isXY?'yVal':'val',s.valRef,workbook,names,offsets,true)}${type==='bubble'?refXML('bubbleSize',s.sizeRef,workbook,names,offsets,true):''}</c:ser>`;
     }
-    if(chart.labels)body+='<c:dLbls><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>';
+    if(chart.labels){const percent=['pie','doughnut'].includes(type);body+=`<c:dLbls><c:showLegendKey val="0"/><c:showVal val="${percent?0:1}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="${percent?1:0}"/><c:showBubbleSize val="0"/></c:dLbls>`;}
     if(tag==='barChart')body+=`<c:gapWidth val="150"/><c:overlap val="${grouping==='clustered'?0:100}"/>`;
     if(type==='doughnut')body+='<c:firstSliceAng val="0"/><c:holeSize val="50"/>';
     if(type==='bubble')body+='<c:bubbleScale val="100"/><c:showNegBubbles val="0"/><c:sizeRepresents val="area"/>';
@@ -112,17 +114,23 @@ export function newChartXML(chart,sheet,workbook,names,offsets){
     groupsXML+=`<c:${tag}>${body}</c:${tag}>`;
   }
   let axes='';const xy=['scatter','bubble'].includes(chart.type),horizontal=chart.type==='bar-horizontal';
-  if(needsAxes){axes=axis(100,200,xy?'valAx':'catAx',horizontal?'l':'b',chart.xTitle)+axis(200,100,'valAx',horizontal?'b':'l',chart.yTitle,false,chart.grouping==='percentStacked');if(secondary)axes+=axis(300,400,'catAx','b','',true)+axis(400,300,'valAx','r','',true);}
-  return `${DECL}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="ko-KR"/><c:chart>${chart.title?richTitle(chart.title):''}<c:autoTitleDeleted val="${chart.title?0:1}"/><c:plotArea><c:layout/>${groupsXML}${axes}</c:plotArea>${chart.legend!==false&&(chart.type!=='bar'||series.length>1)?'<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>':''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart></c:chartSpace>`;
+  if(needsAxes){axes=axis(100,200,xy?'valAx':dateCategories?'dateAx':'catAx',horizontal?'l':'b',chart.xTitle,false,false,xy?chartNumberFormat(series[0]?.xRef,workbook):categoryFormat)+axis(200,100,'valAx',horizontal?'b':'l',chart.yTitle,false,chart.grouping==='percentStacked',chartNumberFormat(series.find(s=>!s.secondary)?.valRef,workbook));if(secondary)axes+=axis(300,400,dateCategories?'dateAx':'catAx','b','',true,false,categoryFormat)+axis(400,300,'valAx','r','',true,chart.grouping==='percentStacked',chartNumberFormat(series.find(s=>s.secondary)?.valRef,workbook));}
+  return `${DECL}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="ko-KR"/><c:chart>${chart.title?richTitle(chart.title):''}<c:autoTitleDeleted val="${chart.title?0:1}"/><c:plotArea><c:layout/>${groupsXML}${axes}</c:plotArea>${chart.legend!==false&&(chart.type!=='bar'||series.length>1)?'<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>':''}<c:plotVisOnly val="${chart.plotVisibleOnly===false?0:1}"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart></c:chartSpace>`;
 }
 
 function updateOriginalXML(chart,workbook,names,offsets){
   const raw=new TextDecoder().decode(from64(chart.source.parts[chart.source.root].data)),doc=xml(raw),root=first(doc,'chart');
-  const fs=all(doc,'f');fs.forEach((node,i)=>{const ref=chart.source.formulas[i];if(!ref?.sheetId)return;node.textContent=refFormula(ref,workbook,names,offsets);const parent=node.parentNode,cache=children(parent).find(n=>['numCache','strCache'].includes(n.localName));if(cache&&referenceSize(ref)<=10000){const fragment=xml(`<c:root xmlns:c="${C}">${cacheXML(refValues(ref,workbook),cache.localName==='numCache')}</c:root>`);parent.replaceChild(doc.importNode(fragment.documentElement.firstChild,true),cache);}});
+  const fs=all(doc,'f');fs.forEach((node,i)=>{const ref=chart.source.formulas[i];if(!ref?.sheetId)return;node.textContent=refFormula(ref,workbook,names,offsets);const parent=node.parentNode,cache=children(parent).find(n=>['numCache','strCache'].includes(n.localName));if(cache&&referenceSize(ref)<=10000){const fragment=xml(`<c:root xmlns:c="${C}">${cacheXML(refValues(ref,workbook),cache.localName==='numCache',child(cache,'formatCode')?.textContent||chartNumberFormat(ref,workbook))}</c:root>`);parent.replaceChild(doc.importNode(fragment.documentElement.firstChild,true),cache);}});
   if(root?.namespaceURI===C){
+    if(chart.plotVisibleOnly!==chart.source.original.plotVisibleOnly){let node=child(root,'plotVisOnly');if(!node){node=doc.createElementNS(C,'c:plotVisOnly');root.insertBefore(node,child(root,'dispBlanksAs')||null);}node.setAttribute('val',chart.plotVisibleOnly===false?'0':'1');}
     if(chart.title!==chart.source.original.title){const old=child(root,'title');if(old)root.removeChild(old);if(chart.title)root.insertBefore(doc.importNode(xml(`<c:root xmlns:c="${C}" xmlns:a="${A}">${richTitle(chart.title)}</c:root>`).documentElement.firstChild,true),root.firstChild);const auto=child(root,'autoTitleDeleted');if(auto)auto.setAttribute('val',chart.title?'0':'1');}
     if(chart.legend!==chart.source.original.legend){const old=child(root,'legend');if(old)root.removeChild(old);if(chart.legend!==false){const node=xml(`<c:legend xmlns:c="${C}"><c:legendPos val="b"/><c:overlay val="0"/></c:legend>`).documentElement;root.insertBefore(doc.importNode(node,true),child(root,'plotVisOnly')||null);}}
-    if(chart.labels!==chart.source.original.labels)for(const group of children(first(root,'plotArea')).filter(n=>/Chart$/.test(n.localName))){let labels=child(group,'dLbls');if(!labels){labels=doc.createElementNS(C,'c:dLbls');group.insertBefore(labels,children(group).find(n=>!['barDir','grouping','scatterStyle','radarStyle','varyColors','ser'].includes(n.localName))||null);}let show=child(labels,'showVal');if(!show){show=doc.createElementNS(C,'c:showVal');labels.insertBefore(show,child(labels,'showCatName')||child(labels,'showSerName')||null);}show.setAttribute('val',chart.labels?'1':'0');}
+    if(chart.labels!==chart.source.original.labels)for(const group of children(first(root,'plotArea')).filter(n=>/Chart$/.test(n.localName))){
+      let labels=child(group,'dLbls');
+      if(!labels){labels=doc.createElementNS(C,'c:dLbls');group.insertBefore(labels,children(group).find(n=>!['barDir','grouping','scatterStyle','radarStyle','varyColors','ser'].includes(n.localName))||null);}
+      const percent=['pieChart','pie3DChart','doughnutChart'].includes(group.localName),order=['showLegendKey','showVal','showCatName','showSerName','showPercent','showBubbleSize','showLeaderLines','extLst'];
+      for(const key of ['showVal','showPercent']){let show=child(labels,key);if(!show){show=doc.createElementNS(C,'c:'+key);labels.insertBefore(show,children(labels).find(n=>order.indexOf(n.localName)>order.indexOf(key))||null);}show.setAttribute('val',chart.labels&&(key==='showPercent'?percent:!percent)?'1':'0');}
+    }
     const plot=first(root,'plotArea'),group=children(plot).find(n=>/Chart$/.test(n.localName)),axisIds=children(group,'axId').map(n=>attr(n,'val'));
     for(const [key,index] of [['xTitle',0],['yTitle',1]])if(chart[key]!==chart.source.original[key]){const axis=children(plot).find(n=>['catAx','valAx','dateAx'].includes(n.localName)&&val(n,'axId')===axisIds[index]);if(!axis)continue;const old=child(axis,'title');if(old)axis.removeChild(old);if(chart[key]){const node=xml(`<c:root xmlns:c="${C}" xmlns:a="${A}">${richTitle(chart[key])}</c:root>`).documentElement.firstChild;axis.insertBefore(doc.importNode(node,true),child(axis,'numFmt')||child(axis,'majorTickMark')||null);}}
   }

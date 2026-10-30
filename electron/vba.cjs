@@ -59,7 +59,7 @@ function validatePayload(payload){
           if(key==='name')continue;
           if(['x','y','width','height'].includes(key)){if(!Number.isFinite(value)||value<0||value>100000000||['width','height'].includes(key)&&(value<100||value>10000))throw Error('차트 크기가 올바르지 않습니다.');}
           else if(['title','xTitle','yTitle'].includes(key)){if(typeof value!=='string'||value.length>4000)throw Error('차트 제목이 올바르지 않습니다.');}
-          else if(['legend','labels','combo','secondaryAxis'].includes(key)){if(typeof value!=='boolean')throw Error('차트 표시 설정이 올바르지 않습니다.');}
+          else if(['legend','labels','plotVisibleOnly','percentLabels','combo','secondaryAxis'].includes(key)){if(typeof value!=='boolean')throw Error('차트 표시 설정이 올바르지 않습니다.');}
           else if(key==='series'){
             if(!Array.isArray(value)||value.length>32||!c.range||c.chartType===undefined)throw Error('차트 계열 계획이 올바르지 않습니다.');
             const size=range=>{if(!rangeOK(range))throw Error('차트 계열 범위가 올바르지 않습니다.');const [a,b]=range.split(':'),column=v=>v.match(/[A-Z]+/)[0].split('').reduce((n,c)=>n*26+c.charCodeAt(0)-64,0),dr=Number(b.match(/\d+/)[0])-Number(a.match(/\d+/)[0]),dc=column(b)-column(a);if(dr<0||dc<0||dr&&dc)throw Error('차트 계열은 하나의 행 또는 열이어야 합니다.');const n=dr+dc+1;if(n<1||n>10000)throw Error('차트 계열 범위가 너무 큽니다.');return n;};

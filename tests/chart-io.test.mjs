@@ -57,6 +57,8 @@ test('chart named ranges retain their definitions and resolve current cell value
   const loaded=await readSpreadsheet(await zip.generateAsync({type:'uint8array'}),'named.xlsx');loaded.sheets[0].cells.B2.raw='81';
   assert.equal(chartData(loaded.sheets[0].charts[0],loaded.sheets[0],loaded)[0].values[0],81);
   loaded.sheets[0].name='이름 변경';const out=await JSZip.loadAsync((await writeSpreadsheet(loaded)).data),names=all(xml(await out.file('xl/workbook.xml').async('string')),'definedName');assert.equal(attr(names[0],'name'),'ChartRevenue');assert.ok(names[0].textContent.includes("'이름 변경'!"));
+  const chartPart=out.file(/sheetStudioCharts.*Chart1.xml$/)[0];
+  assert.ok(all(xml(await chartPart.async('string')),'f').some(n=>n.textContent==='ChartRevenue'),'the chart must keep its link to the defined name');
 });
 
 test('modern ChartEx carriers remain opaque and retain their relationship and chart XML',async()=>{
