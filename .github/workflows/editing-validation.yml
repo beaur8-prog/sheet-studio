@@ -33,7 +33,7 @@ jobs:
       - name: Check native composition and existing editing behavior
         shell: bash
         run: |
-          specs="user-journeys autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit file-dialogs file-associations recovery capacity"
+          specs="user-journeys autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot pivot-arrays sheet-lifecycle colors cell-format studio-clipboard parity-audit file-dialogs file-associations recovery capacity"
           core_specs="chart-parity recalculation data-region xlsx-preservation external-links cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays array-views result-types number-formats style-defaults worksheet-extras sheet-print print-layout print-settings virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text large-spills"
           if [ "${{ inputs.scope }}" = full ]; then
             specs="$specs $core_specs"
@@ -81,6 +81,7 @@ jobs:
             test-results/capacity-*.json
             test-results/large-spills*.json
             test-results/array-views.json
+            test-results/pivot-arrays.json
             test-results/file-dialogs.json
             test-results/file-associations.json
             test-results/user-journeys.json

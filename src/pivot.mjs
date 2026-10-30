@@ -6,7 +6,7 @@ export {aggregations,scalarKey,pivotLabel};
 const LIMIT = 100000;
 const fail = message => {throw new Error(message);};
 
-export function sourceData(book, sourceSheetId, sourceRange) {
+export function sourceData(book, sourceSheetId, sourceRange, {evaluate}={}) {
   const source = book.sheets.find(s=>s.id===sourceSheetId);
   if (!source) fail('원본 시트가 없습니다. 원본을 다시 선택하세요.');
   if (source.pivot) fail('원본에는 일반 데이터 시트를 선택하세요.');
@@ -15,16 +15,14 @@ export function sourceData(book, sourceSheetId, sourceRange) {
   if(parts.length!==2||!a||!b||a.r>=b.r||a.c>b.c) fail('머리글과 데이터 행을 포함하는 범위를 입력하세요. 예: A1:D100');
   const width=b.c-a.c+1,height=b.r-a.r+1;
   if(width*height>LIMIT) fail('피벗 원본은 최대 100,000셀까지 지원합니다.');
-  const evaluate=createEvaluator(book,source.id);
-  const read=(r,c)=>{const cell=source.cells[address(r,c)];return !cell?.raw?'':evaluate(address(r,c));};
+  evaluate||=createEvaluator(book,source.id);
+  const read=(r,c)=>{const ref=address(r,c),cell=source.cells[ref];if(!cell?.raw&&!evaluate.isComputed?.(ref))return '';const result=evaluate.result?.(ref);if(result?.error)fail(`${ref}에 계산 오류가 있습니다: ${result.error}`);return result?result.value:evaluate(ref);};
   const headers=Array.from({length:width},(_,i)=>String(read(a.r,a.c+i)).trim());
   if(headers.some(h=>!h||h.length>255)||new Set(headers.map(h=>h.toLowerCase())).size!==headers.length) fail('첫 행에는 비어 있지 않은 고유한 머리글이 필요합니다 (최대 255자).');
   const records=[];
   for(let r=a.r+1;r<=b.r;r++){
     const row=Array.from({length:width},(_,c)=>read(r,a.c+c));
     if(row.every(v=>v===''||v===null))continue;
-    // Never silently turn calculation failures into zero or stale cached results.
-    for(let c=0;c<width;c++)if(typeof row[c]==='string'&&/^#(?:REF!|VALUE!|DIV\/0!|NUM!|NAME\?|N\/A|ERROR!|CYCLE!|SPILL!|NULL!)$/.test(row[c])&&!source.cells[address(r,a.c+c)]?.raw.startsWith("'"))fail(`${address(r,a.c+c)}에 계산 오류가 있습니다: ${row[c]}`);
     records.push(row);
   }
   return {headers,records,source,range:`${address(a.r,a.c)}:${address(b.r,b.c)}`};
@@ -35,9 +33,9 @@ function add(s,value){if(value!==''&&value!==null&&value!==undefined)s.count++;i
 function result(s,kind){if(!s)s=state();switch(kind){case 'sum':return s.sum;case 'count':return s.count;case 'countNumbers':return s.n;case 'average':return s.n?s.sum/s.n:'';case 'min':return s.n?s.min:'';case 'max':return s.n?s.max:'';}}
 const compare=(a,b)=>{for(let i=0;i<a.length;i++){const x=a[i],y=b[i];const d=typeof x==='number'&&typeof y==='number'?x-y:pivotLabel(x).localeCompare(pivotLabel(y),'ko',{numeric:true});if(d)return d;}return 0;};
 
-export function buildPivot(book,spec){
+export function buildPivot(book,spec,options){
   validatePivot(spec);
-  const data=sourceData(book,spec.sourceSheetId,spec.sourceRange),{headers,records}=data;
+  const data=sourceData(book,spec.sourceSheetId,spec.sourceRange,options),{headers,records}=data;
   const index=name=>{const i=headers.indexOf(name);if(i<0)fail(`원본의 “${name}” 필드를 찾을 수 없습니다. 필드 설정을 확인하세요.`);return i;};
   const ri=spec.rows.map(index),ci=spec.columns.map(index),vi=spec.values.map(v=>index(v.field));
   const filters=spec.filters.map(f=>({index:index(f.field),values:new Set(f.values.map(scalarKey))}));

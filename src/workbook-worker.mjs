@@ -1,4 +1,5 @@
 import {calculationDisplay} from './calculation-display.mjs';
+import {sourceData,buildPivot} from './pivot.mjs';
 import {assertNativeCellTransfers} from './native-cell-features.mjs';
 import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} from './tables.mjs';
 import {tableConversionPlan} from './table-conversion.mjs';
@@ -89,6 +90,8 @@ async function handle(type, data) {
     return {...result, revision};
   }
   if (data.revision !== revision) throw Error('문서가 변경되었습니다. 작업을 다시 실행하세요.');
+  if(type==='pivot-source'){const {headers,records,source,range}=sourceData(book,data.sheetId,data.range,{evaluate:evaluator(data.sheetId)});return {headers,records,sourceSheetId:source.id,range};}
+  if(type==='pivot-build'){const {matrix,matched,total,rows,columns}=buildPivot(book,data.spec,{evaluate:evaluator(data.spec.sourceSheetId)});return {matrix,matched,total,rows,columns};}
   if (type === 'recalculate') { evaluators=new Map();conditionals=new Map();arraysSent=false; }
   if (type === 'calculate' || type === 'recalculate') {const values=data.refs.map(([id, ref]) => {
     const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),result=calculationDisplay(evaluate.result(ref)),value=result.value,position=parseAddress(ref);

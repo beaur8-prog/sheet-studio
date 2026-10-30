@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {address,parseWorkbook,serializeWorkbook} from '../src/engine.mjs';
+import {address,parseWorkbook,serializeWorkbook,createWorkbook} from '../src/engine.mjs';
 import {sourceData,buildPivot,applyPivot,shiftPivotSources} from '../src/pivot.mjs';
 
 import {fixture,spec} from './fixtures/pivot.mjs';
@@ -38,4 +38,18 @@ test('pivot definitions survive JSON, refresh, source rename and source structur
   shiftPivotSources(read,'source','r',3,1);assert.equal(read.sheets[1].pivot.sourceRange,'A1:D7');
   read.sheets.shift();assert.throws(()=>applyPivot(read,read.sheets[0],read.sheets[0].pivot),/원본 시트/);
   assert.throws(()=>parseWorkbook(JSON.stringify({...b,sheets:[b.sheets[0],{...target,pivot:{...s,values:[{field:'매출',aggregate:'eval'}]}}]})),/설정/);
+});
+
+test('dynamic array headers and followers supply complete typed pivot records',()=>{
+ const b=createWorkbook(),s=b.sheets[0];s.cells.A1={raw:'={"지역","매출";"동부",10;"서부",20;"동부",30}'};
+ const p={version:1,sourceSheetId:s.id,sourceRange:'A1:B4',rows:['지역'],columns:[],values:[{field:'매출',aggregate:'sum'}],filters:[],totals:true,sort:'asc'};
+ assert.deepEqual(sourceData(b,s.id,'A1:B4').records,[['동부',10],['서부',20],['동부',30]]);assert.deepEqual(buildPivot(b,p).matrix,[['지역','합계: 매출'],['동부',40],['서부',20],['총합계',60]]);assert.equal(Object.keys(s.cells).length,1);
+ s.cells.A1.raw='={"지역","매출";"#N/A",10;"#CALC!",20;"#SPILL!",30}';assert.equal(buildPivot(b,p).matched,3);
+ s.cells.A1.raw='={"지역","매출";"동부",#N/A;"서부",20;"동부",30}';assert.throws(()=>buildPivot(b,p),/B2.*#N\/A/);
+ s.cells.A1.raw='={"지역","매출";"동부",#CALC!;"서부",20;"동부",30}';assert.throws(()=>buildPivot(b,p),/B2.*#CALC/);
+});
+
+test('formula strings resembling errors stay text while real errors and unsupported cached values fail explicitly',()=>{
+ const b=fixture(),p=spec();b.sheets[0].cells.A2.raw='="#N/A"';assert.equal(buildPivot(b,p).matched,5);
+ b.sheets[0].cells.C2={raw:'=FutureFoo()',cachedFormula:'=FutureFoo()',cachedValue:99};assert.throws(()=>buildPivot(b,p),/C2.*#NAME/);
 });
