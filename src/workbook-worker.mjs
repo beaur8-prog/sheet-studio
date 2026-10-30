@@ -3,7 +3,8 @@ import {tableConversionPlan} from './table-conversion.mjs';
 import {tableAt,tableBounds} from './table-schema.mjs';
 import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
-import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress,formulaReference} from './engine.mjs';
+import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress,formulaReference,setExternalEvaluator} from './engine.mjs';
+import {buildSheetPrintDocument} from './sheet-print.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
 import {estimateDataBytes} from './data-size.mjs';
 import {MAX_HISTORY_BYTES} from './limits.mjs';
@@ -89,6 +90,10 @@ async function handle(type, data) {
     if(!conditionals.has(id))conditionals.set(id,sheet?createConditionalEvaluator(book,sheet,evaluate):()=>({}));
     return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{},result.error];
   })};
+  if(type==='print'){
+    const snapshot={...book},shared=(id,ref)=>evaluator(id)(ref);shared.result=(id,ref)=>evaluator(id).result(ref);shared.isComputed=(id,ref)=>evaluator(id).isComputed(ref);setExternalEvaluator(snapshot,shared);
+    return buildSheetPrintDocument(snapshot,data.sheetId,{...data.options,evaluate:evaluator(data.sheetId)});
+  }
   if (type === 'export') {
     if (data.format === 'json') return {data: new TextEncoder().encode(serializeWorkbook(book)), mime: 'application/json', extension: 'sheet.json'};
     const snapshots=new WeakMap(),get=(snapshot,id)=>{

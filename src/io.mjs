@@ -2,6 +2,7 @@ import {tableBounds} from './table-schema.mjs';
 import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
 import {isErrorText} from './cell-values.mjs';
+import {numberFormatKind as formatKind,effectiveNumberFormat} from './number-formats.mjs';
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
 import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
@@ -23,10 +24,6 @@ import {restoreChartParts,addChartParts} from './chart-xlsx.mjs';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_CELLS = MAX_DOCUMENT_CELLS;
 const DAY = 86_400_000;
-const formats = {
-  general: 'General', number: '#,##0.00', currency: '₩#,##0.00',
-  percent: '0.00%', date: 'yyyy-mm-dd', accounting: '₩* #,##0.00;[Red](₩* #,##0.00);₩* "-";@',
-};
 const errors = new Set(['#N/A', '#REF!', '#VALUE!', '#DIV/0!', '#NUM!', '#NAME?', '#NULL!']);
 const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$/;
 
@@ -64,15 +61,6 @@ function argb(color) {
   let hex = color.replace(/^#/, '');
   if (/^[0-9a-f]{3}$/i.test(hex)) hex = [...hex].map(char => char + char).join('');
   return /^[0-9a-f]{6}$/i.test(hex) ? 'FF' + hex.toUpperCase() : undefined;
-}
-function formatKind(format) {
-  if (!format || /^general$/i.test(format)) return 'general';
-  const cleaned = format.replace(/"[^"]*"|\\./g, '');
-  if (/[ymdhis]/i.test(cleaned.replace(/\[[^\]]*\]/g, ''))) return 'date';
-  if (cleaned.includes('%')) return 'percent';
-  if (cleaned.includes('*')) return 'accounting';
-  if (/[$₩€£¥]|\[\$/.test(cleaned)) return 'currency';
-  return 'number';
 }
 function readStyle(cell,rgb) {
   const result = {};
@@ -259,13 +247,7 @@ function applyStyle(target, style = {},tableStyled=false) {
   const alignment={};if(style.align!==undefined)alignment.horizontal=['left','center','right','fill','justify','centerContinuous','distributed'].includes(style.align)?style.align:undefined;
   if(style.verticalAlign!==undefined)alignment.vertical=style.verticalAlign;if(style.wrap!==undefined)alignment.wrapText=style.wrap;if(Object.keys(alignment).length)target.alignment={...target.alignment,...alignment};
   if(style.borders!==undefined||style.border!==undefined)target.border=Object.fromEntries(Object.entries(cellBorders(style)).map(([side,edge])=>[side,edge?{style:edge.style,color:{argb:'FF'+edge.color.slice(1).toUpperCase()}}:{}]));
-  if(style.format!==undefined||style.numberFormat!==undefined)target.numFmt=style.numberFormat&&formatKind(style.numberFormat)===(style.format||'general')?style.numberFormat:formats[style.format]||'General';
-  if (Number.isInteger(style.decimals) && ['number', 'currency', 'accounting', 'percent'].includes(style.format)) {
-    const digits = Math.min(12, Math.max(0, style.decimals));
-    const fraction = digits ? '.' + '0'.repeat(digits) : '';
-    target.numFmt = style.format === 'percent' ? '0' + fraction + '%' :
-      (style.format === 'currency' || style.format === 'accounting' ? '₩' : '') + '#,##0' + fraction;
-  }
+  if(style.format!==undefined||style.numberFormat!==undefined||style.decimals!==undefined)target.numFmt=effectiveNumberFormat(style);
 }
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const fontFields={fontFamily:'name',fontSize:'size',bold:'bold',italic:'italic',underline:'underline',color:'color'};

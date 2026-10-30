@@ -285,9 +285,8 @@ export function createFunctionRuntime(h) {
       if(!s)return 0;if(!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(s))fail('#VALUE!');return finite(Number(s)/100**percent);
     }
     if(name==='TEXT'){
-      const value=checked(args[0]),format=str(1);if(typeof value==='string')return value;
-      const n=numeric(value);if(/^0+$/.test(format))return (n<0?'-':'')+String(Math.abs(rounded(n,0))).padStart(format.length,'0');
-      return formatValue(n,{numberFormat:format});
+      const value=checked(args[0]),format=str(1);
+      return formatValue(typeof value==='string'&&!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())?value:numeric(value),{numberFormat:format});
     }
     if(name==='FIXED'||name==='DOLLAR'){
       const decimals=args.length>1?integer(args[1]):2;if(decimals>99)fail('#VALUE!');

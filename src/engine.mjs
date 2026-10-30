@@ -17,6 +17,8 @@ import {validateChart} from './chart-schema.mjs';
 import {validatePivot} from './pivot-schema.mjs';
 import {createFunctionRuntime} from './function-runtime.mjs';
 import {normalizeFunctionName,XLSX_FUTURE_FUNCTIONS} from './function-catalog.mjs';
+import {numberFormatKind,effectiveNumberFormat,selectNumberSection,formatTextSection,formatNumericSection} from './number-formats.mjs';
+export {numberFormatKind,numberFormatColor} from './number-formats.mjs';
 /** A small, original spreadsheet evaluator. No JavaScript evaluation is used. */
 const MAX_ROWS = 1048576;
 const MAX_COLS = 16384;
@@ -916,39 +918,31 @@ export function formulaForXlsx(formula,originalFormula) {
   return formula;
 }
 
-export function numberFormatKind(format) {
-  if (!format || /^general$/i.test(format)) return 'general';
-  const cleaned = format.replace(/"[^"]*"|\\./g, '');
-  if (/[ymdhs]/i.test(cleaned.replace(/\[[^\]]*\]/g, '')) || /\[(?:h{1,2}|m{1,2}|s{1,2})\]/i.test(cleaned)) return 'date';
-  if (cleaned.includes('%')) return 'percent';
-  if (cleaned.includes('*')) return 'accounting';
-  if (/[$₩€£¥]|\[\$/.test(cleaned)) return 'currency';
-  return 'number';
-}
-
 function formatDateValue(value, pattern, dateOffset=0) {
-  const { year, month, day } = serialParts(value+dateOffset);
   const fraction = ((value % 1) + 1) % 1;
-  const seconds = Math.round(fraction * 86400) % 86400;
+  const fractionCode=pattern.replace(/"[^"]*"|\\./g,'').match(/s{1,2}\]?\.([0#?]+)/i)?.[1],precision=Math.min(9,fractionCode?.length||0),scale=10**precision,ticks=Math.round(fraction*86400*scale),roundedSeconds=Math.floor(ticks/scale),seconds=roundedSeconds%86400,carry=roundedSeconds>=86400&&/[hs]/i.test(pattern.replace(/"[^"]*"|\\./g,''))?1:0;
+  const { year, month, day } = serialParts(Math.floor(value)+carry+dateOffset);
   const hour = Math.floor(seconds / 3600), minute = Math.floor(seconds / 60) % 60, second = seconds % 60;
   const pad = number => String(number).padStart(2, '0');
   const date = new Date(Date.UTC(year,month-1,1));
-  const weekday=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][((Math.floor(value)+dateOffset+6)%7+7)%7];
+  const weekday=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][((Math.floor(value)+carry+dateOffset+6)%7+7)%7];
   const hasAmPm = /AM\/PM|A\/P/i.test(pattern);
-  const tokens = [...pattern.matchAll(/"[^"]*"|\\.|\[[^\]]*\]|AM\/PM|A\/P|yyyy|yy|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s|./gi)];
+  const tokens = [...pattern.matchAll(/"[^"]*"|\\.|_.|\*.|\[[^\]]*\]|AM\/PM|A\/P|yyyy|yy|mmmmm|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s|\.[0#?]+|./gi)];
   let previousTimeUnit = '';
   return tokens.map((match, index) => {
     const token = match[0], lower = token.toLowerCase();
     if (token.startsWith('"')) return token.slice(1, -1);
     if (token.startsWith('\\')) return token.slice(1);
-    if (lower === '[h]' || lower === '[hh]') { previousTimeUnit = 'h'; return String(Math.floor(value * 24)).padStart(lower === '[hh]' ? 2 : 1, '0'); }
-    if (lower === '[m]' || lower === '[mm]') return String(Math.floor(value * 1440)).padStart(lower === '[mm]' ? 2 : 1, '0');
-    if (lower === '[s]' || lower === '[ss]') return String(Math.round(value * 86400)).padStart(lower === '[ss]' ? 2 : 1, '0');
+    if(token.startsWith('_'))return ' ';if(token.startsWith('*'))return '';
+    if (lower === '[h]' || lower === '[hh]') { previousTimeUnit = 'h'; return String(Math.floor((Math.floor(value)*86400+roundedSeconds)/3600)).padStart(lower === '[hh]' ? 2 : 1, '0'); }
+    if (lower === '[m]' || lower === '[mm]') {previousTimeUnit='minute';return String(Math.floor((Math.floor(value)*86400+roundedSeconds)/60)).padStart(lower === '[mm]' ? 2 : 1, '0');}
+    if (lower === '[s]' || lower === '[ss]') return String(Math.floor(value)*86400+roundedSeconds).padStart(lower === '[ss]' ? 2 : 1, '0');
     if (token.startsWith('[')) return '';
-    if (lower === 'am/pm') return hour >= 12 ? 'PM' : 'AM';
-    if (lower === 'a/p') return hour >= 12 ? 'P' : 'A';
+    if (lower === 'am/pm') return hour >= 12 ? token.slice(3) : token.slice(0,2);
+    if (lower === 'a/p') return hour >= 12 ? token.slice(2) : token.slice(0,1);
     if (lower === 'yyyy') return String(year);
     if (lower === 'yy') return String(year).slice(-2);
+    if (lower === 'mmmmm') return date.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }).slice(0,1);
     if (lower === 'mmmm') return date.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
     if (lower === 'mmm') return date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
     if (lower === 'mm' || lower === 'm') {
@@ -961,6 +955,7 @@ function formatDateValue(value, pattern, dateOffset=0) {
     if (lower === 'dd' || lower === 'd') { previousTimeUnit = 'd'; return lower === 'dd' ? pad(day) : String(day); }
     if (lower === 'hh' || lower === 'h') { previousTimeUnit = 'h'; const displayHour = hasAmPm ? hour % 12 || 12 : hour; return lower === 'hh' ? pad(displayHour) : String(displayHour); }
     if (lower === 'ss' || lower === 's') { previousTimeUnit = 's'; return lower === 'ss' ? pad(second) : String(second); }
+    if(/^\.[0#?]+$/.test(token)&&fractionCode){let digits=String(ticks%scale).padStart(precision,'0');while(digits.endsWith('0')&&token[digits.length]==='#')digits=digits.slice(0,-1);return digits?'.'+digits:'';}
     return token;
   }).join('');
 }
@@ -968,25 +963,17 @@ function formatDateValue(value, pattern, dateOffset=0) {
 export function formatValue(value, style = {}, options = {}) {
   if (value === null || value === undefined || value === '') return '';
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
-  if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
-  let format = typeof style === 'string' ? style : style.format || 'general';
-  if (typeof style === 'object' && typeof style.numberFormat === 'string' && (!style.format || numberFormatKind(style.numberFormat) === style.format)) format = style.numberFormat;
+  if(options.error)return String(value);
+  const format=effectiveNumberFormat(style),selected=selectNumberSection(format,value);
+  if(typeof value!=='number')return formatTextSection(value,selected.section);
+  if(!Number.isFinite(value))return String(value);
   const decimals = typeof style === 'object' && Number.isInteger(style.decimals) ? Math.max(0, Math.min(12, style.decimals)) : null;
-  if (format === 'general' || format === 'General' || format === '@') return String(Number(value.toPrecision(12)));
-  const standardFormats = ['general', 'number', 'currency', 'accounting', 'percent', 'text'];
-  if (format === 'date' || (!standardFormats.includes(format) && numberFormatKind(format) === 'date')) {
+  if(selected.section&&numberFormatKind(selected.section.code)==='date'){
     try {
-      return formatDateValue(value, format === 'date' ? 'yyyy-mm-dd' : format,options.date1904?1462:0);
+      if(value<0)return '########';return formatDateValue(value,selected.section.code,options.date1904?1462:0);
     } catch { return '########'; }
   }
-  const customDecimals = (format.split(';')[0].match(/\.([0#]+)/) || [])[1];
-  const precision = decimals ?? (customDecimals ? Math.min(12, customDecimals.length) : ['number', 'currency', 'accounting', 'percent'].includes(format) ? 2 : 0);
-  const minPrecision = decimals ?? (customDecimals ? Math.min(12, customDecimals.replace(/#/g, '').length) : precision);
-  if (format === 'percent' || format.includes('%')) return `${(value * 100).toLocaleString('ko-KR', { minimumFractionDigits: minPrecision, maximumFractionDigits: precision })}%`;
-  const currency = format === 'currency' || format === 'accounting' || /[$₩€£¥]/.test(format);
-  const symbol = format.match(/[$₩€£¥]/)?.[0] || '₩';
-  const number = value.toLocaleString('ko-KR', { useGrouping: currency || format === 'number' || format.includes(','), minimumFractionDigits: minPrecision, maximumFractionDigits: precision });
-  return currency ? `${symbol}${number}` : number;
+  return formatNumericSection(selected.value,selected.section,{negative:selected.negative,decimals});
 }
 
 /** Rewrite references after one structural row/column insertion or deletion.
