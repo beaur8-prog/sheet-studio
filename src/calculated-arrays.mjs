@@ -11,22 +11,46 @@ export function setCalculatedArrays(sheet,regions){
 export function calculatedArrayRegions(sheet){
   return calculatedArrayRecords(sheet).filter(a=>!a.blocked);
 }
-export function mayReturnArray(node){
+export function referenceDimensions(node){
+  if(!node)return null;
+  if(['literal','error','ref','implicit'].includes(node.type))return {rows:1,cols:1};
+  if(node.type==='array')return {rows:node.rows,cols:node.cols};
+  if(node.type==='range')return {rows:Math.abs(node.start.r-node.end.r)+1,cols:Math.abs(node.start.c-node.end.c)+1};
+  if(node.type==='referenceOp'&&node.op===':'){
+    const bounds=n=>n.type==='ref'?{r1:n.pos.r,r2:n.pos.r,c1:n.pos.c,c2:n.pos.c}:n.type==='range'?{r1:Math.min(n.start.r,n.end.r),r2:Math.max(n.start.r,n.end.r),c1:Math.min(n.start.c,n.end.c),c2:Math.max(n.start.c,n.end.c)}:null;
+    const a=bounds(node.left),b=bounds(node.right);if(a&&b)return {rows:Math.max(a.r2,b.r2)-Math.min(a.r1,b.r1)+1,cols:Math.max(a.c2,b.c2)-Math.min(a.c1,b.c1)+1};
+  }
+  if(node.type==='whole')return {rows:node.axis==='c'?1048576:Math.abs(node.start-node.end)+1,cols:node.axis==='r'?16384:Math.abs(node.start-node.end)+1};
+  return null;
+}
+export function mayReturnArray(node,resolveShape=referenceDimensions){
   if(!node)return false;
-  if(['array','range','whole','structured','spill','name','referenceOp'].includes(node.type))return true;
+  const array=child=>mayReturnArray(child,resolveShape);
+  if(['array','range','whole','structured','spill','name','referenceOp'].includes(node.type)){
+    const shape=resolveShape(node);return shape?shape.rows*shape.cols>1: true;
+  }
   if(node.type==='implicit')return false;
-  if(node.type==='unary')return mayReturnArray(node.node);
-  if(node.type==='binary')return mayReturnArray(node.left)||mayReturnArray(node.right);
+  if(node.type==='unary')return array(node.node);
+  if(node.type==='binary')return array(node.left)||array(node.right);
   if(node.type==='call'){
     const name=node.name.replace(/^_XLFN\.(?:_XLWS\.)?/,'').replace(/^_XLWS\./,'');
     if(['FILTER','SORT','UNIQUE','SEQUENCE','ANCHORARRAY'].includes(name))return true;
-    if(['ROW','COLUMN','TRANSPOSE'].includes(name))return node.args.some(mayReturnArray);
-    if(name==='XLOOKUP')return mayReturnArray(node.args[0])||mayReturnArray(node.args[2])||mayReturnArray(node.args[3]);
-    if(name==='INDEX')return node.args.slice(1,3).some(a=>a.type!=='literal'||a.value===0);
-    if(name==='OFFSET')return mayReturnArray(node.args[0])||node.args.slice(3).some(a=>a.type!=='literal'||a.value>1);
-    if(name==='INDIRECT')return node.args[0]?.type!=='literal'||typeof node.args[0].value==='string'&&node.args[0].value.includes(':');
-    if(['IF','IFERROR','IFNA','IFS','SWITCH','CHOOSE','LET'].includes(name))return node.args.some(mayReturnArray);
-    if(ARRAY_SCALAR_FUNCTIONS.has(name))return node.args.some(mayReturnArray);
+    if(['ROW','COLUMN','TRANSPOSE'].includes(name))return node.args.some(array);
+    if(name==='XLOOKUP'){
+      if(array(node.args[0])||array(node.args[3]))return true;
+      const lookup=resolveShape(node.args[1]),result=resolveShape(node.args[2]);
+      if(!lookup||!result)return true;
+      return lookup.cols===1?result.cols>1:lookup.rows===1&&result.rows>1;
+    }
+    if(name==='INDEX'){const source=resolveShape(node.args[0]);if(node.args.length===2&&(!source||source.rows>1&&source.cols>1))return true;return node.args.slice(1,3).some(a=>a.type==='call'&&['MATCH','XMATCH'].includes(a.name.replace(/^_XLFN\./,''))?false:a.type!=='literal'||a.value===0);}
+    if(name==='OFFSET')return array(node.args[0])||node.args.slice(3).some(a=>a.type!=='literal'||a.value>1);
+    if(name==='INDIRECT'){
+      const arg=node.args[0];if(arg?.type!=='literal'||typeof arg.value!=='string')return true;
+      const local=arg.value.replace(/^(?:'(?:[^']|'')*'|[\p{L}_][\p{L}\p{N}_.]*)!/u,'');
+      return !tableBounds(local)||local.includes(':');
+    }
+    if(['IF','IFERROR','IFNA','IFS','SWITCH','CHOOSE','LET'].includes(name))return node.args.some(array);
+    if(ARRAY_SCALAR_FUNCTIONS.has(name))return node.args.some(array);
   }
   return false;
 }

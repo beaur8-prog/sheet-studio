@@ -15,6 +15,7 @@ import {openPrintSettingsUI} from './print-settings-ui.mjs';
 import {readPrintSettings} from './print-layout.mjs';
 import {drawingPreviews} from './xlsx-drawings.mjs';
 import {transformAnchoredObjects,dimensionSnapshot} from './anchored-objects.mjs';
+import {clearContentsPlan} from './clear-contents.mjs';
 import {setCalculatedArrays,calculatedArrayRecords,spillExplanation} from './calculated-arrays.mjs';
 import {storedArrayIndex,clearReplacedArrayDefinitions,normalizeArrayCopy} from './stored-arrays.mjs';
 import {filteredRowsForSheet,tableAt,tableBounds,overlaps} from './table-schema.mjs';
@@ -52,7 +53,7 @@ import {installChartInteractions} from './chart-interactions.mjs';
 import {installDimensionInteractions} from './dimension-interactions.mjs';
 import {createVbaUI} from './vba-ui.mjs';
 import {createPivotUI} from './pivot-ui.mjs';
-import {autoSumPlan,formulaReferences,referenceSlot,cycleReference,rangeReference,referenceColors,completeFormula} from './formula-tools.mjs';
+import {formulaReferences,referenceSlot,cycleReference,rangeReference,referenceColors,completeFormula} from './formula-tools.mjs';
 
 async function start(){
 const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -231,7 +232,7 @@ function renderFormulaReferences(){
  layer.innerHTML=formulaReferences($('#editor').value).map(ref=>{
    const name=ref.sheet||owner.name,key=[name.toLowerCase(),ref.r1,ref.c1,ref.r2,ref.c2].join(':');if(!colors.has(key))colors.set(key,referenceColors[colors.size%referenceColors.length]);
    if(name.toLowerCase()!==sheet().name.toLowerCase())return '';
-   const color=colors.get(key);return viewRects(ref).map(q=>`<svg class="formula-reference-box" data-reference="${esc(ref.text)}" aria-label="수식 참조 ${esc(ref.text)}" style="left:${q.x}px;top:${q.y}px;width:${q.w}px;height:${q.h}px;color:${color}" viewBox="0 0 ${q.w} ${q.h}"><rect x="1" y="1" width="${Math.max(0,q.w-2)}" height="${Math.max(0,q.h-2)}" class="reference-fill"/><rect x="1" y="1" width="${Math.max(0,q.w-2)}" height="${Math.max(0,q.h-2)}" class="reference-border"/></svg>`).join('');
+   const spill=ref.spill&&computedArrayAt(sheet().id,address(ref.r1,ref.c1)),color=colors.get(key);return viewRects(spill||ref).map(q=>`<svg class="formula-reference-box" data-reference="${esc(ref.text)}" aria-label="수식 참조 ${esc(ref.text)}" style="left:${q.x}px;top:${q.y}px;width:${q.w}px;height:${q.h}px;color:${color}" viewBox="0 0 ${q.w} ${q.h}"><rect x="1" y="1" width="${Math.max(0,q.w-2)}" height="${Math.max(0,q.h-2)}" class="reference-fill"/><rect x="1" y="1" width="${Math.max(0,q.w-2)}" height="${Math.max(0,q.h-2)}" class="reference-border"/></svg>`).join('');
  }).join('');
 }
 // Keep the same native text input focused while navigating. Starting an IME
@@ -243,7 +244,7 @@ function restoreEditView(){
  if(!editSession)return;const cross=sheet().id!==editSession.sheetId;book.activeSheetId=editSession.sheetId;selection={...editSession.selection};entryRange=editSession.entryRange;
  if(cross||editSession.viewChanged){filteredRows=editSession.filteredRows;filterEnabled=editSession.filterEnabled;makeLayout();$('#grid').scrollLeft=editSession.scrollLeft;verticalScroll.setTop(editSession.scrollTop);renderSheets();renderPivotBar();}
 }
-function finishEditing(){functionAssistant.hide();editing=false;editSession=null;referenceDrag=null;keyboardReference=null;$('#editor').value='';renderFormulaReferences();focusGrid();render();}
+function finishEditing(){functionAssistant.hide();editing=false;editSession=null;referenceDrag=null;keyboardReference=null;$('#editor').hidden=true;$('#editor').value='';renderFormulaReferences();focusGrid();render();}
 function commitEdit(move,fillSelection=false,allowInvalid=false){
  if(!editing)return true;const input=$('#editor').value;restoreEditView();const rawFor=(r,c)=>entryRaw(textEntryStyle(effectiveCellStyle(r,c))?input:completeFormula(input),effectiveCellStyle(r,c)),raw=rawFor(editSession.r,editSession.c),edits=[{r:editSession.r,c:editSession.c,raw},...editSession.pending];
  if(fillSelection){const b=bounds();if((b.r2-b.r1+1)*(b.c2-b.c1+1)>100000){toast('한 번에 최대 100,000개 셀을 편집할 수 있습니다.');return;}edits.length=0;for(let r=b.r1;r<=b.r2;r++)for(let c=b.c1;c<=b.c2;c++)if(editableCell(r,c)){const value=rawFor(r,c);edits.push({r,c,raw:value.startsWith('=')?shiftFormula(value,r-editSession.r,c-editSession.c):value});}}
@@ -262,9 +263,9 @@ function cancelEdit(){if(editing)restoreEditView();finishEditing();}
 async function recalculate(){
  if(commitEdit()===false)return;return runBusy('수식을 다시 계산하는 중…',async()=>{const result=await tasks.recalculate();if(result?.values.length){dirty=true;updateTitle();}render();toast('수식을 다시 계산했습니다.');});
 }
-function startAutoSum(){
+async function startAutoSum(){
  if(pivotLocked())return;
- try{const plan=autoSumPlan(sheet(),selection,createEvaluator(book,sheet().id)),first=plan[0];select(first.r,first.c,false,true);startEdit(first.raw);editSession.pending=plan.slice(1);$('#editor').setSelectionRange(5,first.raw.length-1);pointMode=true;renderFormulaReferences();updateStats();}catch(error){toast(error.message);}
+ try{const plan=await runBusy('합계 범위를 확인하는 중…',()=>tasks.run('auto-sum',{sheetId:sheet().id,selection:{...selection}}));if(!plan?.length)return;const first=plan[0];select(first.r,first.c,false,true);startEdit(first.raw);if(!editing)return;editSession.pending=plan.slice(1);$('#editor').setSelectionRange(5,first.raw.length-1);pointMode=true;renderFormulaReferences();updateStats();}catch(error){toast(error.message);}
 }
 function currentReferenceSlot(){return editing&&!editSession.textFormat&&editInput?referenceSlot($('#editor').value,editInput.selectionStart,editInput.selectionEnd):null;}
 function showReferenceSheet(id){
@@ -298,7 +299,7 @@ function formulaKeydown(e){
  // bar stay in text editing mode, where arrow keys move the caret instead.
  if(delta&&pointMode&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();commitEdit({ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'}[e.key]);}
 }
-function setRaw(raw){if(pivotLocked())return;const updates=[];forSelection(key=>updates.push({key,cell:{...sheet().cells[key],raw}}));const plan=prepareHeaders(updates);if(!plan||!plan.updates.length||!permitUpdates(plan.updates))return;preserveProtectedFormatting(plan.updates);checkpoint();applyTableHeaderEdits(book,sheet(),plan);for(const {key,cell} of plan.updates)sheet().cells[key]=cell;changed();}
+function setRaw(raw){if(pivotLocked())return;let updates=[];try{if(raw===''&&!book.nativeSource&&!sheetIsProtected(sheet()))updates=clearContentsPlan(sheet(),bounds(),{editable:editableCell});else if(!forSelection(key=>updates.push({key,cell:{...sheet().cells[key],raw}})))return;}catch(error){toast(error.message);return;}const plan=prepareHeaders(updates);if(!plan||!plan.updates.length||!permitUpdates(plan.updates))return;preserveProtectedFormatting(plan.updates);checkpoint();applyTableHeaderEdits(book,sheet(),plan);for(const {key,cell} of plan.updates)sheet().cells[key]=cell;changed();}
 function resetSelectionFormat(){
  if(book.nativeSource)return toast('XLSM의 전체 셀 서식 초기화는 Excel에서 진행하거나 XLSX 사본으로 저장하세요.');
  const updates=[];if(!forSelection(key=>updates.push({key,cell:resetCellFormat(sheet().cells[key],sheetIsProtected(sheet())?{protection:cellProtection(book,sheet(),key)}:{})})))return;

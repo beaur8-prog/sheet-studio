@@ -195,7 +195,7 @@ export function createFunctionRuntime(h) {
       return finite(sum(first.values.map((_,i)=>ranges.reduce((product,r)=>{const v=checked(r.values[i]);return product*(typeof v==='number'?v:0);},1))));
     }
     if(name==='INDEX'){
-      const r=asRange(args[0]);let row=integer(args[1]),col=args.length>2?integer(args[2]):1;
+      const r=asRange(args[0]);let row=integer(args[1]),col=args.length>2?integer(args[2]):r.rows>1&&r.cols>1?0:1;
       if(args.length===2&&r.rows===1){col=row;row=1;}
       if(row<0||col<0||row>r.rows||col>r.cols)fail('#REF!');
       const rows=row?1:r.rows,cols=col?1:r.cols,top=row?row-1:0,left=col?col-1:0,values=[];

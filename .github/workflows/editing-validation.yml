@@ -5,7 +5,7 @@ on:
       scope:
         description: Regression scope
         type: choice
-        options: [all, excel-parity, print-layout, file-dialogs, file-associations]
+        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations]
         default: all
 permissions:
   contents: read
@@ -16,7 +16,7 @@ jobs:
       matrix:
         os: [macos-15, windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,8 +34,11 @@ jobs:
         shell: bash
         run: |
           specs="user-journeys autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit file-dialogs file-associations recovery capacity"
-          if [ "${{ inputs.scope }}" = excel-parity ]; then
-            specs="chart-parity recalculation data-region xlsx-preservation cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays result-types number-formats style-defaults worksheet-extras sheet-print print-layout print-settings virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text"
+          core_specs="chart-parity recalculation data-region xlsx-preservation cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays array-views result-types number-formats style-defaults worksheet-extras sheet-print print-layout print-settings virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text large-spills"
+          if [ "${{ inputs.scope }}" = full ]; then
+            specs="$specs $core_specs"
+          elif [ "${{ inputs.scope }}" = excel-parity ]; then
+            specs="$core_specs"
           elif [ "${{ inputs.scope }}" = print-layout ]; then
             specs="sheet-print print-layout print-settings worksheet-extras"
           elif [ "${{ inputs.scope }}" != all ]; then
@@ -61,7 +64,7 @@ jobs:
               node tests/ui-capacity.mjs --desktop --structure
               node tests/ui-capacity.mjs --desktop --tall --structure
             fi
-          elif [ "${{ inputs.scope }}" = all ]; then
+          elif [ "${{ inputs.scope }}" = all ] || [ "${{ inputs.scope }}" = full ]; then
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node tests/ui-capacity.mjs --desktop --tall
             else
@@ -76,6 +79,8 @@ jobs:
             test-results/*.png
             test-results/*.pdf
             test-results/capacity-*.json
+            test-results/large-spills*.json
+            test-results/array-views.json
             test-results/file-dialogs.json
             test-results/file-associations.json
             test-results/user-journeys.json

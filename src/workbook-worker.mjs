@@ -3,6 +3,7 @@ import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} 
 import {tableConversionPlan} from './table-conversion.mjs';
 import {tableAt,tableBounds,filteredRowsForSheet} from './table-schema.mjs';
 import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
+import {autoSumPlan} from './formula-tools.mjs';
 import {dataEdge} from './cell-navigation.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
 import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress,formulaReference,setExternalEvaluator} from './engine.mjs';
@@ -116,6 +117,7 @@ async function handle(type, data) {
     const next=structuralWorkbookPlan(book,sheet.id,data.options),token=crypto.randomUUID();prepared={token,book:next};return {book:next,description:describe(next),token};
   }
   if(type==='table-plan'){const table=sheet.tables?.find(t=>t.id===data.tableId);if(data.operation!=='create'&&!table)throw Error('표를 찾을 수 없습니다.');if(data.operation==='convert')return tableConversionPlan(book,sheet,table);const plan=data.operation==='create'?createTablePlan(book,sheet,data.values):data.operation==='calculate'?calculatedColumnPlan(book,sheet,table,data.values):updateTablePlan(book,sheet,table,data.values);return finalizeTablePlan(book,sheet,plan,data.values);}
+  if(type==='auto-sum')return autoSumPlan(sheet,data.selection,evaluator(sheet.id));
   if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);
   if(type==='data-edge'){const hidden=filteredRowsForSheet(sheet);return dataEdge(sheet,data.point,data.axis,data.direction,{hiddenRow:r=>hidden.has(r)||sheet.rowHeights?.[r]===0,hiddenCol:c=>sheet.columnWidths?.[c]===0});}

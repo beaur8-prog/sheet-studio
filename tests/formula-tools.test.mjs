@@ -38,3 +38,10 @@ test('AutoSum selected rows/columns reserve blank totals and never overwrite occ
   s.cells.A3={raw:'keep'};assert.throws(()=>autoSumPlan(s,at(0,0,1,1),e),/데이터/);assert.equal(s.cells.A3.raw,'keep');
   assert.throws(()=>autoSumPlan(s,at(0,0,100000,0),e),/100,000/);
 });
+
+test('spill references keep their operator during reference picking and F4 lock cycling',()=>{
+ const formula='=SUM(A1#)';assert.deepEqual(formulaReferences(formula).map(r=>({text:r.text,spill:r.spill})),[{text:'A1#',spill:true}]);assert.deepEqual(referenceSlot(formula,8),{start:5,end:8});let f=formula;for(const expected of ['=SUM($A$1#)','=SUM(A$1#)','=SUM($A1#)','=SUM(A1#)']){f=cycleReference(f,6).formula;assert.equal(f,expected);}
+});
+test('AutoSum includes derived spill followers and reserves the next genuinely empty row',()=>{
+ const [s,e]=fixture({A1:'=SEQUENCE(1000)'});assert.deepEqual(autoSumPlan(s,at(1000,0),e),[{r:1000,c:0,raw:'=SUM(A1:A1000)'}]);assert.deepEqual(autoSumPlan(s,at(0,0,999,0),e),[{r:1000,c:0,raw:'=SUM(A1:A1000)'}]);
+});

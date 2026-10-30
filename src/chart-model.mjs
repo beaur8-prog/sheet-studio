@@ -116,7 +116,7 @@ function sourceAxes(chart,sheet,workbook){
 export function chartLayout(chart,sheet,workbook){
   const axes=sourceAxes(chart,sheet,workbook);if(!axes)return {firstRowAsHeader:false,firstColumnAsLabels:false};
   const {rows,lane1,lane2,point1,point2,xy,implicitX}=axes,evaluate=createEvaluator(workbook,sheet.id),numeric=v=>typeof v==='number'&&Number.isFinite(v);
-  const value=(lane,point)=>{const key=rows?address(lane,point):address(point,lane),cell=sheet.cells[key];return !cell||cell.raw===''?null:chartCellValue(cell,evaluate,key,undefined,workbook);};
+  const value=(lane,point)=>{const key=rows?address(lane,point):address(point,lane),cell=sheet.cells[key];return (!cell||cell.raw==='')&&!evaluate.isComputed?.(key)?null:chartCellValue(cell,evaluate,key,undefined,workbook);};
   let numericFirstLane=false;for(let point=point1;point<=point2;point++)if(numeric(value(lane1,point))){numericFirstLane=true;break;}
   const categories=(rows?chart.firstRowAsHeader:chart.firstColumnAsLabels)??(lane1<lane2&&!numericFirstLane);
   const firstPoint=[];for(let lane=lane1+Number(xy?!implicitX:categories);lane<=lane2;lane++)firstPoint.push(value(lane,point1));

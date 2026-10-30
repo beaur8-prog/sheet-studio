@@ -62,3 +62,18 @@ test('invalidated spill anchors retain REF errors through copy, transpose and st
  assert.equal(transformFormulaReferences('=SUM(A1#)',{axis:'r',index:0,delta:-1,targetSheet:'Sheet1',ownerSheet:'Sheet1'}),'=SUM(#REF!)');
  assert.equal(transposeFormula('=SUM(A1#)',{r:1,c:1},{r:0,c:0}),'=SUM(#REF!)');assert.equal(rewriteSheetReferences("=SUM('Removed'!A1#)",'Removed',null),'=SUM(#REF!)');
 });
+
+test('chart header inference and filter extents include results with no physical follower cells',async()=>{
+ const {chartLayout,chartData}=await import('../src/chart-model.mjs'),{inferFilterRange}=await import('../src/filters.mjs');const b=make({A1:'={"Region","Revenue";"Seoul",10;"Busan",20;"Jeju",30}'}),s=b.sheets[0];createEvaluator(b,s.id)('B4');const chart={type:'bar',range:'A1:B4'};assert.deepEqual(chartLayout(chart,s,b),{firstRowAsHeader:true,firstColumnAsLabels:true});const data=chartData(chart,s,b);assert.equal(data.length,1);assert.deepEqual(data[0].values,[10,20,30]);assert.deepEqual(data[0].labels,['Seoul','Busan','Jeju']);
+ assert.deepEqual(inferFilterRange(s,{r1:0,r2:0,c1:0,c2:1}),{r1:0,r2:3,c1:0,c2:1});assert.deepEqual(inferFilterRange(s,{r1:0,r2:1048575,c1:1,c2:1}),{r1:0,r2:3,c1:1,c2:1});assert.deepEqual(inferFilterRange(s,{r1:1,r2:3,c1:1,c2:1}),{r1:1,r2:3,c1:1,c2:1});
+});
+
+test('ordinary scalar lookups and named constants do not spend another formula calculation budget',()=>{
+ const b=make({}),s=b.sheets[0];for(let r=1;r<=1000;r++)s.cells['A'+r]={raw:String(r)};for(let r=1;r<=10000;r++)s.cells['B'+r]={raw:'=XLOOKUP(500,$A$1:$A$1000,$A$1:$A$1000)'};let e=createEvaluator(b,s.id);assert.equal(e('B10000'),500);assert.equal(e.spills().length,0);
+ // Imported one-cell dynamic metadata must not make the cumulative discovery
+ // cost poison later, individually valid formulas with NUM errors.
+ for(let r=1;r<=10000;r++){const ref='B'+r,cell=s.cells[ref];cell.xlsxFormula={raw:cell.raw,formula:cell.raw.slice(1),shareType:'array',ref,dynamic:true};}e=createEvaluator(b,s.id);assert.equal(e('B10000'),500);assert.equal(e('B1'),500);
+});
+test('INDIRECT named/spilled references discover followers before their offscreen anchor is requested',()=>{
+ const b=make({A1:'=SEQUENCE(3)',D1:'=INDIRECT("A1#")',F1:'=INDIRECT("Numbers")',H1:'=Rate*2'}),s=b.sheets[0];b.chartNames=[{name:'Numbers',formula:"'Sheet1'!$A$1:$A$3"},{name:'Rate',formula:'0.5'}];const e=createEvaluator(b,s.id);assert.equal(e('D3'),3);assert.equal(e('F3'),3);assert.equal(e('H1'),1);assert.deepEqual(e.spills().map(a=>a.ref),['A1','D1','F1']);
+});

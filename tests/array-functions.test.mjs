@@ -58,3 +58,8 @@ test('XLOOKUP returns complete matching rows or columns and a lazy array fallbac
  assert.deepEqual(array('=XLOOKUP(2,A:A,B:C)',b),expected(1,2,['last',42]));
  assert.equal(error('=XLOOKUP(2,{1;2},{10,11,12})'),'#VALUE!');
 });
+
+test('INDEX omitted axes return complete rows or columns while one-dimensional shorthand stays scalar',()=>{
+ assert.deepEqual(array('=INDEX({1,2;3,4},2)'),expected(1,2,[3,4]));assert.deepEqual(array('=INDEX({1,2;3,4},,2)'),expected(2,1,[2,4]));assert.deepEqual(array('=INDEX({1,2;3,4},2,)'),expected(1,2,[3,4]));assert.deepEqual(array('=INDEX({1,2,3},2)'),expected(1,1,[2]));assert.deepEqual(array('=INDEX({1;2;3},2)'),expected(1,1,[2]));
+ const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'1'},B1:{raw:'2'},A2:{raw:'3'},B2:{raw:'4'},D1:{raw:'=INDEX(A1:B2,2)'},G1:{raw:'=INDEX(A1:B2,,2)'}};assert.deepEqual(array('=INDEX(A1:B2,2)',b),expected(1,2,[3,4]));
+});

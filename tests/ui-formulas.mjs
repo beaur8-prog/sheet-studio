@@ -17,7 +17,7 @@ const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#
 const cell=a=>page.getByRole('gridcell',{name:a,exact:true});
 const value=a=>page.evaluate(a=>sheetStudio.evaluateAsync(a),a);
 const raw=a=>page.evaluate(a=>sheetStudio.getWorkbook().sheets[0].cells[a]?.raw||'',a);
-const sum=()=>page.getByRole('button',{name:'자동 합계',exact:true}).click();
+const sum=async()=>{await page.getByRole('button',{name:'자동 합계',exact:true}).click();await page.locator('.workbook-busy').waitFor({state:'detached'});await settle();};
 const draft=async(a,text)=>{await go(a);await page.keyboard.press('F2');await page.locator('#editor').fill(text);await settle();};
 const drag=async(a,b)=>{await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await cell(a).waitFor();await cell(b).waitFor();const start=await cell(a).evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}),end=await cell(b).evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});await page.mouse.move(start.x+start.width/2,start.y+start.height/2);await page.mouse.down();await page.mouse.move(end.x+end.width/2,end.y+end.height/2,{steps:8});await page.mouse.up();};
 try{
@@ -30,7 +30,7 @@ try{
  await drag('B3','B4');assert.equal(await page.locator('#editor').inputValue(),'=SUM(B3:B4)');await page.locator('#editor').press('Enter');assert.equal(await value('B5'),50);assert.equal(await page.locator('.formula-reference-box').count(),0);
  await page.keyboard.press(modifier+'+z');assert.equal(await raw('B5'),'');await page.keyboard.press(modifier+'+Shift+z');assert.equal(await value('B5'),50);
  await go('B6');await sum();await page.locator('#editor').press('Escape');assert.equal(await raw('B6'),'');assert.equal(await page.locator('.formula-reference-box').count(),0);
- await go('F2');await page.keyboard.press(process.platform==='darwin'?'Meta+Shift+t':'Alt+=');assert.equal(await page.locator('#editor').inputValue(),'=SUM(B2:E2)');await page.locator('#editor').press('Tab');assert.equal(await value('F2'),16);
+ await go('F2');await page.keyboard.press(process.platform==='darwin'?'Meta+Shift+t':'Alt+=');await page.locator('.workbook-busy').waitFor({state:'detached'});await settle();assert.equal(await page.locator('#editor').inputValue(),'=SUM(B2:E2)');await page.locator('#editor').press('Tab');assert.equal(await value('F2'),16);
  await go('H2:I4');await sum();assert.equal(await raw('H4'),'');assert.equal(await raw('I4'),'');await page.locator('#editor').press('Enter');assert.equal(await value('H4'),9);assert.equal(await value('I4'),13);await page.keyboard.press(modifier+'+z');assert.equal(await raw('H4'),'');assert.equal(await raw('I4'),'');
  await go('B2:B4');await sum();assert.ok((await page.locator('.toast').innerText()).includes('데이터'));assert.equal(await value('B5'),50);
  await draft('C7','=SUM(');await drag('B2','B4');await page.locator('#editor').press('Enter');assert.equal(await raw('C7'),'=SUM(B2:B4)');assert.equal(await value('C7'),60);assert.equal(await value('B2'),10);

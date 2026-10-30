@@ -1,3 +1,4 @@
+import {arrayRegions} from './cell-constraints.mjs';
 import {sortStyleResolver} from './sort-style.mjs';
 import {worksheetFilterStyle} from './cell-style.mjs';
 import {numberFormatStyle} from './number-formats.mjs';
@@ -18,12 +19,12 @@ export function filterValue(sheet,evaluate,r,c){
   return (!cell?.raw||cell.raw==="'")&&!evaluate.isComputed?.(address(r,c))?'':evaluate(address(r,c));
 }
 export function inferFilterRange(sheet,selection){
-  const points=Object.entries(sheet.cells).filter(([,v])=>v.raw!=='').map(([key])=>parseAddress(key));
+  const points=[];for(const ref in sheet.cells)if(sheet.cells[ref].raw){const p=parseAddress(ref);if(p)points.push(p);}const arrays=arrayRegions(sheet),intersects=(a,b)=>a.r1<=b.r2&&a.r2>=b.r1&&a.c1<=b.c2&&a.c2>=b.c1;
   let b={...selection};
   if(b.r1===b.r2&&b.c1===b.c2){
     const region=currentRegion(sheet,b);if(!region)throw Error('필터를 적용할 데이터 안의 셀을 선택하세요.');b=region;
-  }else if(b.r1===b.r2){const occupied=new Set(points.filter(p=>p.c>=b.c1&&p.c<=b.c2).map(p=>p.r));while(occupied.has(b.r2+1))b.r2++;}else if(b.r2===1048575){b.r2=points.filter(p=>p.c>=b.c1&&p.c<=b.c2).reduce((max,p)=>Math.max(max,p.r),b.r1);}
-  if(!points.some(p=>p.r>=b.r1&&p.r<=b.r2&&p.c>=b.c1&&p.c<=b.c2))throw Error('선택한 범위에 데이터가 없습니다.');
+  }else if(b.r1===b.r2){const occupied=new Set(points.filter(p=>p.c>=b.c1&&p.c<=b.c2).map(p=>p.r));let changed=true;while(changed){changed=false;while(occupied.has(b.r2+1)){b.r2++;changed=true;}for(const a of arrays)if(a.c1<=b.c2&&a.c2>=b.c1&&a.r1<=b.r2+1&&a.r2>b.r2){b.r2=a.r2;changed=true;}}}else if(b.r2===1048575){b.r2=Math.max(points.filter(p=>p.c>=b.c1&&p.c<=b.c2).reduce((max,p)=>Math.max(max,p.r),b.r1),...arrays.filter(a=>a.c1<=b.c2&&a.c2>=b.c1).map(a=>a.r2));}
+  if(!arrays.some(a=>intersects(a,b))&&!points.some(p=>p.r>=b.r1&&p.r<=b.r2&&p.c>=b.c1&&p.c<=b.c2))throw Error('선택한 범위에 데이터가 없습니다.');
   validateAutoFilter({range:b,columns:{}});return b;
 }
 function pattern(value){
