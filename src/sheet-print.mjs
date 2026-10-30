@@ -12,7 +12,7 @@ import {nativeCachedValue} from './native-plan.mjs';
 import {readPrintSettings,planPrintPages,checkPrintRange,printRowHeight,printColWidth} from './print-layout.mjs';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function printRange(sheet,selection){
+function printRange(sheet,selection,spills=[]){
   if(selection){
     checkPrintRange(selection);
     return {...selection};
@@ -21,7 +21,7 @@ function printRange(sheet,selection){
   const include=b=>{if(!b)return;if(!range)range={...b};else {range.r1=Math.min(range.r1,b.r1);range.c1=Math.min(range.c1,b.c1);range.r2=Math.max(range.r2,b.r2);range.c2=Math.max(range.c2,b.c2);}};
   for(const ref in sheet.cells){const cell=sheet.cells[ref];if(cell.raw===''&&!Object.keys(cell.style||{}).length)continue;const p=parseAddress(ref);if(p)include({r1:p.r,r2:p.r,c1:p.c,c2:p.c});}
   for(const table of sheet.tables||[])include(tableBounds(table.range));
-  for(const array of storedArrayIndex(sheet).regions)include(array);
+  for(const array of [...storedArrayIndex(sheet).regions,...spills])include(array);
   if(!range)return null;
   // Merge bounds are meaningful when their content lies in the used region.
   for(const ref of sheet.merges||[]){const b=tableBounds(ref);if(b&&b.r1<=range.r2&&b.r2>=range.r1&&b.c1<=range.c2&&b.c2>=range.c1)include(b);}
@@ -39,7 +39,7 @@ function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,
   const tr=rows.map(r=>{
     const td=cols.map(c=>{
       const merge=merges.get(address(r,c));if(merge&&(r!==merge.firstR||c!==merge.firstC))return '';
-      const row=merge?.r1??r,col=merge?.c1??c,ref=address(row,col),cell=sheet.cells[ref]||{};let result=evaluate.result(ref);const cached=result.error?nativeCachedValue(book,sheet.id,ref,result.value):undefined;if(cached!==undefined){result={value:cached,error:cell.cachedError?cached:null};cachedCount++;}const value=result.value;
+      const row=merge?.r1??r,col=merge?.c1??c,ref=address(row,col),cell=sheet.cells[ref]||{};let result=evaluate.result(ref);const cached=result.cached&&!result.stale?result.cachedValue:result.error?nativeCachedValue(book,sheet.id,ref,result.value):undefined;if(cached!==undefined){result={value:cached,error:result.cachedError|| (cell.cachedError?cached:null)};cachedCount++;}const value=result.value;
       const style={...numberFormatStyle(value,worksheetCellStyle(book,sheet,row,col)),...conditional(row,col,value)};
       const css=['background:'+(style.background||'white'),'color:'+(style.color||'#222'),'font-family:'+(style.fontFamily||'Arial'),'font-size:'+(style.fontSize||11)+'pt','font-weight:'+(style.bold?'bold':'normal'),'font-style:'+(style.italic?'italic':'normal'),'text-decoration:'+(style.underline?'underline':'none'),'text-align:'+(style.align|| (typeof value==='number'?'right':'left')),'vertical-align:'+(style.verticalAlign||'middle'),'white-space:'+(style.wrap?'pre-wrap':'pre'),bordersCss(style)].join(';');
       const height=merge?rows.filter(r=>r>=merge.r1&&r<=merge.r2).reduce((n,r)=>n+printRowHeight(sheet,r),0):printRowHeight(sheet,r),edges=cellBorders(style),border=Math.max(gridLines?1:0,...['top','bottom'].map(side=>parseFloat(edgeCss(edges[side]))||0));
@@ -66,7 +66,7 @@ export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,or
   const {contentWidth,contentHeight}=settings,calculate=evaluate||createEvaluator(book,sheetId),chartOnly=scope==='charts'||sheet.kind==='chart';
   // Selection printing deliberately ignores saved areas and repeating titles.
   if(scope==='selection'){settings.repeatRows=null;settings.repeatCols=null;}
-  const ranges=chartOnly?[]:settings.areas.length?settings.areas:[printRange(sheet,scope==='selection'?selection:null)],plan=planPrintPages(sheet,ranges,settings);
+  const ranges=chartOnly?[]:settings.areas.length?settings.areas:[printRange(sheet,scope==='selection'?selection:null,calculate.spills?.()||[])],plan=planPrintPages(sheet,ranges,settings);
   let cachedCount=0;
   const pages=plan.pages.map((page,i)=>{const grid=gridHTML(book,sheet,page,{gridLines,evaluate:calculate});cachedCount+=grid.cachedCount||0;return '<section class="print-page" data-page="'+(i+1)+'" style="height:'+(contentHeight-1)+'px">'+grid.html+'</section>';});
   const charts=(includeCharts||chartOnly?sheet.charts||[]:[]).map(chart=>{

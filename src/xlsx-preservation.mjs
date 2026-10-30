@@ -14,7 +14,7 @@ export async function worksheetParts(zip){
 /** Read range validation XML without ExcelJS expanding entire-column rules into
  * millions of JavaScript objects. Keep the original bounds, formulas and flags.
  */
-export async function prepareWorksheetFeatures(zip){
+export async function prepareWorksheetFeatures(zip,{onMetadataCell}={}){
   const features=new Map(),styleRows=new Map(),normalCells=new Map(),loader=zip.clone();loader.files={...zip.files};let stripped=false,hasTables=false;
   // XML boolean 'true' is valid, but ExcelJS 4.4 only recognizes '1' here.
   // Normalize the private loader before it converts any date serials to Date.
@@ -24,7 +24,7 @@ export async function prepareWorksheetFeatures(zip){
     if(!part.type?.endsWith('/worksheet'))continue;
     const text=await zip.file(part.path).async('string');
     const rows=[],normal=new Set(),columns=new Set();let styledRow=false;
-    const split=splitWorksheetXML(text,{onColumn:col=>{if(Number(col.style)>0)for(let c=Math.max(1,Number(col.min));c<=Math.min(16384,Number(col.max));c++)columns.add(c);},onAnyRow:row=>{styledRow=row.s!==undefined;if(styledRow)rows.push(Number(row.r));},wantCell:cell=>{if(cell.s!==undefined&&cell.s!=='0')return false;const name=/^[A-Z]+/i.exec(cell.r||'')?.[0];let c=0;for(const letter of name||'')c=c*26+letter.toUpperCase().charCodeAt(0)-64;return styledRow||columns.has(c);},onCell:cell=>normal.add(cell.r)}),doc=xml(split.metadata),root=doc.documentElement,feature={};
+    const split=splitWorksheetXML(text,{onColumn:col=>{if(Number(col.style)>0)for(let c=Math.max(1,Number(col.min));c<=Math.min(16384,Number(col.max));c++)columns.add(c);},onAnyRow:row=>{styledRow=row.s!==undefined;if(styledRow)rows.push(Number(row.r));},wantCell:cell=>{const name=/^[A-Z]+/i.exec(cell.r||'')?.[0];let c=0;for(const letter of name||'')c=c*26+letter.toUpperCase().charCodeAt(0)-64;if((cell.s===undefined||cell.s==='0')&&(styledRow||columns.has(c)))normal.add(cell.r);return !!onMetadataCell&&(cell.cm!==undefined||cell.vm!==undefined);},onCell:cell=>onMetadataCell?.(part.name,cell)}),doc=xml(split.metadata),root=doc.documentElement,feature={};
     if(rows.length)styleRows.set(part.name,rows);if(normal.size)normalCells.set(part.name,normal);
     const validations=child(root,'dataValidations'),protection=child(root,'sheetProtection'),conditions=children(root,'conditionalFormatting');
     if(validations){feature.dataValidations=stringify(validations);root.removeChild(validations);stripped=true;}

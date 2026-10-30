@@ -1,10 +1,11 @@
+import {calculatedArrayRegions} from './calculated-arrays.mjs';
 import {address} from './engine.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
 /** Excel data-edge navigation depends on occupied cells in the current line,
  * not the last occupied cell elsewhere in the worksheet. Formula-empty strings
  * and declared array followers are occupied; formatting-only cells are not. */
 export function dataEdge(sheet,point,axis,direction,{hiddenRow=()=>false,hiddenCol=()=>false}={}){
- const limit=axis==='r'?1048576:16384,other=axis==='r'?'c':'r',array=storedArrayIndex(sheet),occupied=index=>{const p={...point,[axis]:index};return !!sheet.cells[address(p.r,p.c)]?.raw||!!array.at(p);},visible=index=>!(axis==='r'?hiddenRow(index):hiddenCol(index));
+ const limit=axis==='r'?1048576:16384,other=axis==='r'?'c':'r',array=storedArrayIndex(sheet,{regions:[...storedArrayIndex(sheet).regions,...calculatedArrayRegions(sheet)]}),occupied=index=>{const p={...point,[axis]:index};return !!sheet.cells[address(p.r,p.c)]?.raw||!!array.at(p);},visible=index=>!(axis==='r'?hiddenRow(index):hiddenCol(index));
  let current=point[axis],next=current+direction;while(next>=0&&next<limit&&!visible(next))next+=direction;if(next<0||next>=limit)return {...point};
  const seekGap=occupied(current)&&occupied(next);current=next;
  if(seekGap){for(let i=current+direction;i>=0&&i<limit;i+=direction){if(!visible(i))continue;if(!occupied(i))break;current=i;}}

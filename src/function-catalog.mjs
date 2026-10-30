@@ -292,6 +292,10 @@ SHEET|[value]|"Sheet1"|시트 순번
 SHEETS|[reference]||시트 개수
 TYPE|value|TRUE|값의 자료형 번호`,
   '찾기·참조': `
+FILTER|array, include, [if_empty]|{1;2},{TRUE;FALSE}|조건이 참인 행이나 열을 동적 배열로 반환
+SORT|array, [sort_index], [sort_order], [by_col]|{2;1}|값을 정렬한 동적 배열 반환
+UNIQUE|array, [by_col], [exactly_once]|{1;1;2}|중복을 제거한 행이나 열 반환
+SEQUENCE|rows, [columns], [start], [step]|3|지정한 크기와 간격의 연속 숫자 배열 생성
 ADDRESS|row_num, column_num, [abs_num], [a1], [sheet_text]|3,2,4,TRUE,"Sheet1"|셀 주소 문자열 생성
 CHOOSE|index_num, value1, [value2], …|2,"a","b","c"|순번으로 값 선택
 COLUMN|[reference]|C3|열 번호
@@ -396,7 +400,7 @@ export const XLSX_FUTURE_FUNCTIONS = new Set(FUNCTION_CATALOG.filter(f=>f.name.i
 ACOT ACOTH BASE BITAND BITLSHIFT BITOR BITRSHIFT BITXOR COMBINA CONCAT COT COTH CSC CSCH
 DAYS DECIMAL FORMULATEXT GAMMA GAUSS IFNA IFS IMCOSH IMCOT IMCSC IMCSCH IMSEC IMSECH
 IMSINH IMTAN ISFORMULA ISOWEEKNUM MAXIFS MINIFS NUMBERVALUE PDURATION PERMUTATIONA PHI
-LET RRI SEC SECH SHEET SHEETS SWITCH TEXTAFTER TEXTBEFORE TEXTJOIN UNICHAR UNICODE XLOOKUP XMATCH XOR
+FILTER SORT UNIQUE SEQUENCE ANCHORARRAY SINGLE LET RRI SEC SECH SHEET SHEETS SWITCH TEXTAFTER TEXTBEFORE TEXTJOIN UNICHAR UNICODE XLOOKUP XMATCH XOR
 `.trim().split(/\s+/)));
 export function normalizeFunctionName(name) {
   return String(name).toUpperCase().replace(/^_XLFN\.(?:_XLWS\.)?/, '').replace(/^_XLWS\./,'');

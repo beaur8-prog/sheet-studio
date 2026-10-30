@@ -1,3 +1,5 @@
+import {calculatedArrayRegions} from './calculated-arrays.mjs';
+import {storedArrayIndex} from './stored-arrays.mjs';
 import {tableAt,tableBounds} from './table-schema.mjs';
 import {address,parseAddress,createEvaluator} from './engine.mjs';
 
@@ -12,13 +14,14 @@ function intersects(values,lo,hi){
  * Index each occupied cell once rather than repeatedly scanning the entire sheet.
  */
 export function currentRegion(sheet,point){
-  const r=point.r??point.r1,c=point.c??point.c1,rows=new Map(),cols=new Map();let found=false;
+  const r=point.r??point.r1,c=point.c??point.c1,rows=new Map(),cols=new Map(),arrays=[...storedArrayIndex(sheet).regions,...calculatedArrayRegions(sheet)];let found=arrays.some(a=>contains(a,r,c));
   for(const ref in sheet.cells){const cell=sheet.cells[ref];if(!cell?.raw||cell.raw==="'")continue;const p=parseAddress(ref);if(!p)continue;add(rows,p.r,p.c);add(cols,p.c,p.r);if(p.r===r&&p.c===c)found=true;}
   if(!found)return null;
   for(const values of rows.values())if(Array.isArray(values))values.sort((a,b)=>a-b);
   for(const values of cols.values())if(Array.isArray(values))values.sort((a,b)=>a-b);
   const b={r1:r,r2:r,c1:c,c2:c};let changed=true;
   while(changed){changed=false;
+    for(const a of arrays)if(a.r1<=b.r2+1&&a.r2>=b.r1-1&&a.c1<=b.c2+1&&a.c2>=b.c1-1){const next={r1:Math.min(b.r1,a.r1),r2:Math.max(b.r2,a.r2),c1:Math.min(b.c1,a.c1),c2:Math.max(b.c2,a.c2)};if(!equal(b,next)){Object.assign(b,next);changed=true;}}
     if(b.r1>0&&intersects(rows.get(b.r1-1),b.c1-1,b.c2+1)){b.r1--;changed=true;}
     if(b.r2<1048575&&intersects(rows.get(b.r2+1),b.c1-1,b.c2+1)){b.r2++;changed=true;}
     if(b.c1>0&&intersects(cols.get(b.c1-1),b.r1-1,b.r2+1)){b.c1--;changed=true;}

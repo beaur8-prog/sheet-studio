@@ -10,6 +10,7 @@ import {numberFormatKind as formatKind,effectiveNumberFormat} from './number-for
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
 import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
+import {readArrayMetadata,addArrayMetadata} from './array-xlsx.mjs';
 import {cloneData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 import {cellBorders,borderSides,borderStyles} from './borders.mjs';
@@ -19,7 +20,7 @@ import {addFilterParts,restoreFilterParts} from './filter-xlsx.mjs';
 import JSZip from 'jszip';
 import {createColorResolver} from './spreadsheet-colors.mjs';
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
-import { createEvaluator,transformFormulaReferences,formulaForXlsx,formulaForEditing } from './engine.mjs';
+import { createEvaluator,transformFormulaReferences,formulaForXlsx,formulaForEditing,formulaHasDynamicArrays } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
 import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
 import {applyPivot,sourceData} from './pivot.mjs';
@@ -146,7 +147,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   // JSZip 3.10.2 exposes the central-directory size on its pinned compressed
   // entry. Check before ExcelJS inflates cell XML into its in-memory model.
   for(const file of Object.values(colorZip.files))if(!file.dir){const size=file._data?.uncompressedSize;if(!Number.isSafeInteger(size)||size<0)throw Error('XLSX 압축 정보를 읽을 수 없습니다.');expanded+=size;if(expanded>512*1024*1024)throw Error('압축 해제 후 512 MB 이하인 XLSX 파일을 선택하세요.');}
-  const preserved=await prepareWorksheetFeatures(colorZip);
+  const arrayMetadata=await readArrayMetadata(colorZip),preserved=await prepareWorksheetFeatures(colorZip,{onMetadataCell:arrayMetadata.collect});
   const styleModels=[],styleIndexes=new Map(),styleObjects=new WeakMap();
   const rememberStyle=(cell,baseline)=>{if(!Object.keys(cell.style||{}).length)return undefined;let index=styleObjects.get(cell.style);if(index!==undefined)return index;const key=JSON.stringify(cell.style);index=styleIndexes.get(key);if(index===undefined){index=styleModels.length;styleIndexes.set(key,index);styleModels.push({style:plainCopy(cell.style),baseline:plainCopy(baseline)});}styleObjects.set(cell.style,index);return index;};
   const book = new ExcelJS.Workbook();
@@ -180,6 +181,8 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       const originalStyle=rememberStyle(cell,style);if(originalStyle!==undefined)entry.xlsxStyle=originalStyle;
       if(value?.richText||value?.hyperlink)entry.xlsxValue={raw,value:plainCopy(value)};
       if(cell.formula&&(value?.shareType==='array'||/_xlfn\.|_xlws\./i.test(cell.formula)))entry.xlsxFormula={raw,formula:cell.formula,...(value?.shareType==='array'?{shareType:'array',ref:value.ref}:{})};
+      const metadata=arrayMetadata.cells.get(source.name)?.get(cell.address);
+      if(metadata){entry.xlsxMetadata={raw,...(metadata.cm!==undefined?{cm:metadata.cm}:{}),...(metadata.vm!==undefined?{vm:metadata.vm}:{})};if(metadata.dynamic&&cell.formula)entry.xlsxFormula={raw,formula:cell.formula,shareType:'array',ref:metadata.ref||value?.ref||cell.address,dynamic:true};}
       if (typeof cell.note === 'string') entry.note = cell.note;
       else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
       if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result instanceof Date ? Math.round((cell.result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : cell.result?.error || cell.result; entry.cachedFormula = raw;if(typeof entry.cachedValue==='string'&&/^#/.test(entry.cachedValue))entry.cachedError=!!cell.result?.error; }
@@ -224,24 +227,50 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if(normalIndex!==undefined)result.xlsxDefaultStyle=normalIndex;
   const properties=documentProperties(book);if(Object.keys(properties).length)result.xlsxProperties=properties;
   if(preserved.colors)result.xlsxColors=preserved.colors;
+  if(arrayMetadata.preserved)result.xlsxMetadata=arrayMetadata.preserved;
+  if(arrayMetadata.stale)result.referenceCachesValid=false;
   if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
   await restoreSheetKinds(colorZip,result,newSheet);
   await restoreWorksheetParts(data,result);
   await restoreTables(colorZip,result);
   await restoreFilterParts(data,result);
   await restoreChartParts(data,result);
+  // Excel stores cached spill followers as ordinary value cells. Their raw
+  // values must not obstruct recalculation of the imported dynamic anchor.
+  const importedArrays=new Map();
+  for(const s of result.sheets){
+    const regions=[];for(const ref in s.cells){const cell=s.cells[ref];if(cell.xlsxFormula?.dynamic)regions.push({ref,...tableBounds(cell.xlsxFormula.ref||ref)});}
+    if(regions.length)importedArrays.set(s.id,regions);
+    if(!regions.length)continue;const arrays=storedArrayIndex(s,{regions});
+    for(const ref in s.cells){const cell=s.cells[ref],p=coordinates(ref),array=p&&arrays.at({r:p.row,c:p.col});if(!array||array.ref===ref||cell.raw?.startsWith('='))continue;const scalar=toScalar(cell.raw);cell.cachedValue=scalar&&typeof scalar==='object'?scalar.error||'':scalar??'';cell.cachedError=!!(scalar&&typeof scalar==='object'&&scalar.error);cell.cachedFormula='';cell.raw='';}
+  }
   restoreTableFilterVisibility(result);
   for(const s of result.sheets)if(s.autoFilter&&!s.autoFilter.unsupported?.length)applyFilters(result,s);
   await restorePivotParts(data,result,{refresh:!/\.xlsm$/i.test(filename)});
+  if(!/\.xlsm$/i.test(filename)&&importedArrays.size){
+    const evaluate=createEvaluator(result,result.activeSheetId);
+    for(const s of result.sheets){
+      const imported=importedArrays.get(s.id)||[];
+      if(!imported.length)continue;
+      const current=evaluate.forSheet(s.id),retained=new Set(current.spills({includeBlocked:true}).filter(a=>a.cached).map(a=>a.ref));
+      // A missing cached range or unsupported formula is kept conservatively.
+      for(const a of imported)if(current.result(a.ref).error==='#NAME?')retained.add(a.ref);
+      const index=storedArrayIndex(s,{regions:imported.filter(a=>!retained.has(a.ref))});
+      for(const ref in s.cells){const cell=s.cells[ref],p=coordinates(ref),a=p&&index.at({r:p.row,c:p.col});if(!a||a.ref===ref||cell.raw!=='')continue;
+        delete cell.cachedValue;delete cell.cachedFormula;delete cell.cachedError;
+        if(!Object.keys(cell.style||{}).length&&Object.keys(cell).every(key=>['raw','style'].includes(key)))delete s.cells[ref];
+      }
+    }
+  }
   return /\.xlsm$/i.test(filename) ? attachNativeSource(result, data, filename) : result;
 }
 
 async function evaluator() {
-  const caches = new Map();
+  const caches = new WeakMap();
   const get=(workbook,sheetId)=>{
-    if (!caches.has(sheetId)) caches.set(sheetId, createEvaluator(workbook, sheetId));
-    return caches.get(sheetId);
-  },evaluate=(workbook,sheetId,addr)=>get(workbook,sheetId)(addr);evaluate.result=(workbook,sheetId,addr)=>get(workbook,sheetId).result(addr);return evaluate;
+    if (!caches.has(workbook)) caches.set(workbook,createEvaluator(workbook,sheetId));
+    return caches.get(workbook).forSheet(sheetId);
+  },evaluate=(workbook,sheetId,addr)=>get(workbook,sheetId)(addr);evaluate.result=(workbook,sheetId,addr)=>get(workbook,sheetId).result(addr);evaluate.spills=(workbook,sheetId)=>get(workbook,sheetId).spills({includeBlocked:true});return evaluate;
 }
 function toScalar(raw) {
   if (typeof raw !== 'string') return raw ?? null;
@@ -292,6 +321,10 @@ function cachedResult(evaluate, workbook, sheet, addr, cell,detailed=evaluate?.r
   if (error&&errors.has(error)) return { error };
   return String(value);
 }
+function originalCachedResult(cell){
+  const value=cell?.cachedValue;if(value===undefined||value===null)return undefined;
+  return cell.cachedError&&errors.has(value)?{error:value}:value;
+}
 
 /** Export XLSX (all sheets) or CSV/TSV (the active sheet). */
 export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) {
@@ -301,11 +334,12 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if (!['xlsx', 'csv', 'tsv'].includes(kind)) throw new Error('지원되지 않는 저장 형식입니다.');
   const evaluate = typeof options.evaluate === 'function' ? options.evaluate : await evaluator(),styleCache=new Map(),inheritanceCache=new Map();
   const detailed=typeof options.evaluateDetailed==='function'?options.evaluateDetailed:evaluate.result;
+  const spillSessions=new WeakMap(),getSpills=options.spills||evaluate.spills||((snapshot,id)=>{if(!spillSessions.has(snapshot))spillSessions.set(snapshot,createEvaluator(snapshot,id));return spillSessions.get(snapshot).forSheet(id).spills({includeBlocked:true});});
   if (kind === 'csv' || kind === 'tsv') {
     const sheet = workbook.sheets.find(item => item.id === workbook.activeSheetId) || workbook.sheets[0];
     if(sheet.kind==='chart')throw Error('차트 전용 시트는 XLSX로 저장하세요.');
     let maxRow = -1, maxCol = -1;
-    const arrays=storedArrayIndex(sheet);for(const array of arrays.regions){maxRow=Math.max(maxRow,array.r2);maxCol=Math.max(maxCol,array.c2);}
+    const arrays=storedArrayIndex(sheet,{regions:[...storedArrayIndex(sheet).regions,...getSpills(workbook,sheet.id).filter(a=>!a.blocked)]});for(const array of arrays.regions){maxRow=Math.max(maxRow,array.r2);maxCol=Math.max(maxCol,array.c2);}
     for (const [addr, cell] of Object.entries(sheet.cells)) {
       if (cell.raw === '' || cell.raw === undefined) continue;
       const coordinate = coordinates(addr);
@@ -333,6 +367,18 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   }
   // Export a consistent snapshot: cached result cells and native pivot cache use the same source.
   if(workbook.sheets.some(s=>s.pivot)){workbook=cloneData(workbook);for(const s of workbook.sheets)if(s.pivot){try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
+  // Check the final record count before ExcelJS allocates a large output
+  // model. Spill results remain sparse in the editor but are real XLSX cells.
+  const spillsBySheet=new Map(workbook.sheets.map(sheet=>[sheet.id,getSpills(workbook,sheet.id)]));
+  let projected=workbook.sheets.reduce((n,s)=>n+Object.keys(s.cells).length,0);
+  for(const sheet of workbook.sheets){
+    const regions=[...storedArrayIndex(sheet).regions,...spillsBySheet.get(sheet.id).filter(a=>!a.blocked&&!a.cached)];
+    if(!regions.length)continue;
+    const index=storedArrayIndex(sheet,{regions});
+    for(const a of regions)projected+=(a.r2-a.r1+1)*(a.c2-a.c1+1);
+    for(const ref in sheet.cells){const p=coordinates(ref);if(p&&index.at({r:p.row,c:p.col}))projected--;}
+    if(projected>MAX_CELLS)throw Error('배열 결과를 포함한 XLSX의 셀 수가 1,000,000개를 초과합니다.');
+  }
   const book = new ExcelJS.Workbook();
   book.properties.date1904=workbook.date1904===true;
   const exportResolve=createColorResolver(workbook.chartTheme||'',workbook.xlsxColors?'<styleSheet>'+workbook.xlsxColors+'</styleSheet>':undefined);
@@ -344,8 +390,11 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   const visibleSheet=sheet=>!sheet.state||sheet.state==='visible',active=workbook.sheets.find(sheet=>sheet.id===workbook.activeSheetId&&visibleSheet(sheet))||workbook.sheets.find(visibleSheet);
   book.views = [{ activeTab: Math.max(0, workbook.sheets.indexOf(active)), visibility: 'visible' }];
   const names = new Set(), exportNames = new Map();
-  let exportedCount=workbook.sheets.reduce((n,s)=>n+Object.keys(s.cells).length,0);
+  let exportedCount=workbook.sheets.reduce((n,s)=>n+Object.keys(s.cells).length,0);const dynamicArrays=new Map();
   for (const sheet of workbook.sheets) {
+    const spills=spillsBySheet.get(sheet.id),dynamicByRef=new Map(spills.map(a=>[a.ref,a]));
+    for(const ref in sheet.cells)if(sheet.cells[ref].raw?.startsWith('=')&&(sheet.cells[ref].xlsxFormula?.dynamic||formulaHasDynamicArrays(sheet.cells[ref].raw))&&!dynamicByRef.has(ref)){const p=coordinates(ref);dynamicByRef.set(ref,{ref,r1:p.row,r2:p.row,c1:p.col,c2:p.col,dynamic:true,scalar:true});}
+    dynamicArrays.set(sheet.id,[...dynamicByRef.values()]);
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
     target.properties.defaultColWidth=((sheet.defaultColumnWidth||90)-5)/digitWidth;
     target.properties.defaultRowHeight=(sheet.defaultRowHeight||25)*3/4;
@@ -365,11 +414,12 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       const targetCell = target.getCell(offset?address(pos.col,pos.row+offset):addr);
       const contextTable=tableRanges.find(b=>pos.row>=b.r1&&pos.row<=b.r2&&pos.col>=b.c1&&pos.col<=b.c2)?.table;
       if (typeof cell.raw === 'string' && cell.raw.startsWith('=')) {
-        const result = cachedResult(evaluate, workbook, sheet, addr, cell,detailed);
+        const result = dynamicByRef.get(addr)?.cached?originalCachedResult(cell):cachedResult(evaluate, workbook, sheet, addr, cell,detailed);
         let formula=cell.raw;
         for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
         const original=cell.xlsxFormula,keepOriginal=original?.raw===formula;
-        targetCell.value = { formula: formulaForXlsx(keepOriginal?'='+original.formula:formula,original?.formula,contextTable).slice(1),...(original?.shareType==='array'?{shareType:'array',ref:original.ref}:{}), ...(result === undefined ? {} : { result }) };
+        const dynamic=dynamicByRef.get(addr),arrayRef=dynamic?(dynamic.blocked?addr:address(dynamic.c1,dynamic.r1)+':'+address(dynamic.c2,dynamic.r2)):original?.shareType==='array'?original.ref:null;
+        targetCell.value = { formula: formulaForXlsx(keepOriginal?'='+original.formula:formula,original?.formula,contextTable).slice(1),...(arrayRef?{shareType:'array',ref:arrayRef}:{}), ...(result === undefined ? {} : { result }) };
       } else {
         const original=cell.xlsxValue;targetCell.value=original?.raw===cell.raw?plainCopy(original.value):toScalar(cell.raw);
         if(original?.value?.hyperlink&&typeof targetCell.value==='string'&&targetCell.value)targetCell.value={...plainCopy(original.value),text:targetCell.value};
@@ -392,11 +442,13 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if(cell.xlsxValue?.value?.richText&&cell.xlsxValue.raw===cell.raw){const original=workbook.xlsxStyles?.[cell.xlsxStyle],delta=fontChanges(cell.style||{},original?.baseline||{},targetCell.font);if(Object.keys(delta).length)targetCell.value={richText:targetCell.value.richText.map(run=>({...run,font:{...run.font,...delta}}))};}
       if (typeof cell.note === 'string') targetCell.note = cell.note;
     }
-    for(const array of storedArrayIndex(sheet).regions){const anchor=sheet.cells[array.ref];
+    for(const array of [...storedArrayIndex(sheet).regions,...spills.filter(a=>!a.blocked)]){const anchor=sheet.cells[array.ref];
       if((array.r2-array.r1+1)*(array.c2-array.c1+1)>MAX_CELLS)throw Error('배열 수식 결과가 1,000,000셀 계산 한도를 초과합니다.');
       for(let r=array.r1;r<=array.r2;r++)for(let c=array.c1;c<=array.c2;c++){
-        const key=address(c,r);if(key===array.ref)continue;if(!sheet.cells[key]&&++exportedCount>MAX_CELLS)throw Error('배열 결과를 포함한 XLSX의 셀 수가 1,000,000개를 초과합니다.');
-        const result=detailed?.(workbook,sheet.id,key),value=result?result.value:evaluate(workbook,sheet.id,key),error=result?result.error:errors.has(value)?value:null;if(error==='#NAME?'&&anchor.xlsxFormula.raw===anchor.raw&&workbook.referenceCachesValid!==false)continue;
+        const key=address(c,r);if(key===array.ref)continue;
+        if(array.cached&&sheet.cells[key]?.cachedValue===undefined)continue;
+        if(!sheet.cells[key]&&++exportedCount>MAX_CELLS)throw Error('배열 결과를 포함한 XLSX의 셀 수가 1,000,000개를 초과합니다.');
+        const result=array.cached?{value:sheet.cells[key].cachedValue,error:sheet.cells[key].cachedError?sheet.cells[key].cachedValue:null}:detailed?.(workbook,sheet.id,key),value=result?result.value:evaluate(workbook,sheet.id,key),error=result?result.error:errors.has(value)?value:null;if(error==='#NAME?'&&anchor.xlsxFormula?.raw===anchor.raw)continue;
         const offset=pageFilters.length?pageFilters.length+1:0,cell=target.getCell(offset?address(c,r+offset):key);cell.value=error&&errors.has(error)?{error}:value===undefined||value===null?'':value;
       }
     }
@@ -418,5 +470,5 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if(workbook.xlsxDefaultStyle!==undefined){normalProbe='_SheetStudio_Normal';for(let n=2;book.getWorksheet(normalProbe);n++)normalProbe='_SheetStudio_Normal_'+n;const probe=book.addWorksheet(normalProbe);probe.getCell('A1').value=0;probe.getCell('A1').style=plainCopy(workbook.xlsxStyles[workbook.xlsxDefaultStyle].style);}
   const baseBytes=await applyDefaultStyleProbe(new Uint8Array(await book.xlsx.writeBuffer()),normalProbe),pivotBytes = await addPivotParts(baseBytes,workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
-  return { data:await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames), mime: XLSX_MIME, extension: 'xlsx' };
+  return { data:await addArrayMetadata(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook,exportNames,dynamicArrays), mime: XLSX_MIME, extension: 'xlsx' };
 }

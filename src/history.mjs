@@ -118,6 +118,11 @@ export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_
     return size;
   }
   function commit() {
+    // Imported unsupported formulas have no reliable dependency graph. A raw
+    // value change invalidates their display caches, and the flag belongs to
+    // the same undo entry as that edit. Loading a replacement workbook adopts
+    // its own caches instead of immediately invalidating them.
+    if(transaction&&!transaction.ops.some(op=>op.target===holder&&op.key==='value')&&transaction.ops.some(op=>op.context?.cells&&(op.key==='raw'&&!Object.is(op.before,op.after)||op.target===op.context.cells&&(op.before?.raw||'')!==(op.after?.raw||''))))wrap(holder.value).referenceCachesValid=false;
     try {
       if (totalCells() > maxCells) throw Error('통합 문서에는 최대 1,000,000개의 셀을 기록할 수 있습니다. 변경을 취소했습니다.');
       if(holder.value.sheets.reduce((n,s)=>n+textLength(s.cells),0)>maxText)throw Error('문서의 셀 텍스트 총량이 제한을 초과했습니다. 변경을 취소했습니다.');

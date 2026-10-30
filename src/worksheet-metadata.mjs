@@ -23,7 +23,7 @@ export function worksheetMetadataXML(text, {wantCell = () => false, onCell = () 
       if (['1','true'].includes(row.hidden)) { onRow(row); if (keepHiddenRows) output.push(tag(node) + `</${node.name}>`); }
     }
     if (node.local === 'c') { const attributes = attrs(node); if (wantCell(attributes)) cell = {...attributes, value: '', formula: false}; }
-    if (cell && ['v','f'].includes(node.local)) { field = node.local; if (field === 'f') cell.formula = true; }
+    if (cell && ['v','f'].includes(node.local)) { field = node.local; if (field === 'f') {cell.formula = true;cell.formulaAttributes=attrs(node);} }
   });
   parser.on('closetag', node => {
     if (inData && depth === 2 && node.local === 'sheetData') { inData = false; output.push(`</${node.name}>`); onDataRange({start: dataStart, end: parser.position}); }

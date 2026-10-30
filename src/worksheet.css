@@ -15,3 +15,5 @@
 .chart-sheet .chart-delete{display:none}
 .xlsx-image{position:absolute;pointer-events:none;user-select:none;object-fit:fill;z-index:3}
 #drawing-status{color:#c5af6c;font-size:10px}.light #drawing-status{color:#806622}
+.array-outline{position:absolute;border:1px solid #6175ca;pointer-events:none;z-index:5;opacity:.75}
+#array-outlines{position:absolute;inset:0;overflow:hidden;pointer-events:none}

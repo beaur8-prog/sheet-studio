@@ -36,11 +36,11 @@ for(const category of new Set(FUNCTION_CATALOG.map(f=>f.category))){
 }
 
 test('catalogue has unique implemented names, valid signatures and complete coverage',()=>{
-  assert.equal(FUNCTION_CATALOG.length,380);assert.equal(FUNCTION_MAP.size,380);
+  assert.equal(FUNCTION_CATALOG.length,384);assert.equal(FUNCTION_MAP.size,384);
   const covered=new Set(fixture.cases.map(c=>c.name));
   for(const fn of FUNCTION_CATALOG){
     assert.ok(fn.description&&fn.syntax&&fn.example.startsWith('='));assert.ok(fn.min<=fn.max);
-    assert.ok(covered.has(fn.name)||['NOW','TODAY','RAND','RANDBETWEEN','XLOOKUP','XMATCH','TEXTBEFORE','TEXTAFTER','LET'].includes(fn.name),fn.name);
+    assert.ok(covered.has(fn.name)||['NOW','TODAY','RAND','RANDBETWEEN','XLOOKUP','XMATCH','TEXTBEFORE','TEXTAFTER','LET','FILTER','SORT','UNIQUE','SEQUENCE'].includes(fn.name),fn.name);
     if(fn.min)assert.equal(calc(`=${fn.name}()`),'#VALUE!',fn.name);
   }
   assert.ok(searchFunctions('평균').some(f=>f.name==='AVERAGEIFS'));

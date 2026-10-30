@@ -74,3 +74,10 @@ test('the text budget is atomic and counts remain exact through coalesced replac
   assert.equal(history.stats.textChars,3);history.undo();assert.equal(history.stats.textChars,0);history.undo(true);assert.equal(history.stats.textChars,3);
   history.begin();sheet.cells.B1={raw:'dd'};assert.throws(()=>history.commit(),/텍스트 총량/);assert.equal(history.stats.textChars,3);assert.equal(sheet.cells.B1,undefined);
 });
+
+test('unsupported imported caches become stale with raw edits and recover with undo, while formatting and imports preserve their status',()=>{
+ const initial=createWorkbook();initial.sheets[0].cells={A1:{raw:'=FutureFunction()',cachedValue:42,cachedFormula:'=FutureFunction()'},B1:{raw:'1'}};
+ const h=createHistory(initial);h.begin();h.book.sheets[0].cells.B1.raw='2';h.commit();assert.equal(h.raw.referenceCachesValid,false);h.undo();assert.equal(h.raw.referenceCachesValid,undefined);h.undo(true);assert.equal(h.raw.referenceCachesValid,false);
+ h.undo();h.begin();h.book.sheets[0].cells.B1.style={bold:true};h.commit();assert.equal(h.raw.referenceCachesValid,undefined);
+ h.begin();const fresh=createWorkbook();fresh.sheets[0].cells.A1={raw:'new'};h.replace(fresh);h.commit();assert.equal(h.raw.referenceCachesValid,undefined);
+});

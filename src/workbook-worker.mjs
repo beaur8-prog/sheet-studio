@@ -15,11 +15,11 @@ import {readSpreadsheet, writeSpreadsheet} from './io.mjs';
 import {openRecoveryStore, workbookMetadata} from './recovery-store.mjs';
 import {applyFilters, filterOptions, filterPredicates, valueKey, sortFilterRange, sortRange, inferFilterRange} from './filters.mjs';
 
-let book = createWorkbook(), revision = 0, store, prepared = null, evaluators = new Map(), conditionals = new Map();
+let book = createWorkbook(), revision = 0, store, prepared = null, evaluators = new Map(), conditionals = new Map(), arraysSent=false;
 let dirty = new Map(), replacements = new Set(), needsSave = false, metadataDirty = false;
-function changed() { resetConstraintIndexes();evaluators = new Map(); conditionals = new Map(); needsSave = true; }
+function changed() { resetConstraintIndexes();evaluators = new Map(); conditionals = new Map(); arraysSent=false; needsSave = true; }
 const evaluator = id => {
-  if (!evaluators.has(id)) evaluators.set(id, createEvaluator(book, id));
+  if (!evaluators.has(id)) evaluators.set(id, evaluators.size?evaluators.values().next().value.forSheet(id):createEvaluator(book,id));
   return evaluators.get(id);
 };
 const cellDescription = cells => {
@@ -87,12 +87,12 @@ async function handle(type, data) {
     return {...result, revision};
   }
   if (data.revision !== revision) throw Error('문서가 변경되었습니다. 작업을 다시 실행하세요.');
-  if (type === 'recalculate') { evaluators=new Map();conditionals=new Map(); }
-  if (type === 'calculate' || type === 'recalculate') return {revision, values: data.refs.map(([id, ref]) => {
+  if (type === 'recalculate') { evaluators=new Map();conditionals=new Map();arraysSent=false; }
+  if (type === 'calculate' || type === 'recalculate') {const values=data.refs.map(([id, ref]) => {
     const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),result=evaluate.result(ref),value=result.value,position=parseAddress(ref);
     if(!conditionals.has(id))conditionals.set(id,sheet?createConditionalEvaluator(book,sheet,evaluate):()=>({}));
-    return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{},result.error];
-  })};
+    return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{},result.error,result.cached?{cached:true,stale:result.stale,cachedValue:result.cachedValue,cachedError:result.cachedError}:null];
+  });const arrays=!data.includeArrays||arraysSent?undefined:book.sheets.map(sheet=>[sheet.id,evaluator(sheet.id).spills({includeBlocked:true})]);if(arrays)arraysSent=true;return {revision,values,arrays};}
   if(type==='print'){
     const snapshot={...book},shared=(id,ref)=>evaluator(id)(ref);shared.result=(id,ref)=>evaluator(id).result(ref);shared.isComputed=(id,ref)=>evaluator(id).isComputed(ref);setExternalEvaluator(snapshot,shared);
     return buildSheetPrintDocument(snapshot,data.sheetId,{...data.options,evaluate:evaluator(data.sheetId)});
@@ -104,13 +104,14 @@ async function handle(type, data) {
       // Pivot export evaluates its refreshed snapshot rather than mixing those
       // cells with caches from the unrefreshed document.
       if(!snapshots.has(snapshot))snapshots.set(snapshot,new Map());
-      const cache=snapshots.get(snapshot);if(!cache.has(id))cache.set(id,createEvaluator(snapshot,id));
+      const cache=snapshots.get(snapshot);if(!cache.has(id))cache.set(id,cache.size?cache.values().next().value.forSheet(id):createEvaluator(snapshot,id));
       return cache.get(id);
     };
-    return writeSpreadsheet(book,data.format,{...data.options,evaluate:(snapshot,id,ref)=>get(snapshot,id)(ref),evaluateDetailed:(snapshot,id,ref)=>get(snapshot,id).result(ref)});
+    return writeSpreadsheet(book,data.format,{...data.options,evaluate:(snapshot,id,ref)=>get(snapshot,id)(ref),evaluateDetailed:(snapshot,id,ref)=>get(snapshot,id).result(ref),spills:(snapshot,id)=>get(snapshot,id).spills({includeBlocked:true})});
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
+  evaluator(sheet.id).spills();
   if(type==='structure'){
     const next=structuralWorkbookPlan(book,sheet.id,data.options),token=crypto.randomUUID();prepared={token,book:next};return {book:next,description:describe(next),token};
   }

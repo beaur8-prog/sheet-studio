@@ -1,5 +1,6 @@
 import {unwrap} from './clone.mjs';
-import {address,parseAddress,evaluateCell,evaluateFormula,evaluateFormulaArray,shiftFormula} from './engine.mjs';
+import {address,parseAddress,evaluateCell,evaluateFormula,evaluateFormulaArray,shiftFormula,formulaHasDynamicArrays} from './engine.mjs';
+import {calculatedArrayRegions} from './calculated-arrays.mjs';
 import {xml,all,attr} from './chart-xml.mjs';
 
 const cache=new Map(),inside=(b,p)=>p.r>=b.r1&&p.r<=b.r2&&p.c>=b.c1&&p.c<=b.c2;
@@ -20,7 +21,7 @@ export const cellFormulaHidden=(book,sheet,ref)=>sheetIsProtected(sheet)&&cellPr
 let arrayIndexes=new WeakMap();
 export function resetConstraintIndexes(){arrayIndexes=new WeakMap();}
 export function refreshConstraintIndexes(book,dirty){for(const sheet of book.sheets){const cells=unwrap(sheet.cells),index=arrayIndexes.get(cells),refs=dirty.get(cells);if(!index||!refs)continue;for(const ref of refs){if(cells[ref]?.xlsxFormula?.shareType==='array')index.add(ref);else index.delete(ref);}}}
-export function arrayRegions(sheet){const cells=unwrap(sheet.cells);let index=arrayIndexes.get(cells);if(!index){index=new Set();for(const ref in cells)if(cells[ref]?.xlsxFormula?.shareType==='array')index.add(ref);arrayIndexes.set(cells,index);}const arrays=[];for(const ref of index){const cell=cells[ref];if(cell?.raw?.startsWith('=')&&cell.xlsxFormula?.shareType==='array'){const b=range(cell.xlsxFormula.ref||ref);if(b)arrays.push({ref,...b});}}return arrays;}
+export function arrayRegions(sheet){const cells=unwrap(sheet.cells);let index=arrayIndexes.get(cells);if(!index){index=new Set();for(const ref in cells)if(cells[ref]?.xlsxFormula?.shareType==='array')index.add(ref);arrayIndexes.set(cells,index);}const arrays=[...calculatedArrayRegions(sheet)];for(const ref of index){const cell=cells[ref];if(cell?.raw?.startsWith('=')&&cell.xlsxFormula?.shareType==='array'&&!cell.xlsxFormula.dynamic){const b=range(cell.xlsxFormula.ref||ref);if(b)arrays.push({ref,...b});}}return arrays;}
 
 export function cellEditError(book,sheet,ref){
   if(sheet.kind==='chart')return '차트 전용 시트에서는 셀을 편집할 수 없습니다.';
@@ -36,9 +37,9 @@ export function assertCellUpdates(book,sheet,updates,{editAnchor=false,formatOnl
     let count=0;for(const key of keys)if(inside(a,parseAddress(key)))count++;
     const anchor=updates.find(u=>u.key===a.ref),formula=anchor?.cell?.raw;
     if(count&&book.nativeSource)throw Error('XLSM의 배열 수식은 Excel에서 편집하거나 XLSX 사본을 사용하세요.');
-    if(count&&count!==(a.r2-a.r1+1)*(a.c2-a.c1+1)&&!(editAnchor&&count===1&&keys.has(a.ref)&&(formula===undefined||formula.startsWith('='))))throw Error('배열 수식 결과의 일부를 변경할 수 없습니다. 배열 전체를 선택하세요.');
+    if(count&&count!==(a.r2-a.r1+1)*(a.c2-a.c1+1)&&!(a.dynamic&&keys.has(a.ref))&&!(editAnchor&&count===1&&keys.has(a.ref)&&(formula===undefined||formula.startsWith('='))))throw Error('배열 수식 결과의 일부를 변경할 수 없습니다. 배열 전체를 선택하거나 첫 셀의 수식을 편집하세요.');
   }
-  if(book.nativeSource&&updates.some(u=>u.cell?.xlsxFormula?.shareType==='array'))throw Error('XLSM에 배열 수식을 붙여넣는 작업은 Excel에서 진행하세요.');
+  if(book.nativeSource&&updates.some(u=>u.cell?.xlsxFormula?.shareType==='array'||formulaHasDynamicArrays(u.cell?.raw)))throw Error('XLSM의 동적·배열 수식 편집은 Excel에서 진행하거나 XLSX 사본을 사용하세요.');
 }
 export function assertStructureAllowed(sheet,axis,index,count,delta){
   const limit=axis==='r'?1048576:16384;

@@ -35,7 +35,7 @@ jobs:
         run: |
           specs="user-journeys autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit file-dialogs file-associations recovery capacity"
           if [ "${{ inputs.scope }}" = excel-parity ]; then
-            specs="chart-parity recalculation data-region xlsx-preservation cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays result-types number-formats style-defaults worksheet-extras sheet-print print-layout virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text"
+            specs="chart-parity recalculation data-region xlsx-preservation cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays result-types number-formats style-defaults worksheet-extras sheet-print print-layout virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text"
           elif [ "${{ inputs.scope }}" = print-layout ]; then
             specs="sheet-print print-layout worksheet-extras"
           elif [ "${{ inputs.scope }}" != all ]; then
