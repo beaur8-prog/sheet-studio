@@ -22,8 +22,9 @@ export function worksheetMetadataXML(text, {wantCell = () => false, onCell = () 
       onAnyRow(row);
       if (['1','true'].includes(row.hidden)) { onRow(row); if (keepHiddenRows) output.push(tag(node) + `</${node.name}>`); }
     }
-    if (node.local === 'c') { const attributes = attrs(node); if (wantCell(attributes)) cell = {...attributes, value: '', formula: false}; }
-    if (cell && ['v','f'].includes(node.local)) { field = node.local; if (field === 'f') {cell.formula = true;cell.formulaAttributes=attrs(node);} }
+    if (node.local === 'c') { const attributes = attrs(node); if (wantCell(attributes)) cell = {...attributes, value: '', formula: false,...(attributes.t==='inlineStr'?{inlineEmpty:true}:{})}; }
+    if (cell && ['v','f'].includes(node.local)) { field = node.local; if (field === 'f') {cell.formula = true;cell.formulaAttributes=attrs(node);} else if(cell.t==='str')cell.stringValuePresent=true; }
+    if(cell?.t==='inlineStr'&&node.local==='t')field='t';
   });
   parser.on('closetag', node => {
     if (inData && depth === 2 && node.local === 'sheetData') { inData = false; output.push(`</${node.name}>`); onDataRange({start: dataStart, end: parser.position}); }
@@ -32,8 +33,9 @@ export function worksheetMetadataXML(text, {wantCell = () => false, onCell = () 
     else if (node.local === field) field = '';
     depth--;
   });
-  parser.on('text', value => { if (!inData) output.push(depth ? escape(value) : value); else if (cell && field === 'v') cell.value += value; });
-  parser.on('cdata', value => { if (!inData) output.push(escape(value)); else if (cell && field === 'v') cell.value += value; });
+  const cellText=value=>{if(cell&&field==='v')cell.value+=value;else if(cell&&field==='t'&&value.length)cell.inlineEmpty=false;};
+  parser.on('text', value => { if (!inData) output.push(depth ? escape(value) : value); else cellText(value); });
+  parser.on('cdata', value => { if (!inData) output.push(escape(value)); else cellText(value); });
   parser.write(text).close(); return output.join('');
 }
 

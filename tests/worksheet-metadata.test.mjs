@@ -20,3 +20,9 @@ test('selected date cells stream their values without materializing unrelated ce
   assert.deepEqual(cells.map(cell=>[cell.r,cell.value,cell.formula]),[['A1','2026-10-20',false],['B1','42',true]]);
   assert.equal(all(xml(result),'c').length,0);
 });
+
+test('streamed text metadata distinguishes empty inline strings, whitespace, CDATA and absent formula values',()=>{
+ const cells=[];
+ worksheetMetadataXML('<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t/></is></c><c r="B1" t="inlineStr"><is><r><t> </t></r></is></c><c r="C1" t="inlineStr"><is><t><![CDATA[x]]></t></is></c><c r="D1" t="str"><f>FUTURE()</f><v/></c><c r="E1" t="str"><f>FUTURE()</f></c></row></sheetData></worksheet>',{wantCell:()=>true,onCell:cell=>cells.push(cell)});
+ assert.deepEqual(cells.map(c=>[c.r,c.inlineEmpty,c.stringValuePresent,c.formula]),[['A1',true,undefined,false],['B1',false,undefined,false],['C1',false,undefined,false],['D1',undefined,true,true],['E1',undefined,undefined,true]]);
+});

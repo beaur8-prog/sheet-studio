@@ -58,8 +58,9 @@ function bytes(value) {
 function fileName(value) { return String(value || '통합 문서').replace(/\.(xlsx|xlsm|csv|tsv|sheet\.json|json)$/i, ''); }
 function stringRaw(value) {
   const text = String(value);
-  // Preserve XLSX text types, including numeric-looking identifiers and '=…'.
-  return /^[=']/.test(text) || numeric.test(text.trim()) || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(text.trim()) ||
+  // An explicitly stored empty string is text, unlike a physically blank cell.
+  // Collapsing it to raw:'' changes ISBLANK/ISTEXT and array results on reopen.
+  return text === '' || /^[=']/.test(text) || numeric.test(text.trim()) || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(text.trim()) ||
     /^(TRUE|FALSE)$/i.test(text) || isErrorText(text) ? "'" + text : text;
 }
 function argb(color) {
@@ -177,6 +178,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       else if (value?.richText) raw = stringRaw(value.richText.map(run => run.text).join(''));
       else if (value?.text !== undefined) raw = stringRaw(value.text);
       else if (value?.error) raw = value.error;
+      else if(preserved.emptyTextCells.get(source.name)?.has(cell.address))raw="'";
       const entry = { raw, style };
       if(preserved.normalCells.get(source.name)?.has(cell.address))entry.xlsxNormal=true;
       const originalStyle=rememberStyle(cell,style);if(originalStyle!==undefined)entry.xlsxStyle=originalStyle;
@@ -187,7 +189,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       if(metadata){entry.xlsxMetadata={raw,...(metadata.cm!==undefined?{cm:metadata.cm}:{}),...(metadata.vm!==undefined?{vm:metadata.vm}:{})};if(metadata.dynamic&&cell.formula)entry.xlsxFormula={raw,formula:cell.formula,shareType:'array',ref:metadata.ref||value?.ref||cell.address,dynamic:true};}
       if (typeof cell.note === 'string') entry.note = cell.note;
       else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
-      if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result instanceof Date ? Math.round((cell.result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : cell.result?.error || cell.result; entry.cachedFormula = raw;if(typeof entry.cachedValue==='string'&&/^#/.test(entry.cachedValue))entry.cachedError=!!cell.result?.error; }
+      if (cell.formula && (cell.result !== undefined||preserved.emptyFormulaStrings.get(source.name)?.has(cell.address))) { const result=cell.result??'';entry.cachedValue = result instanceof Date ? Math.round((result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : result?.error || result; entry.cachedFormula = raw;if(typeof entry.cachedValue==='string'&&/^#/.test(entry.cachedValue))entry.cachedError=!!result?.error; }
       if(entry.xlsxMetadata?.vm!==undefined&&cell.formula&&entry.cachedValue!==undefined)entry.xlsxMetadata.result={value:entry.cachedValue,error:entry.cachedError===true};
       sheet.cells[cell.address] = entry;
     };
@@ -203,6 +205,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       if (!sheet.cells[model.address] && Object.keys(model.style || {}).length) importCell(source.getCell(model.address));
     }
     for(const ref of preserved.normalCells.get(source.name)||[])if(!sheet.cells[ref])importCell(source.getCell(ref));
+    for(const ref of preserved.emptyTextCells.get(source.name)||[])if(!sheet.cells[ref])importCell(source.getCell(ref));
     // Rows with only a custom height can be omitted by eachRow(includeEmpty:false).
     for (const row of sparseRows) {
       const r=row.number-1;

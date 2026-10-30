@@ -5,6 +5,7 @@ import {xml,stringify,children,child,all,attr,readRelationships,resolvePart,relP
 import {splitWorksheetXML} from './worksheet-metadata.mjs';
 import {captureExtraSheetFeatures,writeExtraSheetRelationships,extraSheetNode,EXTRA_SHEET_TAGS} from './worksheet-extra.mjs';
 import {contentTypeWriter} from './xlsx-part-store.mjs';
+import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 
 export const plainCopy=value=>JSON.parse(JSON.stringify(value));
 export async function worksheetParts(zip){
@@ -15,7 +16,7 @@ export async function worksheetParts(zip){
  * millions of JavaScript objects. Keep the original bounds, formulas and flags.
  */
 export async function prepareWorksheetFeatures(zip,{onMetadataCell}={}){
-  const features=new Map(),styleRows=new Map(),normalCells=new Map(),loader=zip.clone();loader.files={...zip.files};let stripped=false,hasTables=false;
+  const features=new Map(),styleRows=new Map(),normalCells=new Map(),emptyTextCells=new Map(),emptyFormulaStrings=new Map(),loader=zip.clone();loader.files={...zip.files};let stripped=false,hasTables=false,emptyTextCount=0;
   // XML boolean 'true' is valid, but ExcelJS 4.4 only recognizes '1' here.
   // Normalize the private loader before it converts any date serials to Date.
   const workbook=xml(await zip.file('xl/workbook.xml').async('string')),properties=child(workbook.documentElement,'workbookPr');
@@ -23,9 +24,13 @@ export async function prepareWorksheetFeatures(zip,{onMetadataCell}={}){
   for(const part of await worksheetParts(zip)){
     if(!part.type?.endsWith('/worksheet'))continue;
     const text=await zip.file(part.path).async('string');
-    const rows=[],normal=new Set(),columns=new Set();let styledRow=false;
-    const split=splitWorksheetXML(text,{onColumn:col=>{if(Number(col.style)>0)for(let c=Math.max(1,Number(col.min));c<=Math.min(16384,Number(col.max));c++)columns.add(c);},onAnyRow:row=>{styledRow=row.s!==undefined;if(styledRow)rows.push(Number(row.r));},wantCell:cell=>{const name=/^[A-Z]+/i.exec(cell.r||'')?.[0];let c=0;for(const letter of name||'')c=c*26+letter.toUpperCase().charCodeAt(0)-64;if((cell.s===undefined||cell.s==='0')&&(styledRow||columns.has(c)))normal.add(cell.r);return !!onMetadataCell&&(cell.cm!==undefined||cell.vm!==undefined);},onCell:cell=>onMetadataCell?.(part.name,cell)}),doc=xml(split.metadata),root=doc.documentElement,feature={};
-    if(rows.length)styleRows.set(part.name,rows);if(normal.size)normalCells.set(part.name,normal);
+    const rows=[],normal=new Set(),emptyText=new Set(),emptyCaches=new Set(),columns=new Set();let styledRow=false;
+    const split=splitWorksheetXML(text,{onColumn:col=>{if(Number(col.style)>0)for(let c=Math.max(1,Number(col.min));c<=Math.min(16384,Number(col.max));c++)columns.add(c);},onAnyRow:row=>{styledRow=row.s!==undefined;if(styledRow)rows.push(Number(row.r));},wantCell:cell=>{const name=/^[A-Z]+/i.exec(cell.r||'')?.[0];let c=0;for(const letter of name||'')c=c*26+letter.toUpperCase().charCodeAt(0)-64;if((cell.s===undefined||cell.s==='0')&&(styledRow||columns.has(c)))normal.add(cell.r);return cell.t==='inlineStr'||cell.t==='str'||!!onMetadataCell&&(cell.cm!==undefined||cell.vm!==undefined);},onCell:cell=>{
+      if(!cell.formula&&(cell.inlineEmpty||cell.t==='str'&&cell.value==='')){emptyText.add(cell.r);if(++emptyTextCount>MAX_DOCUMENT_CELLS)throw Error('1,000,000개 이하의 셀이 있는 파일을 선택하세요.');}
+      if(cell.formula&&cell.t==='str'&&cell.stringValuePresent&&cell.value===''){emptyCaches.add(cell.r);if(++emptyTextCount>MAX_DOCUMENT_CELLS)throw Error('1,000,000개 이하의 셀이 있는 파일을 선택하세요.');}
+      onMetadataCell?.(part.name,cell);
+    }}),doc=xml(split.metadata),root=doc.documentElement,feature={};
+    if(rows.length)styleRows.set(part.name,rows);if(normal.size)normalCells.set(part.name,normal);if(emptyText.size)emptyTextCells.set(part.name,emptyText);if(emptyCaches.size)emptyFormulaStrings.set(part.name,emptyCaches);
     const validations=child(root,'dataValidations'),protection=child(root,'sheetProtection'),conditions=children(root,'conditionalFormatting');
     if(validations){feature.dataValidations=stringify(validations);root.removeChild(validations);stripped=true;}
     const tableParts=child(root,'tableParts');if(tableParts){root.removeChild(tableParts);stripped=true;hasTables=true;}
@@ -39,7 +44,7 @@ export async function prepareWorksheetFeatures(zip,{onMetadataCell}={}){
   }
   if(hasTables)for(const path of Object.keys(loader.files))if(/(?:^|\/)tables\/[^/]+\.xml$/.test(path))loader.remove(path);
   const styles=zip.file('xl/styles.xml')?xml(await zip.file('xl/styles.xml').async('string')):null;
-  return {features,styleRows,normalCells,dxfs:children(child(styles?.documentElement,'dxfs'),'dxf').map(stringify),...(child(styles?.documentElement,'colors')?{colors:stringify(child(styles.documentElement,'colors'))}:{}),data:stripped?await loader.generateAsync({type:'uint8array',compression:'DEFLATE'}):null};
+  return {features,styleRows,normalCells,emptyTextCells,emptyFormulaStrings,dxfs:children(child(styles?.documentElement,'dxfs'),'dxf').map(stringify),...(child(styles?.documentElement,'colors')?{colors:stringify(child(styles.documentElement,'colors'))}:{}),data:stripped?await loader.generateAsync({type:'uint8array',compression:'DEFLATE'}):null};
 }
 const order=['sheetPr','dimension','sheetViews','sheetFormatPr','cols','sheetData','sheetCalcPr','sheetProtection','protectedRanges','scenarios','autoFilter','sortState','dataConsolidate','customSheetViews','mergeCells','phoneticPr','conditionalFormatting','dataValidations','hyperlinks','printOptions','pageMargins','pageSetup','headerFooter','rowBreaks','colBreaks','customProperties','cellWatches','ignoredErrors','smartTags','drawing','legacyDrawing','legacyDrawingHF','picture','oleObjects','controls','webPublishItems','tableParts','extLst'];
 function insert(doc,node){const index=order.indexOf(node.localName),before=children(doc.documentElement).find(n=>order.indexOf(n.localName)>index);doc.documentElement.insertBefore(doc.importNode(node,true),before||null);}
