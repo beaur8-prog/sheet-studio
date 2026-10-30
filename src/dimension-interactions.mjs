@@ -1,6 +1,6 @@
 // The headers are virtualized. Capture on their stable parent, never a handle
 // that is replaced while the sheet is redrawn.
-export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoundary,canResize=()=>true,commitEdit,checkpoint,preview,changed}){
+export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoundary,canResize=()=>true,onDimensionsChanged=()=>{},commitEdit,checkpoint,preview,changed}){
   let gesture=null;
   const guide=document.createElement('div'),line=document.createElement('div'),label=document.createElement('div');
   guide.className='dimension-guide';guide.hidden=true;
@@ -24,7 +24,7 @@ export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoun
     const g=gesture;gesture=null;guide.hidden=true;delete document.body.dataset.dimensionResize;
     if(g.previewed){
       restore(g);
-      if(!cancel&&g.value!==g.size){checkpoint();g.sheet[g.property][g.index]=g.value;changed({rebuild:true});}
+      if(!cancel&&g.value!==g.size){const before={...g.sheet,[g.property]:{...g.sheet[g.property]}};checkpoint();g.sheet[g.property][g.index]=g.value;onDimensionsChanged(g.sheet,before);changed({rebuild:true});}
       else preview();
     }
     if(host.hasPointerCapture(g.pointerId))host.releasePointerCapture(g.pointerId);

@@ -4,6 +4,7 @@ import JSZip from 'jszip';
 import {chartSeries,chartData,parseChartFormula,refFormula,refValues,referenceSize,chartColors,chartNumberFormat} from './chart-model.mjs';
 import {chartRect} from './chart-geometry.mjs';
 import {numberFormatKind} from './engine.mjs';
+import {anchorPlacement,positionAnchor} from './anchor-position.mjs';
 import {drawingAnchorRect,readOpaqueDrawing,writeOpaqueDrawings,drawingRelationshipIds,remapDrawingRelationships} from './xlsx-drawings.mjs';
 import {C,A,R,D,DECL,xmlEscape as esc,xml,stringify,children,child,all,first,attr,val,resolvePart,relPath,relationship,relationships,readRelationships} from './chart-xml.mjs';
 
@@ -72,12 +73,12 @@ export async function restoreChartParts(bytes,workbook){
         }
         const usedIds=drawingRelationshipIds(anchor),rels=drawingRels.filter(r=>usedIds.has(r.id)).map(r=>({...r,target:r.mode==='External'?r.target:resolvePart(drawingPart,r.target)}));
         const axisIds=children(base,'axId').map(n=>attr(n,'val')),axisTitle=id=>all(child(axes.find(n=>val(n,'axId')===id),'title'),'t').map(n=>n.textContent).join('');
-        const chart={id:crypto.randomUUID(),type:type==='bar'&&val(base,'barDir')==='bar'?'bar-horizontal':type,range:'A1:B2',title,plotVisibleOnly:val(first(sourceXML,'chart'),'plotVisOnly','1')!=='0',nativeName:attr(first(anchor,'cNvPr'),'name'),...anchorRect(anchor,sheet),legend,labels:[...all(sourceXML,'showVal'),...all(sourceXML,'showPercent')].some(n=>attr(n,'val')==='1'),grouping:val(base,'grouping','clustered'),series,xTitle:axisTitle(axisIds[0]),yTitle:axisTitle(axisIds[1])};
+        const chart={id:crypto.randomUUID(),type:type==='bar'&&val(base,'barDir')==='bar'?'bar-horizontal':type,range:'A1:B2',title,plotVisibleOnly:val(first(sourceXML,'chart'),'plotVisOnly','1')!=='0',nativeName:attr(first(anchor,'cNvPr'),'name'),placement:anchorPlacement(anchor),...anchorRect(anchor,sheet),legend,labels:[...all(sourceXML,'showVal'),...all(sourceXML,'showPercent')].some(n=>attr(n,'val')==='1'),grouping:val(base,'grouping','clustered'),series,xTitle:axisTitle(axisIds[0]),yTitle:axisTitle(axisIds[1])};
         if(groupNodes.some(n=>/3D/.test(n.localName)))chart.previewNote='3D 차트의 2D 미리 보기 · Excel 원본 보존';
         if(series.some(s=>[s.valRef,s.catRef,s.xRef].some(r=>r?.formula&&!r.sheetId)))chart.previewNote='해석할 수 없는 참조는 저장된 차트 값으로 표시합니다.';
         if(known.some(g=>children(g,'ser').length>32))chart.previewNote='미리 보기: 그룹당 최대 32개 계열 · Excel 원본 보존';
         if(type==='unsupported')chart.unsupportedReason='이 Excel 차트 유형은 원본을 유지하며 저장합니다.';
-        chart.source={root:part,rootType:rel.type,anchor:stringify(anchor),rels,parts:await readParts(zip,rels.filter(r=>r.mode!=='External').map(r=>r.target),types),formulas:all(sourceXML,'f').map(n=>({...parseChartFormula(n.textContent,workbook,sheet.id),ownerSheetId:sheet.id,formula:n.textContent})),original:{title,legend,plotVisibleOnly:chart.plotVisibleOnly,labels:chart.labels,xTitle:chart.xTitle,yTitle:chart.yTitle,geometry:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}}};
+        chart.source={root:part,rootType:rel.type,anchor:stringify(anchor),rels,parts:await readParts(zip,rels.filter(r=>r.mode!=='External').map(r=>r.target),types),formulas:all(sourceXML,'f').map(n=>({...parseChartFormula(n.textContent,workbook,sheet.id),ownerSheetId:sheet.id,formula:n.textContent})),original:{placement:chart.placement,title,legend,plotVisibleOnly:chart.plotVisibleOnly,labels:chart.labels,xTitle:chart.xTitle,yTitle:chart.yTitle,geometry:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}}};
         sheet.charts.push(chart);
       }
     }
@@ -137,7 +138,7 @@ function updateOriginalXML(chart,workbook,names,offsets){
   }
   return stringify(doc);
 }
-function absoluteAnchor(chart,graphic){const r=chartRect(chart);return `<xdr:absoluteAnchor><xdr:pos x="${Math.round(r.x*EMU)}" y="${Math.round(r.y*EMU)}"/><xdr:ext cx="${Math.round(r.width*EMU)}" cy="${Math.round(r.height*EMU)}"/>${graphic}<xdr:clientData/></xdr:absoluteAnchor>`;}
+function absoluteAnchor(chart,graphic){const r=chartRect(chart);return `<xdr:absoluteAnchor xmlns:xdr="${D}" xmlns:a="${A}" xmlns:r="${R}"><xdr:pos x="${Math.round(r.x*EMU)}" y="${Math.round(r.y*EMU)}"/><xdr:ext cx="${Math.round(r.width*EMU)}" cy="${Math.round(r.height*EMU)}"/>${graphic}<xdr:clientData/></xdr:absoluteAnchor>`;}
 
 export async function addChartParts(bytes,workbook,names){
   if(!workbook.sheets.some(s=>s.charts?.length||s.xlsxDrawings?.length)&&!workbook.chartNames?.length&&!workbook.chartTheme)return bytes;
@@ -161,7 +162,8 @@ export async function addChartParts(bytes,workbook,names){
         const anchorDoc=xml(source.anchor),anchor=anchorDoc.documentElement;
         const relIds=new Map();for(const rel of source.rels){const newId=id+'_'+rel.id;relIds.set(rel.id,newId);drawingRelations+=relationship(newId,rel.type,rel.mode==='External'?rel.target:'/'+map(rel.target),rel.mode);}remapDrawingRelationships(anchor,relIds);
         all(anchor,'cNvPr').forEach(node=>node.setAttribute('id',String(n)));
-        if(source.original.geometry&&['x','y','width','height'].every(key=>chart[key]===source.original.geometry[key]))preservedAnchor=stringify(anchor);
+        if(source.original.geometry&&['x','y','width','height'].every(key=>chart[key]===source.original.geometry[key])&&(!chart.placement||chart.placement===(source.original.placement||anchorPlacement(anchor))))preservedAnchor=stringify(anchor);
+        else preservedAnchor=positionAnchor(anchor,{x:chart.x,y:chart.y,width:chart.width,height:chart.height},sheet,chart.placement);
         graphic=children(anchor).filter(node=>!['from','to','pos','ext','clientData'].includes(node.localName)).map(stringify).join('');
         // Keep original frame metadata but give each drawing object a unique ID.
         const graphicDoc=xml(`<xdr:root xmlns:xdr="${D}" xmlns:a="${A}" xmlns:r="${R}">${graphic}</xdr:root>`);all(graphicDoc,'cNvPr').forEach(node=>node.setAttribute('id',String(n)));graphic=children(graphicDoc.documentElement).map(stringify).join('');
@@ -169,7 +171,7 @@ export async function addChartParts(bytes,workbook,names){
         const part=`xl/charts/sheetStudioChart${n}.xml`;zip.file(part,newChartXML(chart,sheet,workbook,names,offsets));content(part,CHART_TYPE);drawingRelations+=relationship(id,R+'/chart','/'+part);
         graphic=`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${n}" name="Chart ${n}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="${C}"><c:chart xmlns:c="${C}" r:id="${id}"/></a:graphicData></a:graphic></xdr:graphicFrame>`;
       }
-      anchors+=preservedAnchor||absoluteAnchor(chart,graphic);
+      anchors+=preservedAnchor||positionAnchor(absoluteAnchor(chart,graphic),chartRect(chart),sheet,chart.placement||'fixed');
     }
     const opaque=await writeOpaqueDrawings(zip,sheet,index,content);anchors+=opaque.anchors;drawingRelations+=opaque.rels;
     const drawing=`xl/drawings/sheetStudioDrawing${index+1}.xml`,sheetPart=`xl/worksheets/sheet${index+1}.xml`;

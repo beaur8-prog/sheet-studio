@@ -3,13 +3,14 @@ import {escapeChartHTML as esc} from './chart-render.mjs';
 
 export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
   const normalize=value=>value.includes(':')?value:value+':'+value;
-  const current=chart||{type:'bar',grouping:'clustered',title:'차트 제목',range:normalize(range),legend:true,labels:false};
+  const current=chart||{type:'bar',grouping:'clustered',title:'차트 제목',range:normalize(range),legend:true,labels:false,placement:'move-size'};
   const initial=chartLayout(current,sheet,workbook);
   const el=modal(chart?'차트 설정':'차트 삽입',`
     <div class="chart-form">
     <label>차트 유형<select id="chart-type">${!chartTypes[current.type]?'<option value="'+esc(current.type)+'">Excel 원본 유형 유지</option>':''}${Object.entries(chartTypes).map(([value,label])=>`<option value="${value}" ${current.type===value?'selected':''}>${label}</option>`).join('')}</select></label>
     <label>데이터 계열 방향<select id="chart-series-by"><option value="auto">자동 (한 줄은 행 기준)</option><option value="rows">행 기준 (가로로 이어진 값)</option><option value="columns">열 기준 (세로로 이어진 값)</option></select></label>
     <label>배치<select id="chart-grouping">${Object.entries({clustered:'묶은형 / 일반',stacked:'누적',percentStacked:'100% 누적'}).map(([value,label])=>`<option value="${value}" ${current.grouping===value||value==='clustered'&&current.grouping==='standard'?'selected':''}>${label}</option>`).join('')}</select></label>
+    <label>셀 변경 시 위치<select id="chart-placement" ${workbook?.nativeSource?'disabled':''}>${Object.entries({'move-size':'셀과 함께 이동·크기 조절',move:'셀과 함께 이동 (크기 유지)',fixed:'위치와 크기 고정'}).map(([value,label])=>`<option value="${value}" ${value===(current.placement||'fixed')?'selected':''}>${label}</option>`).join('')}</select></label>
     <label>제목<input id="chart-title" value="${esc(current.title)}" ${current.type==='unsupported'?'disabled':''}></label>
     <label>데이터 범위<input id="chart-range" value="${esc(current.range||range)}" ${current.source?'disabled':''}></label>
     <label class="chart-check" id="chart-first-row-option"><input id="chart-first-row" type="checkbox" ${initial.firstRowAsHeader?'checked':''}><span id="chart-first-row-label">첫 행을 계열 이름으로 사용</span></label>
@@ -32,7 +33,7 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
       const error=!retained&&chartRangeError({type,range:selected,...layout},sheet,workbook);
       if(error){get('chart-error').textContent=error;return;}
       if(!retained&&type==='unsupported'){get('chart-error').textContent='새 차트 유형을 선택하세요.';return;}
-      const patch={type,grouping:retained?current.grouping:grouping,title:get('chart-title').value,legend:get('chart-legend').checked,labels:get('chart-labels').checked,plotVisibleOnly:!get('chart-hidden-data').checked,xTitle:get('chart-x-title').value,yTitle:get('chart-y-title').value,secondaryAxis:get('chart-secondary').checked};
+      const patch={type,...(workbook?.nativeSource?{}:{placement:get('chart-placement').value}),grouping:retained?current.grouping:grouping,title:get('chart-title').value,legend:get('chart-legend').checked,labels:get('chart-labels').checked,plotVisibleOnly:!get('chart-hidden-data').checked,xTitle:get('chart-x-title').value,yTitle:get('chart-y-title').value,secondaryAxis:get('chart-secondary').checked};
       if(!retained)Object.assign(patch,{range:selected,...layout,series:undefined,source:undefined,rebuilt:true,previewNote:undefined,unsupportedReason:undefined});
       onApply(patch);el.remove();
     }}]);

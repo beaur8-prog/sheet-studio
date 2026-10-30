@@ -1,5 +1,5 @@
 export const CHART_LIMITS={minWidth:280,minHeight:180,maxWidth:2400,maxHeight:1800};
-export const chartRect=chart=>({x:chart.x??40,y:chart.y??25,width:Math.max(CHART_LIMITS.minWidth,Math.min(CHART_LIMITS.maxWidth,chart.width??500)),height:Math.max(CHART_LIMITS.minHeight,Math.min(CHART_LIMITS.maxHeight,chart.height??300))});
+export const chartRect=chart=>({x:chart.x??40,y:chart.y??25,width:Math.max(100,Math.min(CHART_LIMITS.maxWidth,chart.width??500)),height:Math.max(100,Math.min(CHART_LIMITS.maxHeight,chart.height??300))});
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 export function resizeChart(rect,edge,dx,dy){
   const next={...rect},limits=CHART_LIMITS;

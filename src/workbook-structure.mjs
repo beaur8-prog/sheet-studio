@@ -1,4 +1,5 @@
 import {cloneData} from './clone.mjs';
+import {transformAnchoredObjects} from './anchored-objects.mjs';
 import {address,parseAddress,transformFormulaReferences,validateWorkbook} from './engine.mjs';
 import {assertStructureAllowed} from './cell-constraints.mjs';
 import {assertTableStructureAllowed,removeTablesForStructure,shiftTables} from './table-structure.mjs';
@@ -28,6 +29,7 @@ export function structuralWorkbookPlan(book,sheetId,{axis,index,count=1,delta}){
   const prop=axis==='r'?'rowHeights':'columnWidths';sheet[prop]=shiftIndexMap(sheet[prop],index,amount,limit);
   shiftAutoFilter(sheet,axis,index,amount);shiftTables(next,sheetId,axis,index,amount);
   for(const owner of next.sheets)shiftWorksheetFeatures(owner,axis,index,amount,sheet.name);
+  transformAnchoredObjects(sheet,original,{axis,index,delta:amount});
   next.referenceCachesValid=false;
   return validateWorkbook(next);
 }

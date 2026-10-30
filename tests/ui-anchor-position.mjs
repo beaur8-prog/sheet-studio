@@ -1,0 +1,27 @@
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import platform from '../scripts/platform.cjs';
+import {createWorkbook,address} from '../src/engine.mjs';
+import {drawingFixture} from './fixtures/drawings.mjs';
+import {readSpreadsheet} from '../src/io.mjs';
+import {xml,all,attr} from '../src/chart-xml.mjs';
+import JSZip from 'jszip';
+const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','anchor-position-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(60000);
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
+const go=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();},act=async action=>{await page.locator('[data-action="'+action+'"]').first().click();await settle();},table=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].tables[0]),value=ref=>page.evaluate(ref=>sheetStudio.evaluateAsync(ref),ref);
+try{
+ await page.locator('.cell').first().waitFor();const b=await readSpreadsheet(await drawingFixture(),'anchors.xlsx'),s=b.sheets[0];b.name='anchors';s.charts=['move-size','move','fixed'].map((placement,i)=>({id:placement,type:'bar',range:'A1:A2',title:placement,placement,x:20+i*325,y:200,width:300,height:200}));
+ await page.locator('#file-input').setInputFiles({name:'anchors.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await settle();const charts=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].charts),imageY=()=>page.locator('.xlsx-image').evaluate(el=>parseFloat(el.style.top));const iy=await imageY();
+ await go('A1:A3');await act('insert-row');let ch=await charts();assert.equal(ch[0].y,260);assert.equal(ch[1].y,260);assert.equal(ch[2].y,200);assert.equal(await imageY(),iy+60);await page.locator('#undo').click();await settle();assert.equal((await charts())[0].y,200);assert.equal(await imageY(),iy);await page.locator('#redo').click();await settle();assert.equal((await charts())[0].y,260);
+ await go('A16');await act('insert-row');ch=await charts();assert.equal(ch[0].height,220);assert.equal(ch[1].height,200);assert.equal(ch[2].height,200);
+ const resize=page.locator('[data-resize-col="0"]').first(),box=await resize.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+40,box.y+box.height/2,{steps:5});await page.mouse.up();await settle();ch=await charts();assert.equal(ch[1].x,385);assert.equal(ch[2].x,670);assert.equal(ch[0].width,340);
+ await page.locator('[data-edit-chart="move-size"]').click();await page.locator('#chart-placement').selectOption('fixed');await page.getByRole('dialog').getByRole('button',{name:'적용',exact:true}).click();await settle();const fixedY=(await charts())[0].y;await go('A1');await act('insert-row');assert.equal((await charts())[0].y,fixedY);assert.equal((await charts())[1].y,280);
+ const output=path.join(dataDir,'anchors.xlsx');await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},output);await act('save');await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');let bytes=await fs.readFile(output),zip=await JSZip.loadAsync(bytes),drawing=xml(await zip.file('xl/drawings/sheetStudioDrawing1.xml').async('string'));assert.equal(all(drawing,'chart').length,3);assert.equal(all(drawing,'oneCellAnchor').length,2);assert.ok(all(drawing,'absoluteAnchor').length>=3);
+ const expected=await charts();await page.locator('#file-input').setInputFiles(output);await settle();ch=await charts();for(let i=0;i<3;i++){assert.equal(ch[i].placement,expected[i].placement);for(const k of ['x','y','width','height'])assert.ok(Math.abs(ch[i][k]-expected[i][k])<.001);}
+ const id=ch[1].id,title=page.locator('[data-chart-title="'+id+'"]'),tb=await title.boundingBox();await page.mouse.move(tb.x+40,tb.y+8);await page.mouse.down();await page.mouse.move(tb.x+65,tb.y+23,{steps:5});await page.mouse.up();await settle();const moved=(await charts())[1];await act('save');await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');await page.locator('#file-input').setInputFiles(output);await settle();ch=await charts();assert.equal(ch[1].placement,'move');assert.ok(ch[1].source.anchor.includes('oneCellAnchor'));assert.ok(Math.abs(ch[1].x-moved.x)<.001);assert.ok(Math.abs(ch[1].y-moved.y)<.001);assert.deepEqual(errors,[]);
+ console.log('PASS: actual chart/image insertion movement, undo/redo, selective size changes, column drag, placement editing, fixed/move/move-size XLSX anchors, manual chart move preserving placement and reopen');
+}catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/anchor-position-failure.png')});throw error;}
+finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

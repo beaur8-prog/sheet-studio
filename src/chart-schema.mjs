@@ -6,6 +6,7 @@ const fail=()=>{throw Error('차트 설정 또는 보존 데이터가 올바르�
 export function validateChart(chart){
   for(const key of ['title','nativeName','previewNote','unsupportedReason','xTitle','yTitle'])if(chart[key]!==undefined&&!string(chart[key]))fail();
   for(const key of ['legend','labels','plotVisibleOnly','secondaryAxis','rebuilt','radarFilled','firstRowAsHeader','firstColumnAsLabels'])if(chart[key]!==undefined&&typeof chart[key]!=='boolean')fail();
+  if(chart.placement!==undefined&&!['move-size','move','fixed'].includes(chart.placement))fail();
   if(chart.seriesBy!==undefined&&!['rows','columns'].includes(chart.seriesBy))fail();
   if(chart.grouping!==undefined&&!['standard','clustered','stacked','percentStacked'].includes(chart.grouping))fail();
   const ref=r=>{if(!object(r))fail();for(const key of ['sheetId','ownerSheetId','range','formula','formatCode'])if(r[key]!==undefined&&!string(r[key]))fail();if(r.cache!==undefined&&(!Array.isArray(r.cache)||r.cache.length>10000||r.cache.some(v=>v!==null&&!(typeof v==='number'&&Number.isFinite(v))&&typeof v!=='boolean'&&!string(v,32768))))fail();};

@@ -1,16 +1,10 @@
+import {drawingAnchorRect} from './anchor-position.mjs';
+export {drawingAnchorRect} from './anchor-position.mjs';
 import {capturePartTree,writeStoredParts,validateStoredParts,validateStoredRelationships} from './xlsx-part-store.mjs';
 import {xml,stringify,children,child,all,attr,R,resolvePart,relationship} from './chart-xml.mjs';
-const EMU=9525,cache=new Map();
+const cache=new Map();
 export function drawingRelationshipIds(node){const ids=new Set();for(const item of [node,...all(node,'*')])for(const a of Array.from(item.attributes||[]))if(a.namespaceURI===R&&['id','embed','link'].includes(a.localName))ids.add(a.value);return ids;}
 export function remapDrawingRelationships(node,map){for(const item of [node,...all(node,'*')])for(const a of Array.from(item.attributes||[]))if(a.namespaceURI===R&&['id','embed','link'].includes(a.localName)&&map.has(a.value))item.setAttributeNS(R,a.name,map.get(a.value));}
-export function drawingAnchorRect(anchor,sheet){
-  const number=value=>Number.isFinite(Number(value))?Number(value):0,point=node=>{
-    const c=Math.max(0,Math.min(16384,number(child(node,'col')?.textContent))),r=Math.max(0,Math.min(1048576,number(child(node,'row')?.textContent))),cw=sheet.defaultColumnWidth||64,rh=sheet.defaultRowHeight||20;let x=c*cw,y=r*rh;
-    for(const [index,width] of Object.entries(sheet.columnWidths||{}))if(+index<c)x+=width-cw;for(const [index,height] of Object.entries(sheet.rowHeights||{}))if(+index<r)y+=height-rh;
-    return {x:x+number(child(node,'colOff')?.textContent)/EMU,y:y+number(child(node,'rowOff')?.textContent)/EMU};
-  },from=child(anchor,'from')?point(child(anchor,'from')):{x:number(attr(child(anchor,'pos'),'x'))/EMU,y:number(attr(child(anchor,'pos'),'y'))/EMU},to=child(anchor,'to')?point(child(anchor,'to')):null,ext=child(anchor,'ext');
-  return {x:Math.max(0,from.x),y:Math.max(0,from.y),width:Math.max(1,Math.min(10000,to?to.x-from.x:number(attr(ext,'cx'))/EMU||500)),height:Math.max(1,Math.min(10000,to?to.y-from.y:number(attr(ext,'cy'))/EMU||300))};
-}
 export function validateDrawings(groups){
   if(!Array.isArray(groups)||groups.length>100)throw Error('보존된 이미지·도형 목록이 올바르지 않습니다.');let total=0;
   for(const group of groups){if(!group||!Array.isArray(group.anchors)||group.anchors.length>2000)throw Error('보존된 그리기 개체가 올바르지 않습니다.');for(const anchor of group.anchors){if(typeof anchor!=='string'||anchor.length>2_000_000||!['absoluteAnchor','oneCellAnchor','twoCellAnchor','extLst'].includes(xml(anchor).documentElement.localName))throw Error('보존된 그리기 위치가 올바르지 않습니다.');total+=anchor.length;}validateStoredParts(group.parts);validateStoredRelationships(group.rels,group.parts);total+=Object.values(group.parts).reduce((n,f)=>n+f.data.length,0);if(total>64_000_000)throw Error('보존된 이미지·도형 크기 제한을 초과했습니다.');}
