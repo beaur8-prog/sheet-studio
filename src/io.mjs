@@ -151,6 +151,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   try { await book.xlsx.load(data); }
   catch (error) { throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.', { cause: error }); }
   const resolveColor=createColorResolver(await colorZip.file('xl/theme/theme1.xml')?.async('string'),await colorZip.file('xl/styles.xml')?.async('string'));
+  const dateOffset=book.properties.date1904?1462:0;
   let cellCount = 0;
   const sheets = book.worksheets.map(source => {
     const sheet = newSheet(source.name);
@@ -163,7 +164,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       let raw = '';
       const value = cell.value;
       if (cell.formula) raw = '='+formulaForEditing(cell.formula);
-      else if (value instanceof Date) { raw = String(Math.round((value.getTime()/DAY+25569-(value.getTime()<Date.UTC(1900,2,1)?1:0))*1e8)/1e8); style.format = 'date'; }
+      else if (value instanceof Date) { raw = String(Math.round((value.getTime()/DAY+25569-(value.getTime()<Date.UTC(1900,2,1)?1:0)-dateOffset)*1e8)/1e8); style.format = 'date'; }
       else if (typeof value === 'number') raw = String(value);
       else if (typeof value === 'boolean') raw = String(value).toUpperCase();
       else if (typeof value === 'string') raw = stringRaw(value);
@@ -173,7 +174,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       const entry = { raw, style };
       if (typeof cell.note === 'string') entry.note = cell.note;
       else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
-      if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result?.error || cell.result; entry.cachedFormula = raw; }
+      if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result instanceof Date ? Math.round((cell.result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : cell.result?.error || cell.result; entry.cachedFormula = raw; }
       sheet.cells[cell.address] = entry;
     };
     source.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -203,6 +204,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if (!sheets.length) sheets.push(newSheet());
   const activeIndex = book.views?.[0]?.activeTab || 0;
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
+  if(book.properties.date1904)result.date1904=true;
   await restoreWorksheetParts(data,result);
   await restoreFilterParts(data,result);
   await restoreChartParts(data,result);
@@ -304,6 +306,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   // Export a consistent snapshot: cached result cells and native pivot cache use the same source.
   if(workbook.sheets.some(s=>s.pivot)){workbook=cloneData(workbook);for(const s of workbook.sheets)if(s.pivot){try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
   const book = new ExcelJS.Workbook();
+  book.properties.date1904=workbook.date1904===true;
   book.creator = 'Sheet Studio';
   book.created = new Date(); book.modified = new Date();
   book.calcProperties.fullCalcOnLoad = true;

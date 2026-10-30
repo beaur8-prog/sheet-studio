@@ -1,5 +1,5 @@
 import {cloneData} from './clone.mjs';
-import {address,parseAddress,shiftFormula,transposeFormula} from './engine.mjs';
+import {address,parseAddress,shiftFormula,transposeFormula,numberFormatKind} from './engine.mjs';
 export function scalarRaw(value) {
   if(value===null||value===undefined)return '';
   if(typeof value==='boolean')return value?'TRUE':'FALSE';
@@ -33,13 +33,15 @@ export function pastePlan(sheet, clip, start, options={}) {
     else {
       cell=mode==='all'?cloneData(source):cloneData(old);
       let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw):source.raw;
+      const dateStyle=source.style?.format==='date'||numberFormatKind(source.style?.numberFormat)==='date';
+      if(operation==='none'&&typeof clip.date1904==='boolean'&&clip.date1904!==(options.date1904===true)&&dateStyle&&!raw.startsWith("'")&&raw.trim()!==''&&Number.isFinite(Number(raw)))raw=String(Number(raw)+(clip.date1904?1462:-1462));
       if(mode!=='values'&&!clip.cut&&raw.startsWith('=')){const origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]};raw=transpose?transposeFormula(raw,origin,dest):shiftFormula(raw,dest.r-origin.r,dest.c-origin.c);}
       if(operation!=='none'){
         const a=options.evaluate?.(key)??Number(old.raw||0),b=clip.values?.[sr]?.[sc]??Number(source.raw||0);
         if(typeof a!=='number'||typeof b!=='number')throw Error('연산 붙여넣기는 숫자 셀에 사용하세요.');
         raw=operation==='divide'&&b===0?'#DIV/0!':String(({add:()=>a+b,subtract:()=>a-b,multiply:()=>a*b,divide:()=>a/b})[operation]());
       }
-      cell.raw=raw;delete cell.cachedValue;
+      cell.raw=raw;delete cell.cachedValue;delete cell.cachedFormula;
     }
     updates.push({key,cell});
   }

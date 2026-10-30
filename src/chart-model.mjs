@@ -164,7 +164,7 @@ export function chartData(chart,sheet,workbook){
     return {
     ...s,name:String(refValues(s.nameRef,workbook)[0]??s.name??`계열 ${i+1}`),
     categories:preview(s.catRef||s.xRef),dateCategories:categoryFormat.format==='date'||numberFormatKind(categoryFormat.numberFormat||'General')==='date',
-    labels:preview(s.catRef||s.xRef).map(v=>v===null?'':formatValue(v,categoryFormat)),
+    labels:preview(s.catRef||s.xRef).map(v=>v===null?'':formatValue(v,categoryFormat,workbook)),
     values:preview(s.valRef).map(v=>v===null||v===''||typeof v==='boolean'||!Number.isFinite(Number(v))?null:Number(v)),
     xs:preview(s.xRef).map(v=>v===null?null:Number(v)),
     sizes:preview(s.sizeRef).map(v=>Math.max(0,Number(v)||0)),

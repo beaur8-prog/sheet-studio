@@ -2,7 +2,7 @@ import {chartData,chartColors} from './chart-model.mjs';
 import {chartRect} from './chart-geometry.mjs';
 import {formatValue} from './engine.mjs';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt=(n,style={})=>style.numberFormat&&style.numberFormat!=='General'||style.format&&style.format!=='general'?formatValue(n,style):Math.abs(n)>=1e6?(n/1e6).toLocaleString(undefined,{maximumFractionDigits:1})+'M':Number(n.toPrecision(4)).toLocaleString();
+const formatChartValue=(n,style={},workbook={})=>style.numberFormat&&style.numberFormat!=='General'||style.format&&style.format!=='general'?formatValue(n,style,workbook):Math.abs(n)>=1e6?(n/1e6).toLocaleString(undefined,{maximumFractionDigits:1})+'M':Number(n.toPrecision(4)).toLocaleString();
 const text=(x,y,value,extra='')=>`<text x="${x}" y="${y}" font-size="10" fill="#555" ${extra}>${esc(value)}</text>`;
 const line=(x,y,x2,y2,extra='')=>`<line x1="${x}" y1="${y}" x2="${x2}" y2="${y2}" stroke="#e3e6e9" ${extra}/>`;
 const poly=(points,color,fill='none',extra='')=>`<polyline points="${points.map(p=>p.join(',')).join(' ')}" stroke="${color}" fill="${fill}" stroke-width="2" ${extra}/>`;
@@ -37,6 +37,7 @@ export function layoutChartCategories(root){
 }
 
 export function renderChartSVG(chart,sheet,workbook){
+  const fmt=(value,style)=>formatChartValue(value,style,workbook);
   const {width,height}=chartRect(chart),w=width-36,h=height-70,data=chartData(chart,sheet,workbook);
   if(chart.type==='unsupported')return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'Excel 원본 차트 보존','text-anchor="middle"')+text(w/2,h/2+20,chart.unsupportedReason||'이 유형의 미리 보기는 아직 지원하지 않습니다.','text-anchor="middle"')};
   if(!data.length||!data.some(s=>s.values.some(Number.isFinite)))return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'표시할 숫자 데이터가 없습니다.','text-anchor="middle"')+text(w/2,h/2+20,'범위와 첫 행·첫 열 설정을 확인하세요.','text-anchor="middle"')};

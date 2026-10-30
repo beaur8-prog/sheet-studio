@@ -261,7 +261,13 @@ class Parser {
 function context(workbook, sheetId) {
   const sheet = workbook?.sheets?.find(item => item.id === sheetId);
   if (!sheet) fail('#REF!');
-  return { workbook, sheet, position:{r:0,c:0}, active: new Set(), cache: new Map(), steps: 0, depth: 0 };
+  const dateOffset=workbook.date1904?1462:0;
+  const calendar={dateSerial:(...args)=>dateSerial(...args)-dateOffset,serialParts:value=>serialParts(numeric(value)+dateOffset)};
+  const runtime=dateOffset?createFunctionRuntime({...functionHelpers,...calendar,dateOffset,
+    criterion:(value,options)=>criterion(value,{...options,dateOffset}),
+    formatValue:(value,style)=>formatValue(value,style,workbook),
+  }):extendedFunction;
+  return { workbook, sheet, dateOffset, calendar, runtime, position:{r:0,c:0}, active: new Set(), cache: new Map(), steps: 0, depth: 0 };
 }
 function step(ctx) { if (++ctx.steps > MAX_STEPS) throw new CalculationLimit(); }
 function resolveSheet(ctx, name) {
@@ -597,7 +603,8 @@ function referenceFunction(ctx,name,nodes,evaluate) {
   }
   fail('#NAME?');
 }
-const extendedFunction=createFunctionRuntime({BLANK,FormulaError,fail,scalar,checked,numeric,textual,logical,finite,isRange,isRef,asRange,flatten,numericItems,criterion,compare,wildcardRegex,dateSerial,serialParts,rounded,colName,parseAddress,address,formatValue});
+const functionHelpers={BLANK,FormulaError,fail,scalar,checked,numeric,textual,logical,finite,isRange,isRef,asRange,flatten,numericItems,criterion,compare,wildcardRegex,dateSerial,serialParts,rounded,colName,parseAddress,address,formatValue};
+const extendedFunction=createFunctionRuntime(functionHelpers);
 
 function callFunction(name, nodes, evaluate, ctx) {
   const arity = (min, max = min) => { if (nodes.length < min || nodes.length > max) fail('#VALUE!'); };
@@ -613,7 +620,7 @@ function callFunction(name, nodes, evaluate, ctx) {
     }
   }
   const known = new Set(['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'AND', 'OR', 'NOT', 'ROUND', 'ROUNDUP', 'ROUNDDOWN', 'ABS', 'SQRT', 'POWER', 'MOD', 'INT', 'LEN', 'LEFT', 'RIGHT', 'MID', 'CONCAT', 'CONCATENATE', 'TRIM', 'UPPER', 'LOWER', 'SUMIF', 'COUNTIF', 'VLOOKUP', 'XLOOKUP', 'TODAY', 'DATE', 'YEAR', 'MONTH', 'DAY']);
-  if (!known.has(name)) return extendedFunction(name,nodes,evaluate,{
+  if (!known.has(name)) return ctx.runtime(name,nodes,evaluate,{
     referenceFunction:(name,nodes,evaluate)=>referenceFunction(ctx,name,nodes,evaluate),
     getRange:(sheet,top,left,rows,cols)=>getRange(ctx,sheet,top,left,rows,cols),
   });
@@ -677,7 +684,7 @@ function callFunction(name, nodes, evaluate, ctx) {
   if (name === 'LOWER') { arity(1); return text(0).toLowerCase(); }
   if (name === 'COUNTIF' || name === 'SUMIF') {
     arity(2, name === 'SUMIF' ? 3 : 2);
-    const range = asRange(args[0]), matches = criterion(args[1]);
+    const range = asRange(args[0]), matches = criterion(args[1],{dateOffset:ctx.dateOffset});
     if (name === 'COUNTIF') return range.values.filter(matches).length;
     let sumRange = args.length > 2 ? asRange(args[2]) : range;
     if(sumRange.sheet)sumRange=getRange(ctx,sumRange.sheet,sumRange.top,sumRange.left,range.rows,range.cols);
@@ -733,18 +740,18 @@ function callFunction(name, nodes, evaluate, ctx) {
     return value === BLANK ? 0 : value;
   }
   if (name === 'TODAY') {
-    arity(0); const now = new Date(); return dateSerial(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    arity(0); const now = new Date(); return ctx.calendar.dateSerial(now.getFullYear(), now.getMonth() + 1, now.getDate());
   }
   if (name === 'DATE') {
     arity(3); let year = Math.trunc(num(0));
     if (year >= 0 && year < 1900) year += 1900;
     if (year < 0 || year > 9999) fail('#NUM!');
     const month = Math.trunc(num(1)), day = Math.trunc(num(2));
-    if (year === 1900 && month === 2 && day === 29) return 60;
-    return dateSerial(year, month, day);
+    if (year === 1900 && month === 2 && day === 29) return 60-ctx.dateOffset;
+    return ctx.calendar.dateSerial(year, month, day);
   }
   if (['YEAR', 'MONTH', 'DAY'].includes(name)) {
-    arity(1); return serialParts(args[0])[name.toLowerCase()];
+    arity(1); return ctx.calendar.serialParts(args[0])[name.toLowerCase()];
   }
   return fail('#NAME?');
 }
@@ -798,14 +805,14 @@ export function numberFormatKind(format) {
   return 'number';
 }
 
-function formatDateValue(value, pattern) {
-  const { year, month, day } = serialParts(value);
+function formatDateValue(value, pattern, dateOffset=0) {
+  const { year, month, day } = serialParts(value+dateOffset);
   const fraction = ((value % 1) + 1) % 1;
   const seconds = Math.round(fraction * 86400) % 86400;
   const hour = Math.floor(seconds / 3600), minute = Math.floor(seconds / 60) % 60, second = seconds % 60;
   const pad = number => String(number).padStart(2, '0');
   const date = new Date(Date.UTC(year,month-1,1));
-  const weekday=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][((Math.floor(value)+6)%7+7)%7];
+  const weekday=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][((Math.floor(value)+dateOffset+6)%7+7)%7];
   const hasAmPm = /AM\/PM|A\/P/i.test(pattern);
   const tokens = [...pattern.matchAll(/"[^"]*"|\\.|\[[^\]]*\]|AM\/PM|A\/P|yyyy|yy|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s|./gi)];
   let previousTimeUnit = '';
@@ -837,7 +844,7 @@ function formatDateValue(value, pattern) {
   }).join('');
 }
 
-export function formatValue(value, style = {}) {
+export function formatValue(value, style = {}, options = {}) {
   if (value === null || value === undefined || value === '') return '';
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
@@ -848,7 +855,7 @@ export function formatValue(value, style = {}) {
   const standardFormats = ['general', 'number', 'currency', 'accounting', 'percent', 'text'];
   if (format === 'date' || (!standardFormats.includes(format) && numberFormatKind(format) === 'date')) {
     try {
-      return formatDateValue(value, format === 'date' ? 'yyyy-mm-dd' : format);
+      return formatDateValue(value, format === 'date' ? 'yyyy-mm-dd' : format,options.date1904?1462:0);
     } catch { return '########'; }
   }
   const customDecimals = (format.split(';')[0].match(/\.([0#]+)/) || [])[1];
@@ -1118,6 +1125,7 @@ export function validateWorkbook(data) {
   };
   if (!object(data) || !Array.isArray(data.sheets) || data.sheets.length < 1 || data.sheets.length > 100) throw new Error('유효한 통합 문서가 아닙니다.');
   if (typeof data.name !== 'string' || data.name.length > 255) throw new Error('통합 문서 이름이 올바르지 않습니다.');
+  if(data.date1904!==undefined&&typeof data.date1904!=='boolean')throw new Error('통합 문서의 날짜 체계가 올바르지 않습니다.');
   const ids = new Set(), names = new Set();
   let cellCount = 0, textCount = 0;
   for (const sheet of data.sheets) {

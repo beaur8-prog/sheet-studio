@@ -7,7 +7,7 @@ import {FUNCTION_MAP, FUNCTION_ALIASES} from './function-catalog.mjs';
 export function createFunctionRuntime(h) {
   const {BLANK, FormulaError, fail, scalar, checked, numeric, textual, logical, finite,
     isRange, isRef, asRange, flatten, numericItems, criterion, compare, wildcardRegex,
-    dateSerial, serialParts, rounded, colName, parseAddress, address, formatValue} = h;
+    dateSerial, serialParts, rounded, colName, parseAddress, address, formatValue,dateOffset=0} = h;
   const range = (values, rows=values.length, cols=1) => ({kind:'range',values,rows,cols});
   const raw = value => value === BLANK ? null : value;
   const sum = values => values.reduce((total,value) => total + value,0);
@@ -17,9 +17,9 @@ export function createFunctionRuntime(h) {
   };
   const integer = v => Math.trunc(numeric(v));
   const day = v => {const n=Math.floor(numeric(v));serialParts(n);return n;};
-  const weekday = serial => ((serial+6)%7+7)%7; // Excel's fictitious 1900-02-29 is intentional.
+  const weekday = serial => ((serial+dateOffset+6)%7+7)%7; // Excel's fictitious 1900-02-29 is intentional.
   const monthDays = (y,m) => y===1900&&m===2?29:new Date(Date.UTC(y,m,0)).getUTCDate();
-  const serial = (y,m,d) => y===1900&&m===2&&d===29?60:dateSerial(y,m,d);
+  const serial = (y,m,d) => y===1900&&m===2&&d===29?60-dateOffset:dateSerial(y,m,d);
   const serialDate = v => {
     v=checked(v);if(typeof v!=='string')return day(v);
     const s=v.trim();let m=/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T].*)?$/.exec(s),y,mo,d;

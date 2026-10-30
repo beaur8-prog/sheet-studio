@@ -33,19 +33,20 @@ function pattern(value){
   }return new RegExp('^'+result+'$','iu');
 }
 export const searchFilterValue=(label,query)=>pattern('*'+query+'*').test(label);
-export function filterDateParts(serial){
+export function filterDateParts(serial,{date1904=false}={}){
+  serial+=date1904?1462:0;
   if(Math.floor(serial)===60)return {year:1900,month:2,day:29};
   const d=new Date(Date.UTC(1899,11,31)+(Math.floor(serial)-(serial>=60?1:0))*86400000);
   return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1,day:d.getUTCDate()};
 }
-export function dateNumber(text){
+export function dateNumber(text,{date1904=false}={}){
   if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(text)){
     const [y,m,d]=text.split('-').map(Number),t=Date.UTC(y,m-1,d),date=new Date(t);
     if(date.getUTCFullYear()!==y||date.getUTCMonth()!==m-1||date.getUTCDate()!==d)return NaN;
-    return (t-Date.UTC(1899,11,31))/86400000+(t>=Date.UTC(1900,2,1)?1:0);
+    return (t-Date.UTC(1899,11,31))/86400000+(t>=Date.UTC(1900,2,1)?1:0)-(date1904?1462:0);
   }return text.trim()===''?NaN:Number(text);
 }
-function matchesCondition(value,condition,kind){
+function matchesCondition(value,condition,kind,book){
   const {operator:op,value:operand}=condition;
   if(['contains','notContains','beginsWith','endsWith'].includes(op)){
     if(typeof value!=='string')return op==='notContains';
@@ -58,13 +59,13 @@ function matchesCondition(value,condition,kind){
     const cmp=a.localeCompare(b,undefined,{sensitivity:'base'});
     return {greaterThan:cmp>0,greaterThanOrEqual:cmp>=0,lessThan:cmp<0,lessThanOrEqual:cmp<=0}[op];
   }
-  const n=kind==='date'?dateNumber(operand):Number(operand);
+  const n=kind==='date'?dateNumber(operand,book):Number(operand);
   if(typeof value!=='number'||!Number.isFinite(n)||operand.trim()==='')return op==='notEqual'&&value!=='';
   return {equal:value===n,notEqual:value!==n,greaterThan:value>n,greaterThanOrEqual:value>=n,lessThan:value<n,lessThanOrEqual:value<=n}[op];
 }
-function predicate(rule,values){
+function predicate(rule,values,book){
   if(rule.type==='values'){const set=new Set(rule.values.map(valueKey));return value=>set.has(valueKey(rule.kind==='date'&&typeof value==='number'?Math.floor(value):value));}
-  if(rule.type==='custom')return value=>rule.conditions[rule.join==='and'?'every':'some'](c=>matchesCondition(value,c,rule.kind));
+  if(rule.type==='custom')return value=>rule.conditions[rule.join==='and'?'every':'some'](c=>matchesCondition(value,c,rule.kind,book));
   const numbers=values.filter(v=>typeof v==='number'&&Number.isFinite(v));
   if(!numbers.length)return ()=>false;
   if(rule.type==='average'){const mean=numbers.reduce((a,b)=>a+b,0)/numbers.length;return v=>typeof v==='number'&&(rule.above?v>mean:v<mean);}
@@ -78,7 +79,7 @@ export function filterPredicates(book,sheet,evaluate,omitColumn=-1){
   return Object.entries(f.columns).filter(([c])=>+c!==omitColumn).map(([c,rule])=>{
     if(rule.type==='color')return {column:+c,test:(_value,r)=>normalizeColor({...sheet.cells[address(r,+c)]?.style,...conditional(r,+c,evaluate(address(r,+c)))}[rule.target])===normalizeColor(rule.color)};
     const values=[];if(rule.type==='top'||rule.type==='average')for(let r=f.range.r1+1;r<=f.range.r2;r++)values.push(filterValue(sheet,evaluate,r,+c));
-    return {column:+c,test:predicate(rule,values)};
+    return {column:+c,test:predicate(rule,values,book)};
   });
 }
 export function applyFilters(book,sheet){
@@ -94,14 +95,14 @@ export function filterOptions(book,sheet,column){
     if(!rules.every(({column,test})=>test(filterValue(sheet,evaluate,r,column),r)))continue;
     const value=filterValue(sheet,evaluate,r,column),key=valueKey(value),style=sheet.cells[address(r,column)]?.style;
     const displayed={...style,...conditional(r,column,evaluate(address(r,column)))};for(const target of ['background','color']){const color=normalizeColor(displayed[target]);colors[target].set(color,(colors[target].get(color)||0)+1);}
-    if(!values.has(key))values.set(key,{key,value,label:value===''?'(빈 셀)':formatValue(value,style)});
+    if(!values.has(key))values.set(key,{key,value,label:value===''?'(빈 셀)':formatValue(value,style,book)});
     if(value!==''){if(typeof value==='number'){if(style?.format==='date')dates++;else numbers++;}else texts++;}
   }
   const kind=dates>numbers&&dates>texts?'date':numbers>texts?'number':'text';
   const colorOptions=Object.fromEntries(Object.entries(colors).map(([target,list])=>[target,[...list].map(([color,count])=>({color,count})).sort((a,b)=>(a.color||'').localeCompare(b.color||''))]));
   if(kind==='date'){
     const grouped=new Map();for(const v of values.values()){
-      if(typeof v.value==='number'){v.value=Math.floor(v.value);v.key=valueKey(v.value);const d=filterDateParts(v.value);v.label=`${d.year}-${String(d.month).padStart(2,'0')}-${String(d.day).padStart(2,'0')}`;}
+      if(typeof v.value==='number'){v.value=Math.floor(v.value);v.key=valueKey(v.value);const d=filterDateParts(v.value,book);v.label=`${d.year}-${String(d.month).padStart(2,'0')}-${String(d.day).padStart(2,'0')}`;}
       grouped.set(v.key,v);
     }return {kind,colors:colorOptions,values:[...grouped.values()].sort((a,b)=>compareFilterValues(a.value,b.value,false))};
   }

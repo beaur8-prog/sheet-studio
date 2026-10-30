@@ -1,6 +1,6 @@
 import {cloneData} from './clone.mjs';
 import {filterOptions,valueKey,dateNumber,filterPredicates,searchFilterValue} from './filters.mjs';
-import {address,createEvaluator} from './engine.mjs';
+import {address,createEvaluator,formatValue} from './engine.mjs';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let closeCurrent=()=>{};
 export const closeFilterMenu=()=>closeCurrent();
@@ -45,7 +45,7 @@ export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid,pr
     else {
       const initial=op==='custom'&&rule?.type==='custom'?rule.conditions:[{operator:op==='between'?'greaterThanOrEqual':op==='custom'?'equal':op,value:''},...(op==='between'?[{operator:'lessThanOrEqual',value:''}]:[])];
       $('.filter-custom').innerHTML=`<h3>사용자 지정 자동 필터</h3><p>${esc(title)} · ${kind==='date'?'날짜는 YYYY-MM-DD로 입력하세요.':kind==='text'?'*는 여러 문자, ?는 한 문자, ~는 와일드카드 이스케이프입니다.':'숫자를 입력하세요.'}</p>${[0,1].map(i=>`${i?'<label class="filter-join"><select id="filter-join"><option value="and">그리고 (AND)</option><option value="or">또는 (OR)</option></select></label>':''}<div class="filter-condition"><select id="filter-op-${i}" aria-label="${i+1}번째 조건">${i?'<option value="">(조건 없음)</option>':''}${operators.filter(([v])=>kind==='text'||!['beginsWith','endsWith','contains','notContains'].includes(v)).map(([v,label])=>`<option value="${v}">${label}</option>`).join('')}</select><input id="filter-value-${i}" aria-label="${i+1}번째 조건 값" type="${kind==='date'?'date':'text'}"></div>`).join('')}`;
-      initial.forEach((c,i)=>{if(i>1)return;$(`#filter-op-${i}`).value=c.operator;$(`#filter-value-${i}`).value=kind==='date'&&c.value!==''&&Number.isFinite(Number(c.value))?new Date(Date.UTC(1899,11,31)+(Number(c.value)-(Number(c.value)>=60?1:0))*86400000).toISOString().slice(0,10):c.value;});
+      initial.forEach((c,i)=>{if(i>1)return;$(`#filter-op-${i}`).value=c.operator;$(`#filter-value-${i}`).value=kind==='date'&&c.value!==''&&Number.isFinite(Number(c.value))?formatValue(Number(c.value),{format:'date'},book):c.value;});
       if(op==='custom'&&rule?.type==='custom')$('#filter-join').value=rule.join;
     }position();$('.filter-custom input').focus();
   }
@@ -65,7 +65,7 @@ export function openFilterMenu({book,sheet,column,anchor,apply,sort,focusGrid,pr
       next={type:'top',top:$('#filter-top').value==='top',percent,count};
     }else{
       const conditions=[0,1].map(i=>({operator:$(`#filter-op-${i}`).value,value:$(`#filter-value-${i}`).value})).filter(c=>c.operator);
-      if(kind!=='text'&&conditions.some(c=>c.value.trim()===''||!Number.isFinite(kind==='date'?dateNumber(c.value):Number(c.value)))){$('.filter-error').textContent='올바른 조건 값을 입력하세요.';return;}
+      if(kind!=='text'&&conditions.some(c=>c.value.trim()===''||!Number.isFinite(kind==='date'?dateNumber(c.value,book):Number(c.value)))){$('.filter-error').textContent='올바른 조건 값을 입력하세요.';return;}
       next={type:'custom',kind,join:$('#filter-join').value,conditions};
     }
     apply(next);close();
