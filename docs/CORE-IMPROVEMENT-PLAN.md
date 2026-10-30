@@ -49,3 +49,7 @@
 근거: [인쇄 영역](https://support.microsoft.com/en-us/excel/set-or-clear-a-print-area-on-a-worksheet), [반복 제목](https://support.microsoft.com/en-us/excel/repeat-specific-rows-or-columns-on-every-printed-page), [페이지 맞춤과 수동 나눔](https://support.microsoft.com/en-au/excel/scale-a-worksheet), [페이지 순서](https://support.microsoft.com/en-au/excel/page-setup).
 
 검증 결과: [최종 CI](https://github.com/beaur8-prog/sheet-studio/actions/runs/41071955387), [상세 기록](../VALIDATION.md). 최종 앱 소스는 `8a900e9`이며 뒤의 문서 정리 커밋은 앱 코드를 바꾸지 않는다.
+
+## 0.7.31 추가 개선
+
+사용자의 5시간 추가 작업 요청에 따라 [추가 계획과 재현·수정·검증 기록](CORE-FIVE-HOUR-20261031.md)을 작성했다. 동적 배열 4개 함수·스필 편집/복사/저장과 100만 결과, 외부 통합 문서 연결 보존, 피벗 원본 계산, 페이지 설정·머리글/바닥글과 차트/이미지의 시트 위치 인쇄를 연결했다. 지원 한도와 실제 Excel에서 검증하지 못한 범위는 각 사용 안내에 구분한다. 공개 배포는 계속 별도 요청 때만 진행한다.

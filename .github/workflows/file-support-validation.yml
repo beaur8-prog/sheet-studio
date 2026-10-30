@@ -19,7 +19,7 @@ jobs:
             platform: linux
             arch: x64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       SHEET_STUDIO_ADHOC: '1'
     steps:
@@ -61,7 +61,7 @@ jobs:
       - name: Verify packaged table, formula, chart and cross-document scenarios
         shell: bash
         run: |
-          for spec in table-editing let chart-axis clipboard-types style-defaults recalculation bulk-text; do
+          for spec in table-editing let chart-axis clipboard-types style-defaults recalculation bulk-text dynamic-arrays array-views external-links pivot pivot-arrays print-layout print-settings print-objects large-spills; do
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node "tests/ui-$spec.mjs" --packaged
             else
