@@ -31,3 +31,5 @@ button.color-input{border-bottom:4px solid;width:28px;height:26px;font-weight:70
 .workbook-spinner{width:24px;height:24px;border:3px solid #ffffff44;border-top-color:#5ac98c;border-radius:50%;animation:workbook-spin .8s linear infinite}
 @keyframes workbook-spin{to{transform:rotate(360deg)}}
 .chart-axis-options{margin:14px 0;border-top:1px solid #ddd;padding-top:10px}.chart-axis-options>summary{cursor:pointer;font-weight:600}.chart-axis-options fieldset{margin:12px 0;padding:12px;border:1px solid #ddd;border-radius:4px}.chart-axis-options legend{padding:0 6px;font-weight:600}.chart-axis-options input{min-width:0}
+.chart-source-list{max-height:140px;overflow:auto;margin:4px 0 12px;padding:8px 12px 8px 30px;background:#f5f6f7;border:1px solid #e4e6e8;border-radius:4px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}.chart-source-list code{white-space:pre-wrap}
+#chart-range-option[hidden],#chart-source-references[hidden]{display:none}

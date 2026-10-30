@@ -26,6 +26,12 @@ export function refFormula(ref,workbook,names,offsets){
   const range=ref.range.split(':').map(a=>{const p=parseAddress(a);return p?address(p.r+offset,p.c).replace(/^([A-Z]+)(\d+)$/,'$$$1$$$2'):'#REF!';}).join(':');
   return "'"+name.replace(/'/g,"''")+"'!"+range;
 }
+// Imported charts may combine several sheets, names or disjoint ranges. Their
+// internal fallback rectangle is not a description of those original sources.
+export function chartSourceFormulas(chart,workbook){
+  const refs=chart.source?.formulas?.length?chart.source.formulas:(chart.series||[]).flatMap(s=>['nameRef','catRef','valRef','xRef','sizeRef'].map(key=>s[key]).filter(Boolean));
+  return [...new Set(refs.filter(ref=>ref.formula||ref.sheetId&&ref.range).map(ref=>refFormula(ref,workbook)))];
+}
 function chartCellValue(cell,evaluate,key,onCached,workbook){
   const original=evaluate.result?.(key),result=original?calculationDisplay(original):null,value=result?result.value:evaluate(key);if(original?.cached&&!original.stale)onCached?.();
   // A calculation error is current data, not a reason to resurrect an old
