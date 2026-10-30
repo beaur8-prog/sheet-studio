@@ -1,7 +1,7 @@
 import {tableBounds} from './table-schema.mjs';
 import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
-import {isErrorText} from './cell-values.mjs';
+import {isErrorText,EXCEL_ERROR_VALUES} from './cell-values.mjs';
 import {readDefaultStyleModel,applyDefaultStyleProbe,normalDigitWidth} from './xlsx-default-style.mjs';
 import {inheritedStyles,worksheetCellStyle} from './cell-style.mjs';
 import {readRelationships,resolvePart} from './chart-xml.mjs';
@@ -28,7 +28,7 @@ import {restoreChartParts,addChartParts} from './chart-xlsx.mjs';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_CELLS = MAX_DOCUMENT_CELLS;
 const DAY = 86_400_000;
-const errors = new Set(['#N/A', '#REF!', '#VALUE!', '#DIV/0!', '#NUM!', '#NAME?', '#NULL!']);
+const errors=new Set(EXCEL_ERROR_VALUES);
 const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$/;
 
 const uniqueId = () => globalThis.crypto?.randomUUID?.() || `sheet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -58,7 +58,7 @@ function stringRaw(value) {
   const text = String(value);
   // Preserve XLSX text types, including numeric-looking identifiers and '=…'.
   return /^[=']/.test(text) || numeric.test(text.trim()) || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(text.trim()) ||
-    /^(TRUE|FALSE)$/i.test(text) || errors.has(text) || /^#(?:CYCLE!|SPILL!)$/.test(text) ? "'" + text : text;
+    /^(TRUE|FALSE)$/i.test(text) || isErrorText(text) ? "'" + text : text;
 }
 function argb(color) {
   if (typeof color !== 'string') return undefined;

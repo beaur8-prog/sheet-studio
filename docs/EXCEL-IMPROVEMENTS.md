@@ -232,3 +232,10 @@
 - 메뉴를 **직접 서식 초기화**로 명확하게 표시했다. 조건부 서식과 표의 테마는 별도 기능으로 유지하며 조건부 서식이 있으면 관리 위치를 안내한다. Excel의 조건부 규칙까지 제거하는 Clear Formats 전체 동작을 구현했다고 표시하지 않는다.
 - 서식 복사와 서식만 붙여넣기에 원본 상세 서식·상속 서식·잠금 정보를 연결하고 대상의 오래된 문자별 글꼴이 다시 나타나지 않게 했다. 서식 복사는 선택한 가시 셀에만 적용하여 숨김 행 때문에 선택 범위 밖까지 칠하지 않는다. Esc로 취소할 수 있다. XLSM의 전체 초기화/상세 서식 복사는 연결 저장이 지원하기 전까지 안내한다.
 - 검증: 전체 검사 315개 중 314개 통과, Windows 전용 1개 건너뜀. Normal 재설정·빈 셀·원문/메모/링크·문자별 서식·배열 정의·잠금·대각선/회전 형식의 파일 모델을 검사했다. 실제 Mac Electron에서 문제 재현→수정→동일 동작 재검사, 초기화·실행 취소/다시 실행·서식 복사/취소·숨김 셀과 범위 밖 보호·저장/재열기를 통과했다. 문서 간 클립보드와 Normal/행/열 서식 UI도 다시 통과했다.
+
+### 27차: 최신 Excel 오류값 종류 보존
+
+- 엔진과 파일/클립보드에서 사용하던 오류 목록을 공통 정의로 맞췄다. 기존 7종 외에 GETTING_DATA·SPILL·CALC·FIELD·BLOCKED·UNKNOWN·CONNECT·BUSY·PYTHON 오류와 같은 글자의 텍스트를 구분한다. 수식의 오류 상수와 IFERROR도 이 종류를 인식한다.
+- 가져온 실제 오류 셀과 지원하지 않는 수식의 오류 캐시가 저장 때 일반 문자열로 바뀌지 않는다. 명시적인 텍스트는 계속 텍스트로 저장하며, 값 붙여넣기와 CSV의 문자열 구분에도 같은 정의를 적용한다. 스필·연결·Python 계산 기능 자체를 추가한 것은 아니다.
+- 검증: 전체 검사 316개 중 315개 통과, Windows 전용 1개 건너뜀. 16종 각각의 실제 오류·문자열·오류/문자열 캐시와 IFERROR 상수를 세 번 XLSX 왕복했다. 실제 Mac Electron에서 CALC/SPILL과 같은 글자의 텍스트를 계산하고 저장/재열기하여 구분을 확인했다.
+- 참고: [Microsoft SPILL](https://support.microsoft.com/en-us/excel/how-to-correct-a-spill-error), [CALC](https://support.microsoft.com/en-us/excel/how-to-correct-a-calc-error), [Python 관련 오류](https://support.microsoft.com/en-us/excel/python/troubleshoot-python-in-excel-errors).

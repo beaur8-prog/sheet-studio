@@ -1,3 +1,4 @@
+import {isErrorText,readErrorToken} from './cell-values.mjs';
 import {validateStoredParts} from './xlsx-part-store.mjs';
 import {validateSheetKind} from './sheet-kinds.mjs';
 import {validateDrawings} from './xlsx-drawings.mjs';
@@ -137,8 +138,8 @@ function tokenize(input) {
     }
     if(ch==='['){const token=readStructuredToken(input,at);if(!token)fail('#VALUE!');push('structured',token.value,start,token.end);at=token.end;continue;}
     const rest = input.slice(at);
-    const error = /^(#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|CYCLE!|SPILL!))/i.exec(rest);
-    if (error) { at += error[0].length; push('error', error[0].toUpperCase(), start, at); continue; }
+    const error=readErrorToken(rest);
+    if(error){at+=error.length;push('error',error,start,at);continue;}
     const sheetName=/^[\p{L}\p{N}_.$\\]+(?=!)/u.exec(rest);
     if(sheetName){at+=sheetName[0].length;push('word',sheetName[0],start,at);continue;}
     const number = /^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(rest);
@@ -317,7 +318,7 @@ function literal(raw) {
   if (/^false$/i.test(raw)) return false;
   if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw.trim())) return finite(Number(raw));
   if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(raw.trim())) return finite(Number(raw.trim().slice(0, -1)) / 100);
-  if (/^#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|NULL!|CYCLE!|SPILL!)$/.test(raw)) return new FormulaError(raw);
+  if(isErrorText(raw))return new FormulaError(raw);
   return raw;
 }
 function arraysFor(ctx,sheet){const indexes=ctx.storedArrays??=new Map();if(!indexes.has(sheet.id))indexes.set(sheet.id,storedArrayIndex(sheet));return indexes.get(sheet.id);}
