@@ -188,6 +188,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       if (typeof cell.note === 'string') entry.note = cell.note;
       else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
       if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result instanceof Date ? Math.round((cell.result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : cell.result?.error || cell.result; entry.cachedFormula = raw;if(typeof entry.cachedValue==='string'&&/^#/.test(entry.cachedValue))entry.cachedError=!!cell.result?.error; }
+      if(entry.xlsxMetadata?.vm!==undefined&&cell.formula&&entry.cachedValue!==undefined)entry.xlsxMetadata.result={value:entry.cachedValue,error:entry.cachedError===true};
       sheet.cells[cell.address] = entry;
     };
     source.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -245,7 +246,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
     const regions=[];for(const ref in s.cells){const cell=s.cells[ref];if(cell.xlsxFormula?.dynamic)regions.push({ref,...tableBounds(cell.xlsxFormula.ref||ref)});}
     if(regions.length)importedArrays.set(s.id,regions);
     if(!regions.length)continue;const arrays=storedArrayIndex(s,{regions});
-    for(const ref in s.cells){const cell=s.cells[ref],p=coordinates(ref),array=p&&arrays.at({r:p.row,c:p.col});if(!array||array.ref===ref||cell.raw?.startsWith('='))continue;const scalar=toScalar(cell.raw);cell.cachedValue=scalar&&typeof scalar==='object'?scalar.error||'':scalar??'';cell.cachedError=!!(scalar&&typeof scalar==='object'&&scalar.error);cell.cachedFormula='';cell.raw='';}
+    for(const ref in s.cells){const cell=s.cells[ref],p=coordinates(ref),array=p&&arrays.at({r:p.row,c:p.col});if(!array||array.ref===ref||cell.raw?.startsWith('='))continue;const scalar=toScalar(cell.raw);cell.cachedValue=scalar&&typeof scalar==='object'?scalar.error||'':scalar??'';cell.cachedError=!!(scalar&&typeof scalar==='object'&&scalar.error);cell.cachedFormula='';if(cell.xlsxMetadata){cell.xlsxMetadata.array=array.ref;cell.xlsxMetadata.result={value:cell.cachedValue,error:cell.cachedError};}cell.raw='';}
   }
   restoreTableFilterVisibility(result);
   for(const s of result.sheets)if(s.autoFilter&&!s.autoFilter.unsupported?.length)applyFilters(result,s);
@@ -473,5 +474,6 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if(workbook.xlsxDefaultStyle!==undefined){normalProbe='_SheetStudio_Normal';for(let n=2;book.getWorksheet(normalProbe);n++)normalProbe='_SheetStudio_Normal_'+n;const probe=book.addWorksheet(normalProbe);probe.getCell('A1').value=0;probe.getCell('A1').style=plainCopy(workbook.xlsxStyles[workbook.xlsxDefaultStyle].style);}
   const baseBytes=await applyDefaultStyleProbe(new Uint8Array(await book.xlsx.writeBuffer()),normalProbe),pivotBytes = await addPivotParts(baseBytes,workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
-  return { data:await addArrayMetadata(await addExternalLinks(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook),workbook,exportNames,dynamicArrays), mime: XLSX_MIME, extension: 'xlsx' };
+  const metadataResult=(sheet,ref,array)=>{const cell=sheet.cells[ref],result=detailed?.(workbook,sheet.id,ref),output=array?.cached?originalCachedResult(cell):cell?.raw?.startsWith('=')?cachedResult(evaluate,workbook,sheet,ref,cell,detailed,true):result?.error?{error:result.error}:result?result.value:evaluate(workbook,sheet.id,ref);return {value:output&&typeof output==='object'?output.error:output??'',error:!!(output&&typeof output==='object'&&output.error)};};
+  return { data:await addArrayMetadata(await addExternalLinks(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook),workbook,exportNames,dynamicArrays,metadataResult), mime: XLSX_MIME, extension: 'xlsx' };
 }

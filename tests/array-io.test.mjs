@@ -6,6 +6,8 @@ import ExcelJS from 'exceljs';
 import {createWorkbook,createEvaluator,formulaForXlsx,formulaForEditing,serializeWorkbook,parseWorkbook} from '../src/engine.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
 import {xml,child,children,all,attr,stringify,readRelationships,resolvePart} from '../src/chart-xml.mjs';
+import {valueMetadataFixture} from './fixtures/value-metadata.mjs';
+import {structuralWorkbookPlan} from '../src/workbook-structure.mjs';
 
 const fixture=()=>fs.readFile(new URL('./fixtures/xlsxwriter-dynamic.xlsx',import.meta.url));
 async function cellXML(bytes,ref){const zip=await JSZip.loadAsync(bytes),doc=xml(await zip.file('xl/worksheets/sheet1.xml').async('string'));return all(doc,'c').find(c=>attr(c,'r')===ref);}
@@ -63,4 +65,24 @@ test('imported supported spills release cache-only cells while retaining explici
  const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'=SEQUENCE(10000)'},A2:{raw:'',style:{background:'#abcdef'},note:'Keep this note'}};
  const loaded=await readSpreadsheet((await writeSpreadsheet(b)).data,'compact.xlsx'),target=loaded.sheets[0];assert.equal(Object.keys(target.cells).length,2);assert.equal(target.cells.A2.style.background.toUpperCase(),'#ABCDEF');assert.equal(target.cells.A2.note,'Keep this note');assert.equal(target.cells.A2.cachedValue,undefined);assert.equal(createEvaluator(loaded,loaded.activeSheetId)('A10000'),10000);
  target.cells.A1.raw='=SEQUENCE(2)';const again=await readSpreadsheet((await writeSpreadsheet(loaded)).data,'small.xlsx');assert.equal(Object.keys(again.sheets[0].cells).length,2);assert.equal(createEvaluator(again,again.activeSheetId)('A3'),'');
+});
+
+test('unchanged dynamic followers retain their original value-metadata pointers instead of losing them during cache compaction',async()=>{
+ let bytes=await valueMetadataFixture();
+ for(let round=0;round<3;round++){const b=await readSpreadsheet(bytes,'metadata.xlsx'),s=b.sheets[0];assert.equal(s.cells.A2.raw,'');assert.equal(s.cells.A2.xlsxMetadata.vm,1);bytes=(await writeSpreadsheet(parseWorkbook(serializeWorkbook(b)))).data;for(const ref of ['A1','A2','D2','G2'])assert.equal(attr(await cellXML(bytes,ref),'vm'),'1',ref);}
+});
+
+test('value metadata follows the original typed result, never a changed or removed spill value',async()=>{
+ const b=await readSpreadsheet(await valueMetadataFixture(),'metadata.xlsx'),s=b.sheets[0];s.cells.A1.raw='=SEQUENCE(2)';s.cells.D1.raw='=SEQUENCE(3,1,10)';delete s.cells.G1;b.referenceCachesValid=false;const bytes=(await writeSpreadsheet(b)).data;
+ for(const ref of ['A1','A2','D2','G2'])assert.equal(attr(await cellXML(bytes,ref),'vm'),'',ref);assert.equal(child(await cellXML(bytes,'D2'),'v').textContent,'11');assert.equal(s.cells.G2.note,'metadata note');
+ const same=await readSpreadsheet(await valueMetadataFixture(),'same.xlsx');same.sheets[0].cells.Z1={raw:'unrelated edit'};same.referenceCachesValid=false;const unchanged=(await writeSpreadsheet(same)).data;for(const ref of ['A1','A2','D2','G2'])assert.equal(attr(await cellXML(unchanged,ref),'vm'),'1',ref);
+ const future=await readSpreadsheet(await valueMetadataFixture({unknown:true}),'future.xlsx');future.referenceCachesValid=false;const preserved=(await writeSpreadsheet(future)).data;for(const ref of ['A1','A2'])assert.equal(attr(await cellXML(preserved,ref),'vm'),'1');assert.equal(createEvaluator(future,future.activeSheetId).result('A2').stale,true);
+ const broken=parseWorkbook(serializeWorkbook(same));broken.sheets[0].cells.A2.xlsxMetadata.array='A0';assert.throws(()=>parseWorkbook(JSON.stringify(broken)),/메타데이터/);
+});
+
+test('structural movement rebases metadata owners and formula/cache signatures together',async()=>{
+ let b=await readSpreadsheet(await valueMetadataFixture(),'metadata.xlsx'),id=b.activeSheetId;b=structuralWorkbookPlan(b,id,{axis:'r',index:0,count:1,delta:1});assert.equal(b.sheets[0].cells.A3.xlsxMetadata.array,'A2');assert.equal(createEvaluator(b,id)('A3'),2);let bytes=(await writeSpreadsheet(b)).data;assert.equal(attr(await cellXML(bytes,'A2'),'vm'),'1');assert.equal(attr(await cellXML(bytes,'A3'),'vm'),'1');
+ b=structuralWorkbookPlan(b,id,{axis:'c',index:0,count:1,delta:1});assert.equal(b.sheets[0].cells.B3.xlsxMetadata.array,'B2');bytes=(await writeSpreadsheet(b)).data;assert.equal(attr(await cellXML(bytes,'B3'),'vm'),'1');
+ const future=await readSpreadsheet(await valueMetadataFixture({unknown:true}),'future.xlsx');future.sheets[0].cells.A1.raw='=_xlfn.FUTUREARRAY(A2,3)';future.sheets[0].cells.A1.cachedFormula=future.sheets[0].cells.A1.raw;future.sheets[0].cells.A1.xlsxFormula.raw=future.sheets[0].cells.A1.raw;future.sheets[0].cells.A1.xlsxFormula.formula='_xlfn.FUTUREARRAY(A2,3)';future.sheets[0].cells.A1.xlsxMetadata.raw=future.sheets[0].cells.A1.raw;
+ const moved=structuralWorkbookPlan(future,future.activeSheetId,{axis:'r',index:0,count:1,delta:1});assert.equal(moved.sheets[0].cells.A2.cachedFormula,'=_xlfn.FUTUREARRAY(A3,3)');assert.equal(moved.sheets[0].cells.A3.xlsxMetadata.array,'A2');bytes=(await writeSpreadsheet(moved)).data;assert.equal(attr(await cellXML(bytes,'A3'),'vm'),'1');
 });

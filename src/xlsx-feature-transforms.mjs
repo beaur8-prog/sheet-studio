@@ -24,8 +24,11 @@ export function transformPreservedFeatures(sheet,{reference=f=>f,formula=f=>f,re
     if(feature.dataValidations){feature.dataValidations=transform(feature.dataValidations,'dataValidations');if(!feature.dataValidations)delete feature.dataValidations;}
     if(feature.conditionalFormatting)feature.conditionalFormatting=feature.conditionalFormatting.map(s=>transform(s,'conditionalFormatting')).filter(Boolean);
   }
-  const cells=unwrap(sheet.cells);for(const key in cells)if(cells[key].xlsxFormula){
-    const cell=sheet.cells[key],original=cell.xlsxFormula;original.raw=formula(original.raw);original.formula=formula(original.formula);
-    if(original.ref){original.ref=reference(original.ref);if(original.ref.includes('#REF!'))delete cell.xlsxFormula;}
+  const cells=unwrap(sheet.cells);for(const key in cells){
+    const cell=sheet.cells[key],original=cell.xlsxFormula;
+    if(original){original.raw=formula(original.raw);original.formula=formula(original.formula);if(original.ref){original.ref=reference(original.ref);if(original.ref.includes('#REF!'))delete cell.xlsxFormula;}}
+    if(cell.cachedFormula?.startsWith('='))cell.cachedFormula=formula(cell.cachedFormula);
+    if(cell.xlsxExternal?.raw)cell.xlsxExternal.raw=formula(cell.xlsxExternal.raw);
+    const metadata=cell.xlsxMetadata;if(metadata){if(metadata.raw.startsWith('='))metadata.raw=formula(metadata.raw);if(metadata.array){metadata.array=reference(metadata.array);if(metadata.array.includes('#REF!'))delete cell.xlsxMetadata;}}
   }
 }

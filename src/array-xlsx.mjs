@@ -3,6 +3,7 @@ import {xml,stringify,all,child,children,attr,readRelationships,resolvePart,rela
 import {capturePartTree,writeStoredParts,contentTypeWriter,validateStoredParts,validateStoredRelationships} from './xlsx-part-store.mjs';
 import {validatePreservedXML} from './xlsx-preservation-schema.mjs';
 import {worksheetParts} from './xlsx-preservation.mjs';
+import {tableBounds} from './table-schema.mjs';
 
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const XDA='http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray';
@@ -64,7 +65,7 @@ function dynamicRecord(doc){
   cellMetadata.setAttribute('count',String(children(cellMetadata,'bk').length));return children(cellMetadata,'bk').indexOf(record)+1;
 }
 
-export async function addArrayMetadata(bytes,book,names,arrays){
+export async function addArrayMetadata(bytes,book,names,arrays,exportedResult){
   const hasArrays=[...arrays.values()].some(a=>a.length);let staleCaches=false;
   if(book.referenceCachesValid===false)outer:for(const sheet of book.sheets)for(const ref in sheet.cells){const cell=sheet.cells[ref];if(cell.raw?.startsWith('=')&&cell.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){staleCaches=true;break outer;}}
   if(!book.xlsxMetadata&&!hasArrays&&!staleCaches)return bytes;
@@ -88,8 +89,15 @@ export async function addArrayMetadata(bytes,book,names,arrays){
   zip.file('xl/_rels/workbook.xml.rels',stringify(relDoc));
   for(const part of await worksheetParts(zip)){
     const sheet=book.sheets.find(s=>(names?.get(s.id)||s.name)===part.name);if(!sheet||!part.type.endsWith('/worksheet'))continue;
-    const patches=new Map();
-    for(const ref in sheet.cells){const cell=sheet.cells[ref],m=cell.xlsxMetadata;if(m?.raw===cell.raw)patches.set(ref,{...(m.cm!==undefined?{cm:m.cm}:{}),...(m.vm!==undefined?{vm:m.vm}:{})});}
+    const patches=new Map(),regions=arrays.get(sheet.id)||[],byRef=new Map(regions.map(a=>[a.ref,a]));
+    for(const ref in sheet.cells){const cell=sheet.cells[ref],m=cell.xlsxMetadata;if(!m)continue;const region=m.array&&byRef.get(m.array),point=m.array&&tableBounds(ref),anchor=m.array&&sheet.cells[m.array];
+      const same=m.array?cell.raw===''&&anchor?.xlsxFormula?.dynamic&&anchor.raw===anchor.xlsxFormula.raw&&region&&!region.blocked&&point&&point.r1>=region.r1&&point.r1<=region.r2&&point.c1>=region.c1&&point.c1<=region.c2:m.raw===cell.raw;if(!same)continue;
+      const result=m.result&&exportedResult?.(sheet,ref,region),sameResult=!m.result||result&&Object.is(result.value,m.result.value)&&result.error===m.result.error;
+      // A compacted follower has no literal raw value. Reattach its original
+      // metadata only while the same anchor and typed result still own it.
+      if(m.array&&!sameResult)continue;
+      patches.set(ref,{...(m.cm!==undefined?{cm:m.cm}:{}),...(m.vm!==undefined&&sameResult?{vm:m.vm}:{})});
+    }
     for(const array of arrays.get(sheet.id)||[]){const cell=sheet.cells[array.ref],m=cell?.xlsxMetadata,original=cell?.xlsxFormula?.dynamic&&m?.raw===cell.raw?m.cm:undefined;patches.set(array.ref,{...patches.get(array.ref),cm:original||cm});}
     if(!patches.size)continue;
     const text=await zip.file(part.path).async('string');
