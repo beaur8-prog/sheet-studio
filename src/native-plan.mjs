@@ -1,3 +1,5 @@
+import {createColorResolver} from './spreadsheet-colors.mjs';
+import {nativeCellTransferError} from './native-cell-features.mjs';
 import {cloneData} from './clone.mjs';
 import {structureIndex,shiftIndexMap} from './structure-coordinates.mjs';
 import {conditionalFormula,shiftWorksheetFeatures} from './conditional.mjs';
@@ -60,6 +62,7 @@ export function recordNativeStructure(workbook,sheetId,axis,index,delta){
 export function buildNativePlan(workbook){
   const source=workbook.nativeSource;if(source?.format!=='xlsm')throw new Error('먼저 XLSM 통합 문서를 여세요.');
   const baseline=new Map(source.baseline.map(s=>[s.id,s]));
+  const resolve=createColorResolver(workbook.chartTheme,workbook.xlsxColors?'<styleSheet>'+workbook.xlsxColors+'</styleSheet>':undefined);
   const chartState=sheet=>({name:sheet.name,state:sheet.state,charts:(sheet.charts||[]).map(c=>Object.fromEntries(['id','title','type','grouping','x','y','width','height','legend','labels','plotVisibleOnly','xTitle','yTitle','rebuilt'].map(key=>[key,c[key]])))});
   for(const sheet of source.baseline.filter(s=>s.kind==='chart')){const current=workbook.sheets.find(s=>s.id===sheet.id);if(!current||!equal(chartState(current),chartState(sheet)))throw Error('XLSM의 차트 전용 시트 구성은 Excel에서 편집하거나 XLSX 사본으로 저장하세요.');}
   if(workbook.sheets.some(s=>s.kind==='chart'&&!baseline.has(s.id)))throw Error('새 차트 전용 시트는 XLSX로 저장하세요.');
@@ -67,6 +70,7 @@ export function buildNativePlan(workbook){
     const before=baseline.get(sheet.id),cells=[];
     for(const key of new Set([...Object.keys(before?.cells||{}),...Object.keys(sheet.cells)])){
       const old=before?.cells[key]||{raw:''},now=sheet.cells[key]||{raw:''},patch={address:key};
+      const transferError=nativeCellTransferError(workbook,before||sheet,key,old,now,{resolve});if(transferError)throw Error(transferError);
       if(old.raw!==now.raw)patch.raw=now.raw;
       const style={};for(const name of new Set([...Object.keys(old.style||{}),...Object.keys(now.style||{})]))if(!equal(old.style?.[name],now.style?.[name]))style[name]=now.style?.[name]??null;
       if(Object.keys(style).length)patch.style=style;

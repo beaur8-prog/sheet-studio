@@ -11,6 +11,7 @@ import JSZip from 'jszip';
 import {createWorkbook,createEvaluator,validateWorkbook} from '../src/engine.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
 import {sortRange} from '../src/filters.mjs';
+import {chartData} from '../src/chart-model.mjs';
 import {xml,stringify,all,child,attr} from '../src/chart-xml.mjs';
 import {tableFixture} from './tables-fixture.mjs';
 import {styleDefaultsFixture} from './fixtures/style-defaults.mjs';
@@ -24,7 +25,7 @@ const arrays=createWorkbook(),as=arrays.sheets[0];as.cells={A1:{raw:'Input'},A2:
 const styles=await readSpreadsheet(await styleDefaultsFixture(),'style.xlsx'),ss=styles.sheets[0];for(let r=2;r<=5;r++)ss.cells['C'+r]={raw:String(7-r)};sortRange(styles,ss,{r1:1,r2:4,c1:2,c2:2},2,false);ss.cells.F1={raw:'=SUM(C2:C5)'};cases.push({name:'inherited-sort',book:styles,refs:['C2','C3','C4','C5','F1'],poison:'F1'});
 const charts=chartFixture(),prototype=structuredClone(charts.sheets[0]);charts.sheets=[];
 for(const [i,variant] of chartCases.entries()){const s={...structuredClone(prototype),id:crypto.randomUUID(),name:'Chart'+(i+1),charts:[]};charts.sheets.push(s);const holder={...charts,sheets:[s]};addChart(holder,{...variant,title:variant.type+' '+variant.grouping,x:300,y:10,width:620,height:360,range:variant.type==='bubble'?'B1:D5':variant.type==='scatter'?'B1:C5':'A1:C5',valueAxis:{min:-20,max:100,majorUnit:20}});s.cells.F1={raw:'=SUM(B2:B5)'};}charts.activeSheetId=charts.sheets[0].id;cases.push({name:'chart-combinations',book:charts,refs:['F1'],poison:'F1',charts:chartCases.length});
-const expected=new Map();
+const expected=new Map(),expectedCharts=charts.sheets.map(s=>chartData(s.charts[0],s,charts).slice(0,s.charts[0].type==='pie'?1:128).map(series=>({values:series.values,labels:series.labels}))); 
 for(const item of cases){validateWorkbook(item.book);const calc=createEvaluator(item.book,item.book.sheets[0].id);expected.set(item.name,Object.fromEntries(item.refs.map(ref=>[ref,calc(ref)])));const zip=await JSZip.loadAsync((await writeSpreadsheet(item.book)).data),part='xl/worksheets/sheet1.xml',doc=xml(await zip.file(part).async('string')),cell=all(doc,'c').find(node=>attr(node,'r')===item.poison);assert.ok(child(cell,'f'));child(cell,'v').textContent='-999';zip.file(part,stringify(doc));await fs.writeFile(path.join(input,item.name+'.xlsx'),await zip.generateAsync({type:'uint8array'}));}
 const version=(await execute(soffice,['--version'],{timeout:30000})).stdout.trim(),files=cases.map(item=>path.join(input,item.name+'.xlsx'));
 // 0 = always recalculate; use only this test profile. The default is 1 (never).
@@ -34,7 +35,7 @@ try{
  await fs.writeFile(path.join(output,'conversion.log'),convertedResult.stdout+convertedResult.stderr);
  const results=[],differences=[];
  for(const item of cases){const file=path.join(converted,item.name+'.xlsx'),bytes=await fs.readFile(file),check=new ExcelJS.Workbook();await check.xlsx.load(bytes);const sheet=check.worksheets[0],values={},zip=await JSZip.loadAsync(bytes),document=xml(await zip.file('xl/worksheets/sheet1.xml').async('string'));for(const ref of item.refs){const node=all(document,'c').find(n=>attr(n,'r')===ref);assert.ok(node,item.name+' '+ref+' exists');const raw=child(node,'v')?.textContent;assert.notEqual(raw,undefined,item.name+' '+ref+' cache exists');const kind=attr(node,'t'),actual=kind==='str'||kind==='e'?raw:kind==='b'?raw==='1':Number(raw),want=expected.get(item.name)[ref];if(item.name==='arrays-names'&&ref==='C3'&&actual==='#NAME?'&&want===5)differences.push({case:item.name,ref,sheetStudio:want,libreOffice:actual,note:'Nested LET differs in LibreOffice 26.8, including fully prefixed and distinct-name probes. This run has no Microsoft Excel execution to resolve that external compatibility gap.'});else assert.equal(actual,want,item.name+' '+ref);values[ref]=actual;}
-  const loaded=validateWorkbook(await readSpreadsheet(bytes,item.name+'.xlsx'));if(item.tables)assert.equal(loaded.sheets[0].tables.length,item.tables);if(item.charts)assert.equal(loaded.sheets.reduce((n,s)=>n+(s.charts?.length||0),0),item.charts);
+  const loaded=validateWorkbook(await readSpreadsheet(bytes,item.name+'.xlsx'));if(item.tables)assert.equal(loaded.sheets[0].tables.length,item.tables);if(item.charts){assert.equal(loaded.sheets.reduce((n,s)=>n+(s.charts?.length||0),0),item.charts);for(const [i,s] of loaded.sheets.entries()){assert.equal(s.charts[0].type,chartCases[i].type);assert.deepEqual(chartData(s.charts[0],s,loaded).map(series=>({values:series.values,labels:series.labels})),expectedCharts[i],s.name+' chart series');}}
   if(item.name==='date1904')assert.equal(loaded.date1904,true);
   if(item.name==='inherited-sort'){assert.equal(sheet.getCell('C2').font.name,'Georgia');assert.equal(sheet.getCell('C2').alignment.textRotation,30);assert.equal(sheet.getCell('C5').font.name,'Arial');}
   results.push({case:item.name,status:differences.some(d=>d.case===item.name)?'passed_with_documented_difference':'passed',values,sheets:loaded.sheets.length,...(item.tables?{tables:item.tables}:{}),...(item.charts?{charts:item.charts}:{})});

@@ -36,6 +36,8 @@ try{
   const numbers=createWorkbook();numbers.sheets[0].cells={A1:{raw:'3'},A2:{raw:'2'},A3:{raw:'1'}};await load(numbers);await go('A2');await page.locator('[data-tab="데이터"]').click();await click('sort-asc');
   assert.deepEqual(await Promise.all(['A1','A2','A3'].map(value)),[1,2,3]);
   await go('A2');await page.locator('[data-tab="삽입"]').click();await click('chart-bar');assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].charts[0].range),'A1:A3');
-  assert.deepEqual(errors,[]);console.log('PASS: separated-table sort, undo/redo, partial-column expansion, XLSX save/reopen, numeric first row, chart current-region inference through both insertion paths');
+  // A file activation replaces the document even if an old settings dialog is open.
+  await go('A2');await page.locator('#grid').focus();await page.keyboard.press(process.platform==='darwin'?'Meta+1':'Control+1');await page.getByRole('dialog',{name:'셀 서식',exact:true}).waitFor();const replacement=createWorkbook();replacement.sheets[0].cells.A1={raw:'new document'};const other=structuredClone(replacement.sheets[0]);other.id='other';other.name='Other';replacement.sheets.push(other);await load(replacement);assert.equal(await page.locator('.backdrop').count(),0);await page.locator('[data-sheet="other"]').click();await settle();assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().activeSheetId),'other');
+  assert.deepEqual(errors,[]);console.log('PASS: separated-table sort, undo/redo, partial-column expansion, XLSX save/reopen, numeric first row, chart current-region inference through both insertion paths; new file dismisses old document dialogs');
 }catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/data-region-failure.png')});throw error;}
 finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

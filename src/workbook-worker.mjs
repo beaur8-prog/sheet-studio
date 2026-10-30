@@ -1,3 +1,4 @@
+import {assertNativeCellTransfers} from './native-cell-features.mjs';
 import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} from './tables.mjs';
 import {tableConversionPlan} from './table-conversion.mjs';
 import {tableAt,tableBounds,filteredRowsForSheet} from './table-schema.mjs';
@@ -141,6 +142,7 @@ async function handle(type, data) {
     const next = {...book,xlsxStyles:[...(book.xlsxStyles||[])], sheets: book.sheets.map(item => item.id === sheet.id ? target : item)};
     if(type==='sort-filter'){const filter=table?target.tables.find(t=>t.id===data.tableId).filter:target.autoFilter;sortFilterRange(next,{...target,autoFilter:filter},data.column,data.desc);}
     else sortRange(next, target, data.range, data.column, data.desc);
+    if(book.nativeSource)assertNativeCellTransfers(book,sheet,Object.entries(target.cells).map(([key,cell])=>({key,cell})),{styles:next.xlsxStyles});
     validateWorkbook(next);
     const token=crypto.randomUUID();prepared={token,book:next};
     return {cells: target.cells,xlsxStyles:next.xlsxStyles, autoFilter: target.autoFilter,...(table?{tableId:table.id,tableFilter:target.tables.find(t=>t.id===table.id).filter}:{}), token, description:cellDescription(target.cells)};
