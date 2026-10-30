@@ -14,9 +14,10 @@
 
 | 검사 | 근거 |
 |---|---|
-| 최종 전체 편집 회귀 | 소스 `c7083a2`의 [Windows](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035/job/124299746823)·[Ubuntu](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035/job/124299746555) 통과. Mac은 기존 OS 클립보드 검사 정체로 중단했으며, 앱 코드가 같은 `93f1b41`의 [Mac 전체 재실행](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130260091)은 진행 중 |
+| 최종 전체 편집 회귀 | 소스 `c7083a2`의 [Windows](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035/job/124299746823)·[Ubuntu](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035/job/124299746555) 통과. Mac은 기존 OS 클립보드 검사 정체로 중단했으며, 앱 코드가 같은 `93f1b41`의 [Mac 전체 재실행](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130260091)도 통과. 최종 세 OS 전체 회귀 완료 |
 | 클립보드 검사 보강 | [CI 41130264726](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130264726), `93f1b41` — Windows·Mac·Ubuntu 모두 통과. 실제 IPC·HTML/TSV·표 행 높이·파일 왕복을 유지하며 OS 클립보드 접근은 격리 |
-| 최종 설치 패키지 | [CI 41124604211](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211), 같은 소스 — **Windows x64·Mac arm64·Ubuntu x64 모두 통과** |
+| 실제 Mac OS 클립보드 대조 | [CI 41132596663](https://github.com/beaur8-prog/sheet-studio/actions/runs/41132596663), `2d44665` — GitHub 제공 임시 Mac에서 실제 HTML/TSV 복사·수식/병합 붙여넣기·외부 표 행 높이와 문자열 보존 통과. 로컬·자체 호스트는 접근 전 거부 |
+| 최종 설치 패키지 | [CI 41124604211](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211), `c7083a2`의 같은 앱 동작 — **Windows x64·Mac arm64·Ubuntu x64 모두 통과** |
 | 이전 자료형 수정판 전체 회귀 | [CI 41116736905](https://github.com/beaur8-prog/sheet-studio/actions/runs/41116736905), `8526fec` — 세 OS 모두 통과. 이후 배열 조건 보강은 최종 소스의 별도 검사에 포함 |
 
 최종 패키지 검사는 설치·재설치·제거와 다른 앱의 등록 정보 보존, Mac Launch Services, 설치한 Ubuntu DEB의 MIME·아이콘·창 식별자, 파일 연결 실행과 격리 프로필의 편집·저장·복구를 포함한다. 운영체제마다 편집 시나리오 62개와 추가 세로형 100만 셀 검사, 패키지의 핵심 시나리오 20개를 실행했다. 이는 Microsoft Excel 실행 검사가 아니다.
@@ -35,7 +36,9 @@ LibreOffice 26.8.0.3에서 출력 캐시를 지운 기본 배열 17개는 일치
 
 ### 로컬 앱 후보
 
-최종 Mac arm64 후보의 ASAR SHA-256은 `5aa08c2a4d8dab8880011a3c47e83ca2b3a19679b23fca5a33d218e1c480e2e5`이다. 독립 Git 객체를 가진 전용 보관본과 앱 전체를 `~/Library/Caches/SheetStudioWork/core-five-hour-20261031/`에 준비했다. 화면 잠금 상태에서 현재 설치된 앱과 사용자 복구 프로필을 종료·교체하지 않았다. 보관 위치의 앱에서도 격리 IPC·빠른 입력·정상 종료와 복구 검사를 통과했다. 실제 설치·실행 여부는 종료 시점의 잠금 상태를 다시 확인해 기록한다.
+최종 Mac arm64 후보의 ASAR SHA-256은 `5aa08c2a4d8dab8880011a3c47e83ca2b3a19679b23fca5a33d218e1c480e2e5`이다. 독립 Git 객체를 가진 전용 보관본과 앱 전체를 `~/Library/Caches/SheetStudioWork/core-five-hour-20261031/`에 준비했다. 화면 잠금 상태에서 현재 설치된 앱과 사용자 복구 프로필을 종료·교체하지 않았다. 보관 위치의 앱에서도 격리 IPC·빠른 입력·정상 종료와 복구 검사를 통과했다. 2026-10-31 06:44 KST의 종료 확인에서도 화면이 잠겨 있었고 설치된 앱은 0.7.30이었다. 사용자 앱·문서·프로필을 종료하거나 교체하지 않았으며, 검증한 0.7.31 후보를 별도로 준비했다. 중복 임시 체크아웃·빌드·완료한 테스트 프로필은 정리했다.
+
+요청한 01:11–06:11 KST의 5시간 개선 구간 뒤, 기존 Mac OS 클립보드 검사의 정체를 확인하고 검증 도구·별도 실제 OS 대조·Mac 전체 재검사를 마무리했다. 최종 검수 확인은 06:44 KST다.
 
 ## 2026-10-30 · 핵심 개선 계획과 1차 인쇄 호환성 (0.7.30 개발, 미배포)
 

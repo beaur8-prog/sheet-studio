@@ -207,7 +207,7 @@ ISNUMBER·ISTEXT·ISNONTEXT·ISLOGICAL·ISBLANK·ISERROR·ISERR·ISNA, ERROR.TYP
 
 ### 종료 검증: 마지막 수정판과 앱 보관
 
-마지막 앱 동작 변경 `c7083a2`의 [설치 패키지 검사](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211)는 Windows x64·Mac arm64·Ubuntu x64에서 모두 통과했다. 설치·파일 연결·다른 앱의 공유 등록 정보 보존과 패키지의 편집 묶음 20개를 포함한다. 계산 응답 전 빠른 편집은 각 OS에서 결과 셀과 배열 밖 입력을 각각 10회 검사했고, 즉시 저장·진행 중 한글 편집·리본/시트 이동·정상 종료 후 복구도 통과했다. 첫 [전체 편집 회귀 41124600035](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035)는 Windows·Ubuntu에서 통과했다. Mac은 기존 OS 클립보드 검사 정체로 중단했고, 검증 경로를 격리한 [Mac 전체 재실행 41130260091](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130260091)을 진행한다. 앱 동작과 프로덕션 파일은 같다.
+마지막 앱 동작 변경 `c7083a2`의 [설치 패키지 검사](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211)는 Windows x64·Mac arm64·Ubuntu x64에서 모두 통과했다. 설치·파일 연결·다른 앱의 공유 등록 정보 보존과 패키지의 편집 묶음 20개를 포함한다. 계산 응답 전 빠른 편집은 각 OS에서 결과 셀과 배열 밖 입력을 각각 10회 검사했고, 즉시 저장·진행 중 한글 편집·리본/시트 이동·정상 종료 후 복구도 통과했다. 첫 [전체 편집 회귀 41124600035](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035)는 Windows·Ubuntu에서 통과했다. Mac은 기존 OS 클립보드 검사 정체로 중단했고, 검증 경로를 격리한 [Mac 전체 재실행 41130260091](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130260091)은 통과했다. 앱 동작과 프로덕션 파일은 같다.
 
 마지막 패키지의 100만 결과 관찰값(각 운영체제의 CI 기기, 성능 보장 수치가 아님):
 
@@ -238,3 +238,20 @@ ISNUMBER·ISTEXT·ISNONTEXT·ISLOGICAL·ISBLANK·ISERROR·ISERR·ISNA, ERROR.TYP
 워크플로에는 운영체제 선택(기본값은 기존처럼 세 OS 전체)과 각 시나리오 시작 로그를 추가했다. 변경한 클립보드 검사만 세 OS에서 확인하고 Mac 전체 회귀를 별도로 다시 실행한다. 앱 동작·프로덕션 파일·서명한 후보는 이 검증 도구 보강으로 바뀌지 않았다.
 
 클립보드 검사 보강 `93f1b41`의 [세 OS 집중 검사 41130264726](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130264726)는 Windows·Mac·Ubuntu 모두 통과했다. 같은 도구로 별도 보관한 최종 Mac 패키지도 통과했으며, 불균등 행 높이와 병합 셀의 실제 화면을 다시 확인했다. 새 도구의 검증은 기존에 중단한 실행의 통과를 의미하지 않으며, Mac 전체 회귀 재실행과 구분한다.
+
+격리 검사가 실제 OS 경로를 대신하지 않도록 별도 `tests/ui-native-clipboard.mjs` 대조를 추가했다. [CI 41132596663](https://github.com/beaur8-prog/sheet-studio/actions/runs/41132596663), 소스 `2d44665`의 GitHub 제공 임시 Mac에서 실제 신뢰 출처 IPC의 HTML/TSV 쓰기와 읽기, 수식/병합 셀의 OS 붙여넣기, 외부 HTML 표의 행 높이·문자열 보존과 정상 종료가 모두 통과했다. 호출별 30초 한도와 단계별 JSON 결과를 남긴다. `GITHUB_ACTIONS`와 `RUNNER_ENVIRONMENT=github-hosted`를 함께 요구하며 일반 로컬·CI 표식만 설정한 경우·자체 호스트의 세 거부 조건도 앱 시작 전에 확인했다. 사용자 Mac의 실제 클립보드에는 접근하지 않았다.
+
+첫 네이티브 대조 `41131738589`는 외부 HTML의 “42”를 숫자 원문 `42`로 가정한 검사 기대값 때문에 실패했다. [기존 표 교환 규약](STUDIO-CLIPBOARD.md)은 외부 표를 표시 문자열로 유지한다. 앱을 바꾸지 않고 텍스트 원문과 실제 값 “42”를 함께 검사하도록 바로잡은 뒤 전체 대조가 통과했다. 기존 정체 실행, 검사 기대값 실패, 앱의 실제 복사·붙여넣기 검증 결과를 구분한다.
+
+
+### 최종 종료 확인
+
+**2026-10-31 06:44 KST 검수 완료 확인.** 요청한 01:11–06:11의 5시간 개선 구간을 수행한 뒤, 기존 Mac 클립보드 검사의 정체와 검수 기대값을 정리하고 별도 실제 OS 대조·마지막 Mac 전체 회귀를 끝내는 종료 검증을 추가 진행했다.
+
+- 마지막 앱 동작 변경은 `c7083a2`다. 이후 변경은 문서·소스의 후행 공백·검증 도구뿐이며, 프로덕션 산출물의 바이트 단위 동일성과 앱 실행 소스에 의미 있는 차이가 없음을 확인했다.
+- [Windows 전체 회귀](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035/job/124299746823), [Ubuntu 전체 회귀](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035/job/124299746555), [Mac 전체 후속 회귀](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130260091/job/124319050271)가 모두 통과했다. 각 OS의 편집 시나리오 62개와 추가 세로형 100만 셀 검사를 포함한다. 중단한 첫 Mac 실행을 통과로 세지 않았다.
+- [세 OS 설치 패키지 검사](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211)의 Windows 설치·재설치/제거·다른 앱의 등록 보존, Mac/Linux 지원 앱 연결과 핵심 편집 묶음 20개, [격리한 클립보드 세 OS 검사](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130264726), [실제 Mac OS 클립보드 대조](https://github.com/beaur8-prog/sheet-studio/actions/runs/41132596663)도 통과했다.
+- 단위 검사 415개 중 Windows는 415개 통과, Mac·Ubuntu는 414개 통과·Windows 전용 1개 제외다. 실패는 0개이며 로컬 업데이트 검사 17개도 통과했다. 실제 Microsoft Excel/VBA를 새로 실행한 검증과는 구분한다.
+- 소스·앱·검증 기록은 `~/Library/Caches/SheetStudioWork/core-five-hour-20261031/`의 독립 보관본에 남겼다. Git 객체 연결 검사를 통과했으며 중복 임시 체크아웃과 약 291MiB의 임시 앱, 완료한 테스트 프로필을 제거했다. 최종 앱과 재현 자료·결과 기록은 보존했다.
+- 06:44 KST에도 Mac 화면은 잠겨 있었다. `/Applications/Sheet Studio.app`의 0.7.30과 사용자 복구 프로필을 종료·교체하지 않았다. 별도 0.7.31 후보의 ASAR은 위의 `5aa08c2…`이며 격리 실행·편집·복구·서명 무결성 검사를 통과했다.
+- 수정은 GitHub main에 반영했다. 공개 릴리즈·설치 파일과 리토스 공유 페이지·기존 공유 URL은 이번 요청으로 변경하지 않았다. 공개 배포는 계속 별도의 “배포해줘” 요청 때 진행한다.
