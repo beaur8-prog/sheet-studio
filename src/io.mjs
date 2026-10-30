@@ -1,3 +1,4 @@
+import {tableBounds} from './table-schema.mjs';
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
 import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
@@ -245,20 +246,15 @@ function toScalar(raw) {
   if (errors.has(raw)) return { error: raw };
   return raw;
 }
-function applyStyle(target, style = {}) {
-  target.font = {
-    name: style.fontFamily || 'Calibri', size: Number(style.fontSize) || 11,
-    bold: !!style.bold, italic: !!style.italic, underline: !!style.underline,
-    ...(argb(style.color) ? { color: { argb: argb(style.color) } } : {}),
-  };
-  if (argb(style.background)) target.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(style.background) } };
-  target.alignment = {
-    horizontal: ['left', 'center', 'right', 'fill', 'justify', 'centerContinuous', 'distributed'].includes(style.align) ? style.align : undefined,
-    vertical: style.verticalAlign || 'middle', wrapText: !!style.wrap,
-  };
-  target.border = Object.fromEntries(Object.entries(cellBorders(style)).map(([side,edge])=>[side,edge?{style:edge.style,color:{argb:'FF'+edge.color.slice(1).toUpperCase()}}:{}]));
-  target.numFmt = style.numberFormat && formatKind(style.numberFormat) === (style.format || 'general')
-    ? style.numberFormat : formats[style.format] || 'General';
+function applyStyle(target, style = {},tableStyled=false) {
+  if(!tableStyled)return applyStyle(target,{...style,fontFamily:style.fontFamily||'Calibri',fontSize:Number(style.fontSize)||11,bold:!!style.bold,italic:!!style.italic,underline:!!style.underline,verticalAlign:style.verticalAlign||'middle',wrap:!!style.wrap,border:style.border??false,format:style.format||'general'},true);
+  const font={};for(const [key,field] of Object.entries({fontFamily:'name',fontSize:'size',bold:'bold',italic:'italic',underline:'underline'}))if(style[key]!==undefined)font[field]=style[key];
+  if(argb(style.color))font.color={argb:argb(style.color)};if(Object.keys(font).length)target.font={...target.font,...font};
+  if(Object.hasOwn(style,'background'))target.fill=argb(style.background)?{type:'pattern',pattern:'solid',fgColor:{argb:argb(style.background)}}:{type:'pattern',pattern:'none'};
+  const alignment={};if(style.align!==undefined)alignment.horizontal=['left','center','right','fill','justify','centerContinuous','distributed'].includes(style.align)?style.align:undefined;
+  if(style.verticalAlign!==undefined)alignment.vertical=style.verticalAlign;if(style.wrap!==undefined)alignment.wrapText=style.wrap;if(Object.keys(alignment).length)target.alignment={...target.alignment,...alignment};
+  if(style.borders!==undefined||style.border!==undefined)target.border=Object.fromEntries(Object.entries(cellBorders(style)).map(([side,edge])=>[side,edge?{style:edge.style,color:{argb:'FF'+edge.color.slice(1).toUpperCase()}}:{}]));
+  if(style.format!==undefined||style.numberFormat!==undefined)target.numFmt=style.numberFormat&&formatKind(style.numberFormat)===(style.format||'general')?style.numberFormat:formats[style.format]||'General';
   if (Number.isInteger(style.decimals) && ['number', 'currency', 'accounting', 'percent'].includes(style.format)) {
     const digits = Math.min(12, Math.max(0, style.decimals));
     const fraction = digits ? '.' + '0'.repeat(digits) : '';
@@ -342,8 +338,8 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   const names = new Set(), exportNames = new Map();
   for (const sheet of workbook.sheets) {
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
-    if(sheet.defaultColumnWidth)target.properties.defaultColWidth=(sheet.defaultColumnWidth-5)/7;
-    if(sheet.defaultRowHeight)target.properties.defaultRowHeight=sheet.defaultRowHeight*3/4;
+    target.properties.defaultColWidth=((sheet.defaultColumnWidth||90)-5)/7;
+    target.properties.defaultRowHeight=(sheet.defaultRowHeight||25)*3/4;
     if(sheet.freeze?.rows||sheet.freeze?.cols)target.views=[{state:'frozen',xSplit:sheet.freeze.cols,ySplit:sheet.freeze.rows,topLeftCell:address(sheet.freeze.cols,sheet.freeze.rows),activeCell:'A1'}];
     exportNames.set(sheet.id,target.name);
     for(const [r,protection] of Object.entries(sheet.xlsxProtectionDefaults?.rows||{}))target.getRow(+r+1).protection=plainCopy(protection);
@@ -351,6 +347,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     const pageFilters=sheet.pivot?.filters.filter(f=>!sheet.pivot.rows.includes(f.field)&&!sheet.pivot.columns.includes(f.field))||[];
     const conditionalSheet=pageFilters.length?cloneData(sheet):sheet;if(pageFilters.length)for(let i=0;i<pageFilters.length+1;i++)shiftWorksheetFeatures(conditionalSheet,'r',0,1);exportConditional(target,conditionalSheet);
     pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
+    const tableRanges=(sheet.tables||[]).map(table=>tableBounds(table.range));
     for (const [addr, cell] of Object.entries(sheet.cells || {})) {
       if (!coordinates(addr)) continue;
       const pos=coordinates(addr), offset=pageFilters.length?pageFilters.length+1:0;
@@ -366,9 +363,10 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
         if(original?.value?.hyperlink&&typeof targetCell.value==='string'&&targetCell.value)targetCell.value={...plainCopy(original.value),text:targetCell.value};
       }
       const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!cell.style?.format||cell.style.format==='general');
-      const key=String(cell.xlsxStyle??'')+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
+      const tableStyled=tableRanges.some(b=>pos.row>=b.r1&&pos.row<=b.r2&&pos.col>=b.c1&&pos.col<=b.c2);
+      const key=(tableStyled?'T:':'N:')+String(cell.xlsxStyle??'')+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
       if(cachedStyle)targetCell.style=cachedStyle;
-      else{applyStyle(targetCell,cell.style);restoreCellStyle(targetCell,cell,workbook.xlsxStyles?.[cell.xlsxStyle]);if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);}
+      else{applyStyle(targetCell,cell.style,tableStyled);restoreCellStyle(targetCell,cell,workbook.xlsxStyles?.[cell.xlsxStyle]);if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);}
       if(cell.xlsxProtection)targetCell.style={...targetCell.style,protection:plainCopy(cell.xlsxProtection)};
       if(cell.xlsxValue?.value?.richText&&cell.xlsxValue.raw===cell.raw){const original=workbook.xlsxStyles?.[cell.xlsxStyle],delta=fontChanges(cell.style||{},original?.baseline||{},targetCell.font);if(Object.keys(delta).length)targetCell.value={richText:targetCell.value.richText.map(run=>({...run,font:{...run.font,...delta}}))};}
       if (typeof cell.note === 'string') targetCell.note = cell.note;

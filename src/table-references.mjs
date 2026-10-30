@@ -54,3 +54,9 @@ export function resolveStructuredReference(book,owner,position,tableName,selecto
   return areas.length===1?areas[0]:{areas};
 }
 export const escapeColumn=name=>String(name).replace(/['\[\]#@]/g,char=>"'"+char);
+
+export function rewriteStructuredSelector(selector,renames){
+  const parts=structuredParts(selector);if(!parts)return selector;const patches=[];
+  for(const column of parts.columns){const match=Object.entries(renames||{}).find(([name])=>name.toLocaleLowerCase()===column.name.toLocaleLowerCase());if(!match)continue;if(match[1]===null)return null;const thisRow=!column.escapedFirst&&column.text.trim().startsWith('@');patches.push({start:column.start,end:column.end,value:thisRow?'[@['+escapeColumn(match[1])+']]':'['+escapeColumn(match[1])+']'});}
+  for(const p of patches.reverse())selector=selector.slice(0,p.start)+p.value+selector.slice(p.end);return selector;
+}

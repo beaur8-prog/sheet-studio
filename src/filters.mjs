@@ -1,3 +1,4 @@
+import {tableCellStyle} from './table-style.mjs';
 import {currentRegion} from './data-region.mjs';
 import {cloneData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS} from './limits.mjs';
@@ -73,7 +74,7 @@ export function filterPredicates(book,sheet,evaluate,omitColumn=-1){
   const f=sheet.autoFilter;if(!f)return [];
   const conditional=Object.values(f.columns).some(r=>r.type==='color')?createConditionalEvaluator(book,sheet,evaluate):null;
   return Object.entries(f.columns).filter(([c])=>+c!==omitColumn).map(([c,rule])=>{
-    if(rule.type==='color')return {column:+c,test:(_value,r)=>normalizeColor({...sheet.cells[address(r,+c)]?.style,...conditional(r,+c,evaluate(address(r,+c)))}[rule.target])===normalizeColor(rule.color)};
+    if(rule.type==='color')return {column:+c,test:(_value,r)=>normalizeColor({...tableCellStyle(book,sheet,r,+c),...sheet.cells[address(r,+c)]?.style,...conditional(r,+c,evaluate(address(r,+c)))}[rule.target])===normalizeColor(rule.color)};
     const values=[];if(rule.type==='top'||rule.type==='average')for(let r=f.range.r1+1;r<=f.range.r2;r++)values.push(filterValue(sheet,evaluate,r,+c));
     return {column:+c,test:predicate(rule,values,book)};
   });
@@ -90,9 +91,9 @@ export function filterOptions(book,sheet,column){
   for(let r=b.r1+1;r<=b.r2;r++){
     if(!rules.every(({column,test})=>test(filterValue(sheet,evaluate,r,column),r)))continue;
     const value=filterValue(sheet,evaluate,r,column),key=valueKey(value),style=sheet.cells[address(r,column)]?.style;
-    const displayed={...style,...conditional(r,column,evaluate(address(r,column)))};for(const target of ['background','color']){const color=normalizeColor(displayed[target]);colors[target].set(color,(colors[target].get(color)||0)+1);}
-    if(!values.has(key))values.set(key,{key,value,label:value===''?'(빈 셀)':formatValue(value,style,book)});
-    if(value!==''){if(typeof value==='number'){if(style?.format==='date')dates++;else numbers++;}else texts++;}
+    const displayed={...tableCellStyle(book,sheet,r,column),...style,...conditional(r,column,evaluate(address(r,column)))};for(const target of ['background','color']){const color=normalizeColor(displayed[target]);colors[target].set(color,(colors[target].get(color)||0)+1);}
+    if(!values.has(key))values.set(key,{key,value,label:value===''?'(빈 셀)':formatValue(value,displayed,book)});
+    if(value!==''){if(typeof value==='number'){if(displayed.format==='date')dates++;else numbers++;}else texts++;}
   }
   const kind=dates>numbers&&dates>texts?'date':numbers>texts?'number':'text';
   const colorOptions=Object.fromEntries(Object.entries(colors).map(([target,list])=>[target,[...list].map(([color,count])=>({color,count})).sort((a,b)=>(a.color||'').localeCompare(b.color||''))]));

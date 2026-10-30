@@ -1,3 +1,4 @@
+import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} from './tables.mjs';
 import {tableAt,tableBounds} from './table-schema.mjs';
 import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
@@ -101,24 +102,25 @@ async function handle(type, data) {
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
+  if(type==='table-plan'){const table=sheet.tables?.find(t=>t.id===data.tableId);if(data.operation!=='create'&&!table)throw Error('표를 찾을 수 없습니다.');const plan=data.operation==='create'?createTablePlan(book,sheet,data.values):data.operation==='calculate'?calculatedColumnPlan(book,sheet,table,data.values):updateTablePlan(book,sheet,table,data.values);return finalizeTablePlan(book,sheet,plan,data.values);}
   if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);
   if (type === 'infer-region'){const table=tableAt(sheet,data.selection.r1,data.selection.c1);if(table){const b=tableBounds(table.range);return {...b,r2:b.r2-(table.totalsRow?1:0)};}return currentRegion(sheet,data.selection);}
   if (type === 'sort-plan') return inferSortPlan(book,sheet,data.selection,data.column);
   if (type === 'infer-filter') return inferFilterRange(sheet, data.selection);
   if (type === 'filter-options') {
-    const options = filterOptions(book, sheet, data.column), rule = sheet.autoFilter.columns[data.column];
-    const own = rule?.type !== 'color' && filterPredicates(book, sheet, evaluator(sheet.id)).find(predicate => predicate.column === data.column);
-    const original = rule?.type === 'values' ? rule.values.map(valueKey) : options.values.filter(value => !own || own.test(value.value)).map(value => value.key);
-    return {options, original};
+    const table=data.tableId?sheet.tables?.find(t=>t.id===data.tableId):null,view=table?{...sheet,autoFilter:table.filter}:sheet;
+    if(!view.autoFilter)throw Error('필터를 찾을 수 없습니다.');
+    const options = filterOptions(book,view,data.column),rule=view.autoFilter.columns[data.column];
+    const own=rule?.type!=='color'&&filterPredicates(book,view,evaluator(sheet.id)).find(predicate=>predicate.column===data.column);
+    const original=rule?.type==='values'?rule.values.map(valueKey):options.values.filter(value=>!own||own.test(value.value)).map(value=>value.key);
+    return {options,original};
   }
   if (type === 'filter') {
-    const target = {...sheet, autoFilter: structuredClone(sheet.autoFilter)};
-    if (data.column !== undefined) {
-      if (data.rule) target.autoFilter.columns[data.column] = data.rule; else delete target.autoFilter.columns[data.column];
-    }
-    applyFilters({...book, sheets: book.sheets.map(item => item.id === sheet.id ? target : item)}, target);
-    return target.autoFilter;
+    const table=data.tableId?sheet.tables?.find(t=>t.id===data.tableId):null,filter=structuredClone(table?.filter||sheet.autoFilter);if(!filter)throw Error('필터를 찾을 수 없습니다.');
+    if(data.column!==undefined){if(data.rule)filter.columns[data.column]=data.rule;else delete filter.columns[data.column];}
+    const target=table?{...sheet,tables:sheet.tables.map(t=>t.id===table.id?{...t,filter}:t)}:{...sheet,autoFilter:filter};
+    applyFilters({...book,sheets:book.sheets.map(item=>item.id===sheet.id?target:item)},{...target,autoFilter:filter});return filter;
   }
   if (type === 'sort-filter' || type === 'sort') {
     const table=data.tableId?sheet.tables?.find(t=>t.id===data.tableId):null;

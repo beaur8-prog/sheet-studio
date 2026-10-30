@@ -1,3 +1,4 @@
+import {unwrap} from './clone.mjs';
 import {xml,stringify,children,all,attr} from './chart-xml.mjs';
 
 /** Keep preserved XML references in step with supported sheet edits. Formula
@@ -21,8 +22,8 @@ export function transformPreservedFeatures(sheet,{reference=f=>f,formula=f=>f,re
     if(feature.dataValidations){feature.dataValidations=transform(feature.dataValidations,'dataValidations');if(!feature.dataValidations)delete feature.dataValidations;}
     if(feature.conditionalFormatting)feature.conditionalFormatting=feature.conditionalFormatting.map(s=>transform(s,'conditionalFormatting')).filter(Boolean);
   }
-  for(const cell of Object.values(sheet.cells))if(cell.xlsxFormula){
-    const original=cell.xlsxFormula;original.raw=formula(original.raw);original.formula=formula(original.formula);
+  const cells=unwrap(sheet.cells);for(const key in cells)if(cells[key].xlsxFormula){
+    const cell=sheet.cells[key],original=cell.xlsxFormula;original.raw=formula(original.raw);original.formula=formula(original.formula);
     if(original.ref){original.ref=reference(original.ref);if(original.ref.includes('#REF!'))delete cell.xlsxFormula;}
   }
 }

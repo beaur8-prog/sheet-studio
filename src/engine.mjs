@@ -1,6 +1,6 @@
 import {validateStoredParts} from './xlsx-part-store.mjs';
 import {validateTables,filteredRowsForSheet} from './table-schema.mjs';
-import {readStructuredToken,resolveStructuredReference} from './table-references.mjs';
+import {readStructuredToken,resolveStructuredReference,rewriteStructuredSelector} from './table-references.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 import {validatePreservedData,validatePreservedXML} from './xlsx-preservation-schema.mjs';
 import {MAX_DOCUMENT_CELLS, MAX_DOCUMENT_TEXT_CHARS, MAX_FORMULA_CELLS} from './limits.mjs';
@@ -820,6 +820,18 @@ export function formulaReference(workbook,sheetId,formula,options={}){
     return {sheetId:result.sheet.id,range:{r1:result.top,r2:result.top+result.rows-1,c1:result.left,c2:result.left+result.cols-1}};
   }catch{return null;}
 }
+export function rewriteTableFormula(formula,{tableName,newTableName=tableName,columns,implicit=false,materialize,allowBare=true}={}){
+  const offset=formula.startsWith('=')?1:0;let tokens;try{tokens=tokenize(formula.slice(offset));}catch{return formula;}const patches=[];
+  for(let i=0;i<tokens.length;i++){
+    const token=tokens[i],named=token.type==='word'&&token.value.toLocaleLowerCase()===tableName?.toLocaleLowerCase()&&!['(','!'].includes(tokens[i+1]?.value),following=named&&tokens[i+1]?.type==='structured'?tokens[i+1]:null,local=token.type==='structured'&&implicit&&tokens[i-1]?.type!=='word';
+    if(!following&&!local&&!(named&&allowBare))continue;const selector=following?.value||(local?token.value:'[#Data]'),changed=rewriteStructuredSelector(selector,columns);let value;
+    if(changed===null||newTableName===null&&!materialize)value='#REF!';else if(materialize)value=materialize({selector,tableName:named?tableName:null})||'#REF!';
+    else value=(named?newTableName:'')+(following||local?changed:'');
+    patches.push({start:token.start+offset,end:(following||token).end+offset,value});if(following)i++;
+  }
+  for(const p of patches.reverse())formula=formula.slice(0,p.start)+p.value+formula.slice(p.end);return formula;
+}
+
 export function absoluteFormula(formula,ownerSheet){
   const offset=formula.startsWith('=')?1:0,tokens=tokenize(formula.slice(offset)),patches=[];let previous;
   for(let i=0;i<tokens.length;i++){
