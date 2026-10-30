@@ -1,3 +1,4 @@
+import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
 import {cloneData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 import {cellBorders,borderSides,borderStyles} from './borders.mjs';
@@ -147,8 +148,11 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   // JSZip 3.10.2 exposes the central-directory size on its pinned compressed
   // entry. Check before ExcelJS inflates cell XML into its in-memory model.
   for(const file of Object.values(colorZip.files))if(!file.dir){const size=file._data?.uncompressedSize;if(!Number.isSafeInteger(size)||size<0)throw Error('XLSX 압축 정보를 읽을 수 없습니다.');expanded+=size;if(expanded>512*1024*1024)throw Error('압축 해제 후 512 MB 이하인 XLSX 파일을 선택하세요.');}
+  const preserved=await prepareWorksheetFeatures(colorZip);
+  const styleModels=[],styleIndexes=new Map(),styleObjects=new WeakMap();
+  const rememberStyle=(cell,baseline)=>{if(!Object.keys(cell.style||{}).length)return undefined;let index=styleObjects.get(cell.style);if(index!==undefined)return index;const key=JSON.stringify(cell.style);index=styleIndexes.get(key);if(index===undefined){index=styleModels.length;styleIndexes.set(key,index);styleModels.push({style:plainCopy(cell.style),baseline:plainCopy(baseline)});}styleObjects.set(cell.style,index);return index;};
   const book = new ExcelJS.Workbook();
-  try { await book.xlsx.load(data); }
+  try { await book.xlsx.load(preserved.data||data); }
   catch (error) { throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.', { cause: error }); }
   const resolveColor=createColorResolver(await colorZip.file('xl/theme/theme1.xml')?.async('string'),await colorZip.file('xl/styles.xml')?.async('string'));
   const dateOffset=book.properties.date1904?1462:0;
@@ -172,6 +176,9 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       else if (value?.text !== undefined) raw = stringRaw(value.text);
       else if (value?.error) raw = value.error;
       const entry = { raw, style };
+      const originalStyle=rememberStyle(cell,style);if(originalStyle!==undefined)entry.xlsxStyle=originalStyle;
+      if(value?.richText||value?.hyperlink)entry.xlsxValue={raw,value:plainCopy(value)};
+      if(cell.formula&&(value?.shareType==='array'||/_xlfn\.|_xlws\./i.test(cell.formula)))entry.xlsxFormula={raw,formula:cell.formula,...(value?.shareType==='array'?{shareType:'array',ref:value.ref}:{})};
       if (typeof cell.note === 'string') entry.note = cell.note;
       else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
       if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result instanceof Date ? Math.round((cell.result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : cell.result?.error || cell.result; entry.cachedFormula = raw; }
@@ -198,6 +205,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
     for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
     const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
     importConditional(source,sheet,resolveColor);
+    const features=preserved.features.get(source.name);if(features){for(const [ref,tip] of Object.entries(features.hyperlinkTips||{}))if(sheet.cells[ref]?.xlsxValue?.value?.hyperlink)sheet.cells[ref].xlsxValue.value.tooltip=tip;delete features.hyperlinkTips;sheet.xlsxFeatures=features;if(!sheet.unsupportedConditionalCount)delete features.conditionalFormatting;if(!Object.keys(features).length)delete sheet.xlsxFeatures;}
     sheet.merges = [...(source.model.merges || [])];
     return sheet;
   });
@@ -205,6 +213,8 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   const activeIndex = book.views?.[0]?.activeTab || 0;
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
   if(book.properties.date1904)result.date1904=true;
+  if(styleModels.length)result.xlsxStyles=styleModels;
+  if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
   await restoreWorksheetParts(data,result);
   await restoreFilterParts(data,result);
   await restoreChartParts(data,result);
@@ -249,6 +259,18 @@ function applyStyle(target, style = {}) {
     target.numFmt = style.format === 'percent' ? '0' + fraction + '%' :
       (style.format === 'currency' || style.format === 'accounting' ? '₩' : '') + '#,##0' + fraction;
   }
+}
+const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+const fontFields={fontFamily:'name',fontSize:'size',bold:'bold',italic:'italic',underline:'underline',color:'color'};
+function fontChanges(style,baseline,font){const changes={};for(const [key,field] of Object.entries(fontFields))if(!same(style[key],baseline[key]))changes[field]=font?.[field];return changes;}
+function restoreCellStyle(target,cell,original){
+  if(!original)return;const style=cell.style||{},baseline=original.baseline,generated=target.style,base=plainCopy(original.style);
+  const changes=fontChanges(style,baseline,generated.font);if(Object.keys(changes).length)base.font={...base.font,...changes};
+  if(!same(style.background,baseline.background))base.fill=generated.fill||{type:'pattern',pattern:'none'};
+  for(const [key,field] of Object.entries({align:'horizontal',verticalAlign:'vertical',wrap:'wrapText'}))if(!same(style[key],baseline[key])){base.alignment||={};base.alignment[field]=generated.alignment?.[field];}
+  if(!same(style.border,baseline.border)||!same(style.borders,baseline.borders))base.border={...base.border,...generated.border};
+  if(['format','numberFormat','decimals'].some(key=>!same(style[key],baseline[key])))base.numFmt=generated.numFmt;
+  target.style=base;
 }
 function safeSheetName(name, used) {
   const base = String(name || 'Sheet').replace(/[\\/*?:\[\]]/g, '_').replace(/^'|'$/g, '').slice(0, 31) || 'Sheet';
@@ -329,12 +351,17 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
         const result = cachedResult(evaluate, workbook, sheet, addr, cell);
         let formula=cell.raw;
         for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
-        targetCell.value = { formula: formulaForXlsx(formula).slice(1), ...(result === undefined ? {} : { result }) };
-      } else targetCell.value = toScalar(cell.raw);
+        const original=cell.xlsxFormula,keepOriginal=original?.raw===formula;
+        targetCell.value = { formula: keepOriginal?original.formula:formulaForXlsx(formula,original?.formula).slice(1),...(original?.shareType==='array'?{shareType:'array',ref:original.ref}:{}), ...(result === undefined ? {} : { result }) };
+      } else {
+        const original=cell.xlsxValue;targetCell.value=original?.raw===cell.raw?plainCopy(original.value):toScalar(cell.raw);
+        if(original?.value?.hyperlink&&typeof targetCell.value==='string'&&targetCell.value)targetCell.value={...plainCopy(original.value),text:targetCell.value};
+      }
       const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!cell.style?.format||cell.style.format==='general');
-      const key=JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
+      const key=String(cell.xlsxStyle??'')+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
       if(cachedStyle)targetCell.style=cachedStyle;
-      else{applyStyle(targetCell,cell.style);if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);}
+      else{applyStyle(targetCell,cell.style);restoreCellStyle(targetCell,cell,workbook.xlsxStyles?.[cell.xlsxStyle]);if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);}
+      if(cell.xlsxValue?.value?.richText&&cell.xlsxValue.raw===cell.raw){const original=workbook.xlsxStyles?.[cell.xlsxStyle],delta=fontChanges(cell.style||{},original?.baseline||{},targetCell.font);if(Object.keys(delta).length)targetCell.value={richText:targetCell.value.richText.map(run=>({...run,font:{...run.font,...delta}}))};}
       if (typeof cell.note === 'string') targetCell.note = cell.note;
     }
     for (const [index, width] of Object.entries(sheet.columnWidths || {})) {
@@ -353,5 +380,5 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   }
   const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
-  return { data, mime: XLSX_MIME, extension: 'xlsx' };
+  return { data:await addPreservedFeatures(data,workbook,exportNames), mime: XLSX_MIME, extension: 'xlsx' };
 }

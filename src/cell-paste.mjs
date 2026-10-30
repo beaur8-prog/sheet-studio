@@ -29,7 +29,7 @@ export function pastePlan(sheet, clip, start, options={}) {
     const sr=transpose?c%w:r%h,sc=transpose?r%h:c%w,source=clip.data[sr]?.[sc]||{raw:''};
     if(skipBlanks&&source.raw==='')continue;
     const key=address(targetRows[r],targetCols[c]),old=sheet.cells[key]||{raw:''};let cell;
-    if(mode==='formats')cell={...cloneData(old),style:cloneData(source.style||{})};
+    if(mode==='formats'){cell={...cloneData(old),style:cloneData(source.style||{})};if(source.xlsxStyle!==undefined)cell.xlsxStyle=source.xlsxStyle;else delete cell.xlsxStyle;}
     else {
       cell=mode==='all'?cloneData(source):cloneData(old);
       let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw):source.raw;

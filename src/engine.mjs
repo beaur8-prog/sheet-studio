@@ -1,3 +1,4 @@
+import {validatePreservedData,validatePreservedXML} from './xlsx-preservation-schema.mjs';
 import {MAX_DOCUMENT_CELLS, MAX_DOCUMENT_TEXT_CHARS, MAX_FORMULA_CELLS} from './limits.mjs';
 import {unwrap} from './clone.mjs';
 import {validateBorders} from './borders.mjs';
@@ -784,14 +785,18 @@ export function createEvaluator(workbook, sheetId) {
   return ref => guard(() => { ctx.steps = 0; return runCalculation(ctx,()=>readCell(ctx, ctx.sheet, ref)); });
 }
 
-export function formulaForXlsx(formula) {
+export function formulaForXlsx(formula,originalFormula) {
   const offset=formula.startsWith('=')?1:0;
   let tokens;try{tokens=tokenize(formula.slice(offset));}catch{return formula;}
+  const prefixes=new Map();if(originalFormula){try{const original=tokenize(originalFormula.replace(/^=/,''));original.forEach((token,i)=>{if(token.type==='word'&&original[i+1]?.value==='('&&/_(?:xlfn|xlws)\./i.test(token.value))prefixes.set(normalizeFunctionName(token.value),token.value);});}catch{}}
   const patches=[];
   tokens.forEach((token,i)=>{
-    if(token.type==='word'&&tokens[i+1]?.type==='op'&&tokens[i+1].value==='('&&XLSX_FUTURE_FUNCTIONS.has(token.value.toUpperCase()))patches.push({at:token.start+offset});
+    if(token.type!=='word'||tokens[i+1]?.value!=='(')return;
+    const original=prefixes.get(normalizeFunctionName(token.value));
+    if(original&&!/_(?:xlfn|xlws)\./i.test(token.value))patches.push({at:token.start+offset,end:token.end+offset,value:original});
+    else if(XLSX_FUTURE_FUNCTIONS.has(token.value.toUpperCase()))patches.push({at:token.start+offset,end:token.start+offset,value:'_xlfn.'});
   });
-  for(const {at} of patches.reverse())formula=formula.slice(0,at)+'_xlfn.'+formula.slice(at);
+  for(const {at,end,value} of patches.reverse())formula=formula.slice(0,at)+value+formula.slice(end);
   return formula;
 }
 
@@ -1099,6 +1104,9 @@ export function validateCell(ref, cell) {
   if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
   if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
   if (cell.cachedFormula !== undefined && (typeof cell.cachedFormula !== 'string' || cell.cachedFormula.length > 32768)) throw new Error(`저장된 수식이 올바르지 않습니다: ${ref}`);
+  if(cell.xlsxStyle!==undefined&&(!Number.isInteger(cell.xlsxStyle)||cell.xlsxStyle<0||cell.xlsxStyle>=65536))throw Error(`보존된 셀 서식이 올바르지 않습니다: ${ref}`);
+  if(cell.xlsxValue!==undefined){const v=cell.xlsxValue;if(!object(v)||typeof v.raw!=='string'||v.raw.length>32768||!object(v.value)||!v.value.richText&&!v.value.hyperlink)throw Error(`보존된 셀 값이 올바르지 않습니다: ${ref}`);validatePreservedData(v,1_000_000);}
+  if(cell.xlsxFormula!==undefined){const f=cell.xlsxFormula;if(!object(f)||typeof f.raw!=='string'||f.raw.length>32768||typeof f.formula!=='string'||f.formula.length>32768||f.shareType!==undefined&&f.shareType!=='array'||f.ref!==undefined&&(typeof f.ref!=='string'||!/^\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?$/.test(f.ref)))throw Error(`보존된 배열 수식이 올바르지 않습니다: ${ref}`);}
   if (cell.style) {
     if (cell.style.borders !== undefined) validateBorders(cell.style.borders);
     for (const field of ['bold', 'italic', 'underline', 'wrap', 'border']) if (cell.style[field] !== undefined && typeof cell.style[field] !== 'boolean') throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
@@ -1134,6 +1142,7 @@ export function validateWorkbook(data) {
     ids.add(sheet.id); names.add(sheet.name.toLowerCase());
     for(const key of ['defaultColumnWidth','defaultRowHeight'])if(sheet[key]!==undefined&&(!Number.isFinite(sheet[key])||sheet[key]<1||sheet[key]>10000))throw new Error('시트 기본 크기가 올바르지 않습니다.');
     if(sheet.hiddenSizes!==undefined){if(!object(sheet.hiddenSizes))throw Error('숨김 크기가 올바르지 않습니다.');for(const k of ['rows','cols']){if(!object(sheet.hiddenSizes[k]))throw Error('숨김 크기가 올바르지 않습니다.');for(const [i,v] of Object.entries(sheet.hiddenSizes[k]))if(!/^\d+$/.test(i)||+i>=(k==='rows'?1048576:16384)||!Number.isFinite(v)||v<0||v>10000)throw Error('숨김 크기가 올바르지 않습니다.');}}
+    if(sheet.xlsxFeatures!==undefined){if(!object(sheet.xlsxFeatures))throw Error('보존된 시트 정보가 올바르지 않습니다.');for(const key of ['dataValidations','sheetProtection'])if(sheet.xlsxFeatures[key]!==undefined)validatePreservedXML(sheet.xlsxFeatures[key],key);if(sheet.xlsxFeatures.conditionalFormatting!==undefined){const rules=sheet.xlsxFeatures.conditionalFormatting;if(!Array.isArray(rules)||rules.length>10000)throw Error('보존된 조건부 서식이 올바르지 않습니다.');for(const rule of rules)validatePreservedXML(rule,'conditionalFormatting');}}
     if(sheet.freeze!==undefined)validateFreeze(sheet.freeze);
     if(sheet.conditionalRules!==undefined)validateConditionalRules(sheet.conditionalRules);
     if(sheet.unsupportedConditionalCount!==undefined&&(!Number.isInteger(sheet.unsupportedConditionalCount)||sheet.unsupportedConditionalCount<0||sheet.unsupportedConditionalCount>10000))throw Error('조건부 서식 개수가 올바르지 않습니다.');
@@ -1164,6 +1173,8 @@ export function validateWorkbook(data) {
     }
   }
   if (typeof data.activeSheetId !== 'string' || !ids.has(data.activeSheetId)) throw new Error('활성 시트가 없습니다.');
+  if(data.xlsxStyles!==undefined){if(!Array.isArray(data.xlsxStyles)||data.xlsxStyles.length>65536||data.xlsxStyles.some(s=>!object(s)||!object(s.style)||!object(s.baseline)))throw Error('보존된 Excel 서식 목록이 올바르지 않습니다.');validatePreservedData(data.xlsxStyles,32_000_000);}
+  if(data.xlsxDxfs!==undefined){if(!Array.isArray(data.xlsxDxfs)||data.xlsxDxfs.length>65536)throw Error('보존된 Excel 조건부 서식이 올바르지 않습니다.');for(const rule of data.xlsxDxfs)validatePreservedXML(rule,'dxf');}
   if(data.chartTheme!==undefined&&(typeof data.chartTheme!=='string'||data.chartTheme.length>2000000||/<!DOCTYPE|<!ENTITY/i.test(data.chartTheme)))throw new Error('차트 테마가 올바르지 않습니다.');
   if(data.chartNames!==undefined&&(!Array.isArray(data.chartNames)||data.chartNames.length>10000||data.chartNames.some(n=>!object(n)||typeof n.name!=='string'||n.name.length>255||typeof n.formula!=='string'||n.formula.length>8192||n.sheetId!==undefined&&typeof n.sheetId!=='string'||n.hidden!==undefined&&typeof n.hidden!=='boolean')))throw new Error('차트 이름 참조가 올바르지 않습니다.');
   if(data.chartNameSheets!==undefined&&(!Array.isArray(data.chartNameSheets)||data.chartNameSheets.length>100||data.chartNameSheets.some(s=>!object(s)||typeof s.id!=='string'||typeof s.name!=='string'||s.name.length>31)))throw new Error('차트 원본 시트가 올바르지 않습니다.');

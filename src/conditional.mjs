@@ -85,6 +85,7 @@ export function importConditional(source,sheet,resolveColor=rgb) {
   if(unsupported)sheet.unsupportedConditionalCount=unsupported;
 }
 export function exportConditional(target,sheet) {
+  if(sheet.unsupportedConditionalCount&&sheet.xlsxFeatures?.conditionalFormatting?.length)return;
   if(sheet.unsupportedConditionalCount)throw Error('이 시트에 지원되지 않는 조건부 서식이 있습니다. 원본을 보존하려면 XLSM을 사용하거나 규칙 관리에서 모두 지우세요.');
   (sheet.conditionalRules||[]).forEach((rule,i)=>{
     const style={};if(rule.style.background){const color={argb:'FF'+rule.style.background.slice(1).toUpperCase()};style.fill={type:'pattern',pattern:'solid',fgColor:color,bgColor:color};}

@@ -82,7 +82,7 @@ export async function restoreChartParts(bytes,workbook){
       }
     }
   }
-  if(!number){delete workbook.chartTheme;delete workbook.chartNames;delete workbook.chartNameSheets;}
+  if(!workbook.chartNames.length){delete workbook.chartNames;delete workbook.chartNameSheets;}
 }
 
 const cacheXML=(values,numeric,format='General')=>`<c:${numeric?'numCache':'strCache'}>${numeric?'<c:formatCode>'+esc(format)+'</c:formatCode>':''}<c:ptCount val="${values.length}"/>${values.map((v,i)=>v===null||v===undefined||numeric&&!Number.isFinite(Number(v))?'':`<c:pt idx="${i}"><c:v>${esc(numeric?Number(v):v)}</c:v></c:pt>`).join('')}</c:${numeric?'numCache':'strCache'}>`;
@@ -140,7 +140,7 @@ function updateOriginalXML(chart,workbook,names,offsets){
 function absoluteAnchor(chart,graphic){const r=chartRect(chart);return `<xdr:absoluteAnchor><xdr:pos x="${Math.round(r.x*EMU)}" y="${Math.round(r.y*EMU)}"/><xdr:ext cx="${Math.round(r.width*EMU)}" cy="${Math.round(r.height*EMU)}"/>${graphic}<xdr:clientData/></xdr:absoluteAnchor>`;}
 
 export async function addChartParts(bytes,workbook,names){
-  if(!workbook.sheets.some(s=>s.charts?.length))return bytes;
+  if(!workbook.sheets.some(s=>s.charts?.length)&&!workbook.chartNames?.length&&!workbook.chartTheme)return bytes;
   const zip=await JSZip.loadAsync(bytes),types=xml(await zip.file('[Content_Types].xml').async('string'));
   const offsets=new Map(workbook.sheets.map(s=>{const n=s.pivot?.filters.filter(f=>!s.pivot.rows.includes(f.field)&&!s.pivot.columns.includes(f.field)).length||0;return [s.id,n?n+1:0];}));
   function content(part,type){const name='/'+part;let n=all(types,'Override').find(n=>attr(n,'PartName')===name);if(!n){n=types.createElementNS(types.documentElement.namespaceURI,'Override');n.setAttribute('PartName',name);types.documentElement.appendChild(n);}n.setAttribute('ContentType',type);}
