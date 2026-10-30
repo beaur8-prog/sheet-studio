@@ -14,7 +14,7 @@
 
 | 검사 | 근거 |
 |---|---|
-| 최종 전체 편집 회귀 | [CI 41124600035](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035), 소스 `c7083a2` — **진행 중** |
+| 최종 전체 편집 회귀 | [CI 41124600035](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035), 소스 `c7083a2` — Windows·Ubuntu 통과. Mac은 기존 OS 클립보드 검사 정체로 중단했으며 검사 격리 후 재실행한다 |
 | 최종 설치 패키지 | [CI 41124604211](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211), 같은 소스 — **Windows x64·Mac arm64·Ubuntu x64 모두 통과** |
 | 이전 자료형 수정판 전체 회귀 | [CI 41116736905](https://github.com/beaur8-prog/sheet-studio/actions/runs/41116736905), `8526fec` — 세 OS 모두 통과. 이후 배열 조건 보강은 최종 소스의 별도 검사에 포함 |
 

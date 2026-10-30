@@ -5,7 +5,12 @@ on:
       scope:
         description: Regression scope
         type: choice
-        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations]
+        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations, studio-clipboard]
+        default: all
+      operating_system:
+        description: Operating system to validate
+        type: choice
+        options: [all, macos-15, windows-latest, ubuntu-22.04]
         default: all
 permissions:
   contents: read
@@ -14,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, windows-latest, ubuntu-22.04]
+        os: ${{ fromJSON(inputs.operating_system == 'all' && '["macos-15", "windows-latest", "ubuntu-22.04"]' || format('["{0}"]', inputs.operating_system)) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -39,6 +44,8 @@ jobs:
             specs="$specs $core_specs"
           elif [ "${{ inputs.scope }}" = excel-parity ]; then
             specs="$core_specs"
+          elif [ "${{ inputs.scope }}" = studio-clipboard ]; then
+            specs="studio-clipboard"
           elif [ "${{ inputs.scope }}" = print-layout ]; then
             specs="sheet-print print-layout print-settings print-objects worksheet-extras"
           elif [ "${{ inputs.scope }}" != all ]; then
@@ -50,6 +57,7 @@ jobs:
             fi
           fi
           for spec in $specs; do
+            echo "Starting UI scenario: $spec"
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node "tests/ui-$spec.mjs" --desktop
             else

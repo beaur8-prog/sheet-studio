@@ -4,12 +4,23 @@ import platform from '../scripts/platform.cjs';import {createRequire} from 'node
 import ExcelJS from 'exceljs';
 const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','studio-clipboard-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 const packaged=process.argv.includes('--packaged'),version=createRequire(import.meta.url)('../package.json').version;
+console.log('studio-clipboard: launching an isolated profile');
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});const page=await app.firstWindow();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 const select=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();};
-let saved;
+// Exercise the real trusted preload/IPC handlers and renderer paste flow without
+// reading or replacing the host pasteboard. A blocked macOS pasteboard provider
+// must not stall a test, and a local run must preserve every user clipboard type.
 try{
- await page.locator('.cell').first().waitFor();saved=await app.evaluate(({clipboard})=>({text:clipboard.readText(),html:clipboard.readHTML(),rtf:clipboard.readRTF(),image:clipboard.readImage().toDataURL()}));
+await app.evaluate(({clipboard,BrowserWindow,nativeImage})=>{
+ let payload={text:'',html:'',rtf:''};
+ clipboard.write=data=>{payload={text:data.text||'',html:data.html||'',rtf:data.rtf||''};};
+ clipboard.readText=()=>payload.text;clipboard.readHTML=()=>payload.html;
+ clipboard.readRTF=()=>payload.rtf;clipboard.readImage=()=>nativeImage.createEmpty();
+ BrowserWindow.getAllWindows()[0].webContents.paste=()=>BrowserWindow.getAllWindows()[0].webContents.executeJavaScript('('+((data)=>{const transfer=new DataTransfer();transfer.setData('text/plain',data.text);if(data.html)transfer.setData('text/html',data.html);document.querySelector('#grid').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:transfer}));}).toString()+')('+JSON.stringify(payload)+')');
+});
+console.log('studio-clipboard: isolated desktop clipboard ready');
+ await page.locator('.cell').first().waitFor();
  const b=createWorkbook();b.name='clipboard test';b.sheets[0].cells={A1:{raw:'보고서',style:{bold:true,background:'#fff2cc',borders:{bottom:{style:'double',color:'#ff0000'}}}},A2:{raw:'=1+2'},B2:{raw:'줄1\n줄2'}};b.sheets[0].merges=['A1:B1'];await page.locator('#file-input').setInputFiles({name:'clipboard.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='clipboard test');await select('A1:B2');
  await page.locator('[data-action=copy]').click();await page.getByText('선택한 셀을 복사했습니다.',{exact:true}).waitFor();
  const rich=await app.evaluate(({clipboard})=>({text:clipboard.readText(),html:clipboard.readHTML()}));assert.ok(rich.html.includes('colspan="2"'));assert.ok(rich.html.includes('double'));assert.ok(!rich.html.includes('=1+2'));assert.ok(rich.text.includes('"줄1\n줄2"'));
@@ -19,6 +30,7 @@ try{
  await fs.mkdir(path.join(root,'test-results'),{recursive:true});
  const cases=[{name:'short-frame',points:[32,32,32,32]},{name:'unequal',points:[24,40,28,36],font:14},{name:'merged',points:[32,32,32,32],merged:true},{name:'taller-target',points:[32,32,32,32],target:80}];
  for(const scenario of cases){
+  console.log("studio-clipboard: row-height case "+scenario.name);
   const heightBook=createWorkbook();heightBook.name='표 높이 '+scenario.name;heightBook.sheets[0].columnWidths={0:300};
   if(scenario.target)scenario.points.forEach((_,r)=>heightBook.sheets[0].rowHeights[r]=scenario.target);
   await page.locator('#file-input').setInputFiles({name:'height.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(heightBook))});await page.waitForFunction(name=>sheetStudio.getWorkbook().name===name,heightBook.name);await settle();
@@ -55,5 +67,5 @@ try{
  await select('A3');await page.locator('[data-action=cell-format-menu]').click();await page.locator('[data-action=unhide-row]').click();await settle();
  assert.ok(Math.abs(await page.locator('.cell[data-r="2"][data-c="0"]').evaluate(el=>el.getBoundingClientRect().height)-64*4/3)<0.1);
  await page.locator('#undo').click();await settle();assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].rowHeights[2]),0);
- await page.screenshot({path:'test-results/studio-table-copy.png'});assert.deepEqual(errors,[]);console.log('PASS: OS clipboard HTML+TSV, own formulas/merged cells, external table import, row-height/merged text geometry, taller target preservation, atomic undo, recovery reload and XLSX roundtrip');
-}finally{if(saved)await app.evaluate(({clipboard,nativeImage},data)=>clipboard.write({text:data.text,html:data.html,rtf:data.rtf,image:nativeImage.createFromDataURL(data.image)}),saved);await app.close();await fs.rm(dataDir,{recursive:true,force:true});}
+ await page.screenshot({path:'test-results/studio-table-copy.png'});assert.deepEqual(errors,[]);console.log('PASS: isolated desktop clipboard IPC HTML+TSV, own formulas/merged cells, external table import, row-height/merged text geometry, taller target preservation, atomic undo, recovery reload and XLSX roundtrip');
+}catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/studio-clipboard-failure.png')}).catch(()=>{});throw error;}finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}
