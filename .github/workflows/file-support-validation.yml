@@ -58,6 +58,16 @@ jobs:
           export SHEET_STUDIO_EXECUTABLE='/opt/Sheet Studio/sheet-studio'
           xvfb-run -a node scripts/check-linux-desktop.cjs
           xvfb-run -a node tests/ui-file-associations.mjs --packaged
+      - name: Verify packaged table, formula, chart and cross-document scenarios
+        shell: bash
+        run: |
+          for spec in table-editing let chart-axis clipboard-types; do
+            if [ "$RUNNER_OS" = Linux ]; then
+              xvfb-run -a node "tests/ui-$spec.mjs" --packaged
+            else
+              node "tests/ui-$spec.mjs" --packaged
+            fi
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

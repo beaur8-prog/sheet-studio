@@ -1,3 +1,4 @@
+import {desktopLaunch} from './electron-launch.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -10,7 +11,7 @@ import {writeSpreadsheet} from '../src/io.mjs';
 const root=path.resolve(import.meta.dirname,'..');
 const dataDir=path.join(root,'.package','chart-parity-'+Date.now());
 const env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env});
+const app=await _electron.launch(desktopLaunch(root,env));
 const page=await app.firstWindow(),errors=[];
 page.setDefaultTimeout(10000);page.on('pageerror',error=>errors.push(error.message));
 await page.setViewportSize({width:1280,height:900});

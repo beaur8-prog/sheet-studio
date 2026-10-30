@@ -24,6 +24,7 @@ try{
  await page.waitForFunction(()=>sheetStudio.historyStats().cells===1_000_000);
  await page.evaluate(()=>sheetStudio.flushRecovery());
  record({case:'one million CSV cells imported and durably saved',ms:Date.now()-started,...await gaps()});
+ await select('A1');await heartbeat();const navigating=Date.now();await page.keyboard.press('ControlOrMeta+ArrowDown');await page.waitForFunction(row=>sheetStudio.getSelection().r===row,rows-1);await page.evaluate(()=>sheetStudio.whenIdle());record({case:'data-edge navigation to the final populated row',ms:Date.now()-navigating,...await gaps()});await page.keyboard.press('ControlOrMeta+ArrowUp');await page.waitForFunction(()=>sheetStudio.getSelection().r===0);
  if(process.argv.includes('--structure')){
   await select('A2:A101');await page.locator('[data-tab="홈"]').click();await heartbeat();const changing=Date.now();await page.locator('[data-action="insert-row"]').click();await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());assert.equal(await raw('A102'),'1');assert.equal(await raw('A2'),undefined);assert.equal(await page.evaluate(()=>sheetStudio.historyStats().cells),1_000_000);
   const stats=await page.evaluate(()=>sheetStudio.historyStats());record({case:'100 rows inserted in a million-cell document',ms:Date.now()-changing,undoRetained:stats.undo>0,...await gaps()});

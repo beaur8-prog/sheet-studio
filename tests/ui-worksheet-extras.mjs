@@ -1,3 +1,4 @@
+import {desktopLaunch} from './electron-launch.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -7,7 +8,7 @@ import {worksheetExtrasFixture} from './fixtures/worksheet-extras.mjs';
 import {readSpreadsheet} from '../src/io.mjs';
 import {printOrientation} from '../src/worksheet-extra.mjs';
 const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','worksheet-extras-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
+const app=await _electron.launch(desktopLaunch(root,env)),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
 const model=()=>page.evaluate(()=>sheetStudio.getWorkbook()),act=async action=>{await page.locator('[data-action="'+action+'"]').first().click();await settle();};
 try{

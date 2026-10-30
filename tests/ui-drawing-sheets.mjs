@@ -1,3 +1,4 @@
+import {desktopLaunch} from './electron-launch.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -7,7 +8,7 @@ import {chartsheetBook} from './fixtures/sheet-kinds.mjs';
 import {drawingFixture} from './fixtures/drawings.mjs';
 import {writeSpreadsheet,readSpreadsheet} from '../src/io.mjs';
 const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','drawing-sheets-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(15000);await page.setViewportSize({width:1280,height:900});
+const app=await _electron.launch(desktopLaunch(root,env)),page=await app.firstWindow(),errors=[];page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(15000);await page.setViewportSize({width:1280,height:900});
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
 const load=async(name,bytes)=>{await page.locator('#file-input').setInputFiles({name:name+'.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(bytes)});await page.waitForFunction(name=>sheetStudio.getWorkbook().name===name,name);await settle();};
 const act=async name=>{await page.locator(`[data-action="${name}"]`).first().click();await settle();};

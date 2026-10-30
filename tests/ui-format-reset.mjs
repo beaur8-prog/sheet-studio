@@ -1,3 +1,4 @@
+import {desktopLaunch} from './electron-launch.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -6,7 +7,7 @@ import ExcelJS from 'exceljs';
 import platform from '../scripts/platform.cjs';
 import {styleDefaultsFixture} from './fixtures/style-defaults.mjs';
 const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','format-reset-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
+const app=await _electron.launch(desktopLaunch(root,env)),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
 const go=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();},cell=ref=>page.getByRole('gridcell',{name:ref,exact:true});
 const edit=async(ref,raw)=>{await go(ref);await page.keyboard.press('F2');await page.locator('#editor').fill(raw);await page.locator('#editor').press('Enter');await settle();};

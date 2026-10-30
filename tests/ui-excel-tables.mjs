@@ -1,3 +1,4 @@
+import {desktopLaunch} from './electron-launch.mjs';
 import JSZip from 'jszip';
 import {tableFixture} from './tables-fixture.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
@@ -12,7 +13,7 @@ import {createWorkbook} from '../src/engine.mjs';
 
 const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','excel-tables-'+Date.now());
 const env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env});
+const app=await _electron.launch(desktopLaunch(root,env));
 const page=await app.firstWindow(),errors=[];page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(15000);
 await page.setViewportSize({width:1280,height:900});
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));};

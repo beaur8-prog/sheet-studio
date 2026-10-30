@@ -1,3 +1,4 @@
+import {desktopLaunch} from './electron-launch.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -6,7 +7,7 @@ import ExcelJS from 'exceljs';
 import {createWorkbook} from '../src/engine.mjs';
 import platform from '../scripts/platform.cjs';
 const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','number-formats-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
-const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
+const app=await _electron.launch(desktopLaunch(root,env)),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
 const go=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();},cell=ref=>page.getByRole('gridcell',{name:ref,exact:true});
 const openFormat=async()=>{await page.locator('#grid').focus();await page.keyboard.press(process.platform==='darwin'?'Meta+1':'Control+1');await page.getByRole('dialog',{name:'셀 서식',exact:true}).waitFor();await page.getByRole('tab',{name:'표시 형식',exact:true}).click();};
