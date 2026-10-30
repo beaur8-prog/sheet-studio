@@ -68,7 +68,12 @@ async function smoke() {
     await page.locator('#name-box').fill('A1');await page.locator('#name-box').press('Enter');
     await page.keyboard.press('F2');await page.locator('#editor').fill('17');await page.locator('#editor').press('Enter');
     await page.locator('#name-box').fill('A1');await page.locator('#name-box').press('Enter');
-    await application.evaluate(({ clipboard }) => clipboard.writeText('42'));
+    // Keep the user's OS clipboard untouched while exercising menu -> preload
+    // -> edit-text IPC -> paste event and the real renderer's paste handling.
+    await application.evaluate(({ BrowserWindow }) => {
+      const contents=BrowserWindow.getAllWindows()[0].webContents;
+      contents.paste=()=>contents.executeJavaScript('(()=>{const data=new DataTransfer();data.setData("text/plain","42");document.querySelector("#grid").dispatchEvent(new ClipboardEvent("paste",{bubbles:true,cancelable:true,clipboardData:data}));})()');
+    });
     await menuAction('paste');await page.waitForFunction(() => sheetStudio.evaluate('A1')===42);
     await menuAction('undo');await page.waitForFunction(() => sheetStudio.evaluate('A1')===17);
     await menuAction('redo');await page.waitForFunction(() => sheetStudio.evaluate('A1')===42);

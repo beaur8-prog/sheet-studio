@@ -21,6 +21,8 @@ Detailed evaluation returns `{value,error}` so text such as `"#CALC!"` remains d
 
 `xlsxStyles` stores deduplicated full Excel style models and editable baselines. `xlsxDefaultStyle` identifies Normal; sheet `xlsxStyleDefaults` stores styled row/column templates. Cell `xlsxStyle`/`xlsxNormal` distinguish an explicit original style or Normal override from inherited formatting. The exporter reapplies only changed supported properties over original details such as diagonal borders, text rotation, shrink-to-fit and protection. Rich text and hyperlinks retain original payloads when appropriate. Notes retain plain text. The app does not render every advanced font/fill/border/locale effect.
 
+The private ExcelJS loader normalizes the valid XML date-system boolean `true` to `1` before dates are decoded; the original ZIP is unchanged. Exported table formulas qualify implicit references and serialize current-row selectors as `#This Row`, preserving column escaping and future-function prefixes.
+
 ## XLSX preservation and editing
 
 - Real tables include names, stable column IDs, calculated/totals formulas, styles and per-table filters. Structured references and defined workbook/sheet names are retained; supported references can be edited. Query-table connection graphs remain in the file but do not refresh in the app. See [tables](docs/TABLES.md).
@@ -86,3 +88,8 @@ App pivots include definitions in JSON/Custom XML and, for nonempty reports, nat
 Worksheet and table filters retain supported values, custom/number/text/date/color conditions, sort state and hidden rows. Filtered rows affect SUBTOTAL and chart visibility. Freeze panes, manual hidden dimensions and saved sizes round-trip. Supported conditional rules recalculate without permanently painting cells. See [filters](docs/FILTERS.md) and [worksheet behavior](docs/WORKSHEET.md).
 
 XLSM imports retain original macro bytes and use the Windows Excel bridge for VBA-preserving saves. The bridge handles only its validated change-plan features, so table definitions, names, array edits, full format reset/painting and new axis/placement edits are restricted when necessary. This development run did not newly verify actual Microsoft Excel/VBA execution. Cross-platform Electron tests and OOXML/ExcelJS checks are recorded separately from earlier real Excel oracle evidence.
+
+
+## Optional independent application check
+
+`npm run test:interop:libreoffice` requires an installed LibreOffice (`soffice`, or `SHEET_STUDIO_SOFFICE`). It creates synthetic XLSX files and a separate profile with OOXML hard recalculation enabled. One numeric cache per input is deliberately stale. It verifies 22 matching values plus a documented nested-LET difference, original-style sorting, table definitions, both date encodings and 18 chart types/grouping combinations including series data/labels after Calc saves them. This is an interoperability check with LibreOffice, not a substitute for a fresh Microsoft Excel/VBA run. Evidence is written to the ignored `.verification/excel-improvements/libreoffice/` directory.
