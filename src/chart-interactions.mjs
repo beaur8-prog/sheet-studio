@@ -1,6 +1,6 @@
 import {chartRect,resizeChart} from './chart-geometry.mjs';
 
-export function installChartInteractions({grid,getChart,getZoom,canEdit=()=>true,commitEdit,checkpoint,changed,render}){
+export function installChartInteractions({grid,getChart,getZoom,getScroll=()=>({left:grid.scrollLeft,top:grid.scrollTop}),canEdit=()=>true,commitEdit,checkpoint,changed,render}){
   let gesture=null;
   function restore(chart,rect){for(const key of ['x','y','width','height']){if(rect[key]===undefined)delete chart[key];else chart[key]=rect[key];}}
   function finish(cancel=false){
@@ -16,13 +16,13 @@ export function installChartInteractions({grid,getChart,getZoom,canEdit=()=>true
     if(event.button!==0||!card||(!handle&&event.target.closest('button')))return;
     const chart=getChart(card.dataset.chart);if(!chart||!canEdit())return;
     event.preventDefault();event.stopPropagation();if(commitEdit()===false)return;
-    gesture={id:chart.id,edge:handle?.dataset.chartResize,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,scrollX:grid.scrollLeft,scrollY:grid.scrollTop,rect:chartRect(chart),original:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}};
+    const scroll=getScroll();gesture={id:chart.id,edge:handle?.dataset.chartResize,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,scrollX:scroll.left,scrollY:scroll.top,rect:chartRect(chart),original:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}};
     grid.focus();
   });
   grid.addEventListener('pointermove',event=>{
     if(!gesture||gesture.pointerId!==event.pointerId)return;
     const g=gesture,chart=getChart(g.id);if(!chart)return finish(true);
-    const scale=getZoom()/100,dx=(event.clientX-g.startX+grid.scrollLeft-g.scrollX)/scale,dy=(event.clientY-g.startY+grid.scrollTop-g.scrollY)/scale;
+    const scale=getZoom()/100,scroll=getScroll(),dx=(event.clientX-g.startX+scroll.left-g.scrollX)/scale,dy=(event.clientY-g.startY+scroll.top-g.scrollY)/scale;
     if(!g.captured){if(Math.abs(dx)+Math.abs(dy)<3)return;grid.setPointerCapture(event.pointerId);g.captured=true;}
     Object.assign(chart,g.edge?resizeChart(g.rect,g.edge,dx,dy):{...g.rect,x:Math.max(0,g.rect.x+dx),y:Math.max(0,g.rect.y+dy)});render();
   });

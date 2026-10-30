@@ -10,6 +10,8 @@
 .table-bar{display:flex;align-items:center;gap:12px;padding:5px 12px;border-bottom:1px solid #9cc7a9;background:#eef7f1;color:#22553a;min-height:33px;font-size:12px;flex-shrink:0}.table-bar[hidden]{display:none}.table-bar strong{white-space:nowrap}.table-bar span{flex:1}.table-bar .ribbon-btn{padding:3px 8px;font-size:12px;min-height:24px}.table-bar svg{width:14px;height:14px}@media print{.table-bar{display:none}}
 .chart-sheet .grid-headings,.chart-sheet #selection,.chart-sheet #selection-extras,.chart-sheet #formula-ranges,.chart-sheet #copy-outlines,.chart-sheet #editor,.chart-sheet #validation-list-button{display:none!important}
 .chart-sheet #grid,.chart-sheet #surface{background:#fff}
+.grid-surface{overflow:clip}
+.grid-cells,#charts{position:sticky;top:0;left:auto;right:auto;bottom:auto;height:0}
 .chart-sheet .chart-delete{display:none}
 .xlsx-image{position:absolute;pointer-events:none;user-select:none;object-fit:fill;z-index:3}
 #drawing-status{color:#c5af6c;font-size:10px}.light #drawing-status{color:#806622}

@@ -1,4 +1,5 @@
 // Pixel geometry shared by cells, selection, reference outlines and pointer picking.
+export const rowHeadingWidth=row=>Math.max(40,String(Math.max(1,row+1)).length*7+12);
 export function offsetIndex(arr, p) {
   let l=0,h=arr.length-1;
   while(l<h){const m=Math.ceil((l+h)/2);if(arr[m]<=p)l=m;else h=m-1;}
