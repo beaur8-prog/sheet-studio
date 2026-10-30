@@ -1127,6 +1127,9 @@ export function formulaHasExternalReferences(formula){
 export function formulaHasDynamicArrays(formula){
   try{const tokens=tokenize(String(formula).replace(/^=/,''));return tokens.some((t,i)=>t.value==='#'||t.type==='word'&&tokens[i+1]?.value==='('&&['FILTER','SORT','UNIQUE','SEQUENCE','ANCHORARRAY'].includes(normalizeFunctionName(t.value)));}catch{return false;}
 }
+// Conservative syntax-only check for pending edit constraints. No worksheet
+// values are calculated on the renderer while waiting for worker spill bounds.
+export function formulaCanSpill(formula){if(!String(formula).startsWith('='))return false;try{return mayReturnArray(new Parser(String(formula)).parse());}catch{return false;}}
 export function formulaForXlsx(formula,originalFormula,contextTable) {
   formula=arrayFormulaSyntax(formula,true);
   const offset=formula.startsWith('=')?1:0;

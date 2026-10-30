@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkbook,evaluateFormulaArray,evaluateFormula} from '../src/engine.mjs';
+import {createWorkbook,evaluateFormulaArray,evaluateFormula,formulaCanSpill} from '../src/engine.mjs';
 
 const book=createWorkbook();
 const array=(formula,b=book)=>evaluateFormulaArray(b,b.sheets[0].id,formula);
 const expected=(rows,cols,values)=>({rows,cols,values});
 const error=formula=>array(formula).values[0];
+
+test('pending spill detection is conservative without calculating any source values',()=>{
+ for(const f of ['=SEQUENCE(100000)','=A1:A100000','={1;2}','=ISNUMBER(A1:A5)','=NamedRange','=XLOOKUP(2,A:A,B:C)'])assert.equal(formulaCanSpill(f),true,f);
+ for(const f of ['=SUM(SEQUENCE(100000))','=A1+1','="SEQUENCE(3)"','=@A:A','=TYPE(A1:A5)','not a formula'])assert.equal(formulaCanSpill(f),false,f);
+});
 
 test('SEQUENCE generates row-major horizontal, vertical and two-dimensional arrays with optional arguments',()=>{
   assert.deepEqual(array('=SEQUENCE(4)'),expected(4,1,[1,2,3,4]));

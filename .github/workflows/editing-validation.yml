@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           specs="user-journeys autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot pivot-arrays sheet-lifecycle colors cell-format studio-clipboard parity-audit file-dialogs file-associations recovery capacity"
-          core_specs="chart-parity recalculation data-region xlsx-preservation external-links cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays array-metadata array-views dashboard-journey result-types number-formats style-defaults worksheet-extras sheet-print print-layout print-settings print-objects virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text large-spills"
+          core_specs="chart-parity recalculation data-region xlsx-preservation external-links cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays array-races array-metadata array-views dashboard-journey result-types number-formats style-defaults worksheet-extras sheet-print print-layout print-settings print-objects virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text large-spills"
           if [ "${{ inputs.scope }}" = full ]; then
             specs="$specs $core_specs"
           elif [ "${{ inputs.scope }}" = excel-parity ]; then
@@ -81,6 +81,7 @@ jobs:
             test-results/dashboard-journey.xlsx
             test-results/capacity-*.json
             test-results/large-spills*.json
+            test-results/array-races.json
             test-results/array-views.json
             test-results/pivot-arrays.json
             test-results/dashboard-journey.json
