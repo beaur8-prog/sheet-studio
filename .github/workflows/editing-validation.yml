@@ -5,7 +5,7 @@ on:
       scope:
         description: Regression scope
         type: choice
-        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations, studio-clipboard]
+        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations, studio-clipboard, native-clipboard]
         default: all
       operating_system:
         description: Operating system to validate
@@ -44,6 +44,8 @@ jobs:
             specs="$specs $core_specs"
           elif [ "${{ inputs.scope }}" = excel-parity ]; then
             specs="$core_specs"
+          elif [ "${{ inputs.scope }}" = native-clipboard ]; then
+            specs="native-clipboard"
           elif [ "${{ inputs.scope }}" = studio-clipboard ]; then
             specs="studio-clipboard"
           elif [ "${{ inputs.scope }}" = print-layout ]; then
@@ -89,6 +91,7 @@ jobs:
             test-results/dashboard-journey.xlsx
             test-results/capacity-*.json
             test-results/large-spills*.json
+            test-results/native-clipboard.json
             test-results/array-races.json
             test-results/array-views.json
             test-results/pivot-arrays.json
