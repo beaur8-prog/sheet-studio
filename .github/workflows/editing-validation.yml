@@ -5,7 +5,7 @@ on:
       scope:
         description: Regression scope
         type: choice
-        options: [all, file-dialogs, file-associations]
+        options: [all, excel-parity, file-dialogs, file-associations]
         default: all
 permissions:
   contents: read
@@ -34,7 +34,9 @@ jobs:
         shell: bash
         run: |
           specs="user-journeys autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot sheet-lifecycle colors cell-format studio-clipboard parity-audit file-dialogs file-associations recovery capacity"
-          if [ "${{ inputs.scope }}" != all ]; then
+          if [ "${{ inputs.scope }}" = excel-parity ]; then
+            specs="chart-parity recalculation data-region xlsx-preservation cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays result-types number-formats style-defaults worksheet-extras sheet-print virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset"
+          elif [ "${{ inputs.scope }}" != all ]; then
             specs="file-dialogs file-associations recovery user-journeys"
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node scripts/electron-smoke.cjs
@@ -49,7 +51,15 @@ jobs:
               node "tests/ui-$spec.mjs" --desktop
             fi
           done
-          if [ "${{ inputs.scope }}" = all ]; then
+          if [ "${{ inputs.scope }}" = excel-parity ]; then
+            if [ "$RUNNER_OS" = Linux ]; then
+              xvfb-run -a node tests/ui-capacity.mjs --desktop --structure
+              xvfb-run -a node tests/ui-capacity.mjs --desktop --tall --structure
+            else
+              node tests/ui-capacity.mjs --desktop --structure
+              node tests/ui-capacity.mjs --desktop --tall --structure
+            fi
+          elif [ "${{ inputs.scope }}" = all ]; then
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node tests/ui-capacity.mjs --desktop --tall
             else
@@ -62,6 +72,7 @@ jobs:
           name: editing-validation-${{ matrix.os }}
           path: |
             test-results/*.png
+            test-results/*.pdf
             test-results/capacity-*.json
             test-results/file-dialogs.json
             test-results/file-associations.json
