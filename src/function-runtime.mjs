@@ -66,7 +66,7 @@ export function createFunctionRuntime(h) {
     return typeof fn==='function'?fn:null;
   };
   const libraryCall = (name,args) => {
-    const fn=scalarFn(name);if(!fn)fail('#NAME?');
+    const fn=scalarFn(name);if(!fn)fail('#NAME?','unsupported');
     const result=fn(...args);
     if(result instanceof Error)fail(/^#/.test(result.message)?result.message:'#VALUE!');
     if(typeof result==='number')return finite(result);
@@ -116,7 +116,7 @@ export function createFunctionRuntime(h) {
     return count*direction;
   }
   return function call(inputName,nodes,evaluate,ctx) {
-    const metadata=FUNCTION_MAP.get(inputName);if(!metadata)fail('#NAME?');
+    const metadata=FUNCTION_MAP.get(inputName);if(!metadata)fail('#NAME?','unsupported');
     if(nodes.length<metadata.min||nodes.length>metadata.max)fail('#VALUE!');
     const name=FUNCTION_ALIASES[inputName]||inputName;
     const omitted=i=>!nodes[i]||nodes[i].omitted||nodes[i].type==='literal'&&nodes[i].value===BLANK;

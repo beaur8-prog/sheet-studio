@@ -81,3 +81,12 @@ test('unsupported imported caches become stale with raw edits and recover with u
  h.undo();h.begin();h.book.sheets[0].cells.B1.style={bold:true};h.commit();assert.equal(h.raw.referenceCachesValid,undefined);
  h.begin();const fresh=createWorkbook();fresh.sheets[0].cells.A1={raw:'new'};h.replace(fresh);h.commit();assert.equal(h.raw.referenceCachesValid,undefined);
 });
+
+test('sheet structure and whole-cell-map edits invalidate imported caches without treating view or print edits as calculations',()=>{
+ const initial=createWorkbook(),s=initial.sheets[0];s.name='Source';s.cells={A1:{raw:'=FUTUREFUNC(INDIRECT("Source!B1"))',cachedFormula:'=FUTUREFUNC(INDIRECT("Source!B1"))',cachedValue:42},B1:{raw:'42'}};initial.sheets.push({...createWorkbook().sheets[0],id:'other',name:'Other'});
+ const h=createHistory(initial),source=h.book.sheets[0];
+ for(const mutate of [()=>source.name='Renamed',()=>h.book.sheets.push({...cloneData(initial.sheets[0]),id:'two',name:'Two'}),()=>source.cells={...cloneData(source.cells),B1:{raw:'99'}},()=>source.state='hidden',()=>h.book.date1904=true]){
+  h.begin();mutate();h.commit();assert.equal(h.raw.referenceCachesValid,false);h.undo();assert.equal(h.raw.referenceCachesValid,undefined);
+ }
+ for(const mutate of [()=>h.book.activeSheetId=source.id,()=>source.cells.B1.style={bold:true},()=>source.xlsxFeatures={headerFooter:'<headerFooter><oddHeader>Title</oddHeader></headerFooter>'},()=>source.charts.push({id:'chart',type:'bar',range:'A1:B1',title:'Preview'})]){h.begin();mutate();h.commit();assert.equal(h.raw.referenceCachesValid,undefined);}
+});

@@ -30,7 +30,7 @@ function chartCellValue(cell,evaluate,key,onCached,workbook){
   const original=evaluate.result?.(key),result=original?calculationDisplay(original):null,value=result?result.value:evaluate(key);if(original?.cached&&!original.stale)onCached?.();
   // A calculation error is current data, not a reason to resurrect an old
   // successful result. Only an unchanged, unsupported formula may use a cache.
-  if((result?result.error==='#NAME?':value==='#NAME?')&&workbook?.referenceCachesValid!==false&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){onCached?.();return cell.cachedValue;}
+  if(!original&&value==='#NAME?'&&workbook?.referenceCachesValid!==false&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){onCached?.();return cell.cachedValue;}
   return value;
 }
 export function refValues(ref,workbook,{limit=10000,onCached}={}){

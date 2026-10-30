@@ -315,9 +315,9 @@ function safeSheetName(name, used) {
   return value;
 }
 function cachedResult(evaluate, workbook, sheet, addr, cell,detailed=evaluate?.result,preserveOriginal=false) {
-  let value,error;
-  try {if(detailed){const result=detailed(workbook,sheet.id,addr);value=result.value;error=result.error;}else{value=evaluate?.(workbook,sheet.id,addr);error=errors.has(value)?value:null;}} catch { /* Excel can recalculate an unsupported formula. */ }
-  if (value === undefined || ['#NAME?','#ERROR!'].includes(error)){const original=preserveOriginal&&(workbook.xlsxExternalLinks||cell.xlsxFormula?.raw===cell.raw),stored=(workbook.referenceCachesValid!==false||original)&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)&&cell.cachedValue!==undefined;if(stored){value=cell.cachedValue;error=cell.cachedError===false?null:errors.has(value)?value:null;}else if(error){value=error;}else value=undefined;}
+  let value,error,result;
+  try {if(detailed){result=detailed(workbook,sheet.id,addr);value=result.value;error=result.error;}else{value=evaluate?.(workbook,sheet.id,addr);error=errors.has(value)?value:null;}} catch { /* Excel can recalculate an unsupported formula. */ }
+  if (value === undefined || ['#NAME?','#ERROR!'].includes(error)){const original=preserveOriginal&&(workbook.xlsxExternalLinks||cell.xlsxFormula?.raw===cell.raw),stored=(!detailed||result?.cached)&&(workbook.referenceCachesValid!==false||original)&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)&&cell.cachedValue!==undefined;if(stored){value=cell.cachedValue;error=cell.cachedError===false?null:errors.has(value)?value:null;}else if(error){value=error;}else value=undefined;}
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'number') return Number.isFinite(value) ? value : { error: '#NUM!' };
   if (typeof value === 'boolean') return value;

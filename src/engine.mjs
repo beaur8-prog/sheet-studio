@@ -34,10 +34,11 @@ const MAX_DEPTH = 160;
 const BLANK = Symbol('blank');
 const DAY_MS = 86400000;
 const externalEvaluators = new WeakMap();
+const CACHE_SOURCE=Symbol('unsupported calculation source');
 export function setExternalEvaluator(workbook, evaluator) { externalEvaluators.set(unwrap(workbook), evaluator); }
 
 class FormulaError extends Error {
-  constructor(code) { super(code); this.code = code; }
+  constructor(code,cacheSource) { super(code); this.code = code;if(cacheSource)this.cacheSource=cacheSource; }
 }
 // Internal scheduling signals are not formula errors: IFERROR/ISERROR must not
 // swallow them while an unfinished dependency is being calculated.
@@ -45,7 +46,7 @@ class PendingCell {
   constructor(sheet,ref){this.sheet=sheet;this.ref=ref;this.key=sheet.id+'!'+ref;}
 }
 class CalculationLimit {}
-const fail = code => { throw new FormulaError(code); };
+const fail = (code,cacheSource) => { throw new FormulaError(code,cacheSource); };
 const validPosition = (r, c) => Number.isInteger(r) && Number.isInteger(c) && r >= 0 && c >= 0 && r < MAX_ROWS && c < MAX_COLS;
 const isRef = value => value && value.kind === 'reference';
 const isRange = value => value && value.kind === 'range';
@@ -309,7 +310,7 @@ function withNamedNode(node,ctx,callback){
     const formula=String(named.formula).replace(/^=/,''),tokens=tokenize(formula);
     // Imported relative names have no trustworthy definition origin in our
     // model. Preserve them, but do not silently calculate from the wrong cell.
-    if(tokens.some((t,i)=>t.type==='word'&&parseAddress(t.value)&&!['(','!'].includes(tokens[i+1]?.value)&&!/^\$[A-Za-z]+\$\d+$/.test(t.value))||wholeReferences(tokens).some(r=>!r.first.locked||!r.last.locked))fail('#NAME?');
+    if(tokens.some((t,i)=>t.type==='word'&&parseAddress(t.value)&&!['(','!'].includes(tokens[i+1]?.value)&&!/^\$[A-Za-z]+\$\d+$/.test(t.value))||wholeReferences(tokens).some(r=>!r.first.locked||!r.last.locked))fail('#NAME?','unsupported');
     definition=new Parser(formula).parse();cache.set(id,definition);
   }
   active.add(id);const previous=ctx.sheet,locals=ctx.locals;ctx.locals=null;if(named.sheetId)ctx.sheet=scope;
@@ -402,7 +403,7 @@ function registerSpill(ctx,sheet,ref,position,result){
 }
 function preserveUnsupportedSpill(ctx,sheet,ref,position,error){
   const cell=sheet.cells[ref],definition=cell.xlsxFormula;
-  if(error.code!=='#NAME?'||!definition?.dynamic||definition.raw!==cell.raw)return;
+  if(error.code!=='#NAME?'||!error.cacheSource||!definition?.dynamic||definition.raw!==cell.raw)return;
   const bounds=tableBounds(definition.ref||ref);if(!bounds)return;
   const rows=bounds.r2-bounds.r1+1,cols=bounds.c2-bounds.c1+1;if(rows*cols>MAX_FORMULA_CELLS)return;
   const values=[];
@@ -460,7 +461,7 @@ function readCell(ctx, sheet, ref) {
     ctx.sheet = sheet;ctx.position=pos;ctx.arrayMode=true;ctx.locals=null;
     const known=ctx.spills?.candidateByKey.get(key)?.node,externalFormula=sheet.cells[ref].xlsxExternal?.raw===raw||raw.includes('[')&&formulaHasExternalReferences(raw);
     const node=external||externalFormula?null:ctx.frame?.key===key?(ctx.frame.ast??=known||new Parser(raw).parse()):known||new Parser(raw).parse();
-    const supplied=external?.result?.(sheet.id,ref),computed=external?(supplied?supplied.error?new FormulaError(supplied.error):supplied.value:external(sheet.id,ref)):externalFormula?fail('#NAME?'):evaluateNode(node,ctx,0);
+    const supplied=external?.result?.(sheet.id,ref),computed=external?(supplied?supplied.error?new FormulaError(supplied.error):supplied.value:external(sheet.id,ref)):externalFormula?fail('#NAME?','external'):evaluateNode(node,ctx,0);
     if(array){const result=asRange(computed);(ctx.arrayResults??=new Map()).set(key,result);value=checked(result.values[0]);}
     else if(!external&&isRange(computed)&&(computed.values.length>1||computed.dynamic||sheet.cells[ref].xlsxFormula?.dynamic))value=checked(registerSpill(ctx,sheet,ref,pos,computed));
     else value=checked(computed);
@@ -803,7 +804,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
     }
     return callFunction(target,[{type:'literal',value:{kind:'range',values,rows:values.length,cols:1}}],evaluate,ctx);
   }
-  fail('#NAME?');
+  fail('#NAME?','unsupported');
 }
 const functionHelpers={BLANK,FormulaError,fail,scalar,checked,numeric,textual,logical,finite,isRange,isRef,asRange,flatten,numericItems,criterion,compare,wildcardRegex,dateSerial,serialParts,rounded,colName,parseAddress,address,formatValue};
 const extendedFunction=createFunctionRuntime(functionHelpers);
@@ -995,7 +996,7 @@ function callFunction(name, nodes, evaluate, ctx) {
   if (['YEAR', 'MONTH', 'DAY'].includes(name)) {
     arity(1); return ctx.calendar.serialParts(args[0])[name.toLowerCase()];
   }
-  return fail('#NAME?');
+  return fail('#NAME?','unsupported');
 }
 
 function publicValue(value) {
@@ -1005,7 +1006,7 @@ function publicValue(value) {
 function guard(callback) {
   try { return publicValue(callback()); } catch (error) { return error instanceof CalculationLimit ? '#NUM!' : error instanceof FormulaError ? error.code : '#VALUE!'; }
 }
-function detailedGuard(callback){try{return {value:publicValue(callback()),error:null};}catch(error){const code=error instanceof CalculationLimit?'#NUM!':error instanceof FormulaError?error.code:'#VALUE!';return {value:code,error:code};}}
+function detailedGuard(callback){try{return {value:publicValue(callback()),error:null};}catch(error){const code=error instanceof CalculationLimit?'#NUM!':error instanceof FormulaError?error.code:'#VALUE!',result={value:code,error:code};if(error.cacheSource)Object.defineProperty(result,CACHE_SOURCE,{value:error.cacheSource});return result;}}
 
 export function evaluateCell(workbook, sheetId, ref) {
   return createEvaluator(workbook,sheetId)(ref);
@@ -1076,8 +1077,8 @@ export function createEvaluator(workbook, sheetId) {
       const p=parseAddress(ref),spill=p&&ctx.spills?.indices.get(id)?.at(p)||p&&ctx.spills&&spillIndex(ctx,target).at(p);
       if(spill?.cached){const saved=spill.result.values[(p.r-spill.r1)*spill.result.cols+p.c-spill.c1];result.cached=true;result.stale=!!spill.stale;result.cachedValue=guard(()=>saved);result.cachedError=saved instanceof FormulaError?saved.code:null;}
       const cell=target.cells[ref];
-      if(!result.cached&&result.error==='#NAME?'&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){
-        result.cached=true;result.stale=workbook.referenceCachesValid===false;result.cachedValue=cell.cachedValue;result.cachedError=cell.cachedError?String(cell.cachedValue):null;result.cacheSource=cell.xlsxExternal?.raw===cell.raw?'external':'unsupported';
+      if(!result.cached&&result.error==='#NAME?'&&result[CACHE_SOURCE]&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){
+        result.cached=true;result.stale=workbook.referenceCachesValid===false;result.cachedValue=cell.cachedValue;result.cachedError=cell.cachedError?String(cell.cachedValue):null;result.cacheSource=result[CACHE_SOURCE];
       }
       return result;
     };

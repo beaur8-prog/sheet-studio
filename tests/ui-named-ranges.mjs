@@ -30,7 +30,7 @@ try{
   await go('Revenue');assert.equal(await page.locator('#name-box').inputValue(),'A2:A3');
   const file=await save(),out=new ExcelJS.Workbook();await out.xlsx.load(await fs.readFile(file));assert.equal(out.worksheets[0].getCell('B1').result,7);assert.deepEqual(out.definedNames.getRanges('Revenue').ranges,['Input!$A$2:$A$3']);
   await page.locator('#file-input').setInputFiles(file);await settle();assert.equal(await value('B1'),7);await manager();await page.screenshot({path:path.join(root,'test-results/named-ranges.png')});await page.locator('[data-name-delete="0"]').click();await closeDialog();assert.equal(await value('B1'),'#NAME?');
-  const deleted=await save(),check=new ExcelJS.Workbook();await check.xlsx.load(await fs.readFile(deleted));assert.equal(check.worksheets[0].getCell('B1').result,undefined);
+  const deleted=await save(),check=new ExcelJS.Workbook();await check.xlsx.load(await fs.readFile(deleted));assert.deepEqual(check.worksheets[0].getCell('B1').result,{error:'#NAME?'});
   assert.deepEqual(errors,[]);console.log('PASS: create/edit/delete defined name through the manager, calculate dependent formulas, undo/redo, name-box range navigation and XLSX save/reopen without resurrecting deleted-name caches');
 }catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/named-ranges-failure.png')});throw error;}
 finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

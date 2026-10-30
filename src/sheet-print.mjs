@@ -9,7 +9,6 @@ import {bordersCss,cellBorders,edgeCss} from './borders.mjs';
 import {renderChartSVG} from './chart-render.mjs';
 import {chartRect} from './chart-geometry.mjs';
 import {drawingPreviews} from './xlsx-drawings.mjs';
-import {nativeCachedValue} from './native-plan.mjs';
 import {readPrintSettings,planPrintPages,checkPrintRange,printRowHeight,printColWidth,MAX_PRINT_PAGES} from './print-layout.mjs';
 import {printObjectAxes,objectCellBounds,printObjectFragments} from './print-objects.mjs';
 import {drawingPrintsWithSheet} from './anchor-position.mjs';
@@ -43,7 +42,7 @@ function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,
   const tr=rows.map(r=>{
     const td=cols.map(c=>{
       const merge=merges.get(address(r,c));if(merge&&(r!==merge.firstR||c!==merge.firstC))return '';
-      const row=merge?.r1??r,col=merge?.c1??c,ref=address(row,col),cell=sheet.cells[ref]||{};let result=evaluate.result(ref);const cached=result.cached&&!result.stale?result.cachedValue:result.error?nativeCachedValue(book,sheet.id,ref,result.value):undefined;if(cached!==undefined){result={value:cached,error:result.cachedError|| (cell.cachedError?cached:null)};cachedCount++;}const value=result.value;
+      const row=merge?.r1??r,col=merge?.c1??c,ref=address(row,col),cell=sheet.cells[ref]||{};let result=evaluate.result(ref);const cached=result.cached&&!result.stale?result.cachedValue:undefined;if(cached!==undefined){result={value:cached,error:result.cachedError|| (cell.cachedError?cached:null)};cachedCount++;}const value=result.value;
       const style={...numberFormatStyle(value,worksheetCellStyle(book,sheet,row,col)),...conditional(row,col,value)};
       const css=['background:'+(style.background||'white'),'color:'+(style.color||'#222'),'font-family:'+(style.fontFamily||'Arial'),'font-size:'+(style.fontSize||11)+'pt','font-weight:'+(style.bold?'bold':'normal'),'font-style:'+(style.italic?'italic':'normal'),'text-decoration:'+(style.underline?'underline':'none'),'text-align:'+(style.align|| (typeof value==='number'?'right':'left')),'vertical-align:'+(style.verticalAlign||'middle'),'white-space:'+(style.wrap?'pre-wrap':'pre'),bordersCss(style)].join(';');
       const height=merge?rows.filter(r=>r>=merge.r1&&r<=merge.r2).reduce((n,r)=>n+printRowHeight(sheet,r),0):printRowHeight(sheet,r),edges=cellBorders(style),border=Math.max(gridLines?1:0,...['top','bottom'].map(side=>parseFloat(edgeCss(edges[side]))||0));

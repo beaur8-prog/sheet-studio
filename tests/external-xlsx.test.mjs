@@ -33,3 +33,10 @@ test('external markers skip strings, refuse missing definitions and reject broke
 test('stored unsupported results never replace fresh arithmetic errors or text results after the formula changes',async()=>{
  const source=new ExcelJS.Workbook(),s=source.addWorksheet('Future');s.getCell('A1').value={formula:'_xlfn.FUTUREFOO()',result:7};let b=await readSpreadsheet(await source.xlsx.writeBuffer(),'future.xlsx'),cell=b.sheets[0].cells.A1;assert.equal(calculationDisplay(createEvaluator(b,b.activeSheetId).result('A1')).value,7);cell.raw='=1/0';assert.equal(calculationDisplay(createEvaluator(b,b.activeSheetId).result('A1')).value,'#DIV/0!');cell.raw='="#NAME?"';assert.equal(calculationDisplay(createEvaluator(b,b.activeSheetId).result('A1')).error,null);
 });
+
+test('missing names and literal NAME errors never acquire unsupported-function cache provenance',async()=>{
+ const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'=SUM(Missing)',cachedFormula:'=SUM(Missing)',cachedValue:99},A2:{raw:'=A1*2',cachedFormula:'=A1*2',cachedValue:198},A3:{raw:'=#NAME?',cachedFormula:'=#NAME?',cachedValue:42},B1:{raw:'=FUTUREFOO()',cachedFormula:'=FUTUREFOO()',cachedValue:7},B2:{raw:'=B1*2',cachedFormula:'=B1*2',cachedValue:14}};
+ const e=createEvaluator(b,s.id);for(const ref of ['A1','A2','A3'])assert.deepEqual(e.result(ref),{value:'#NAME?',error:'#NAME?'});assert.equal(calculationDisplay(e.result('B1')).value,7);assert.equal(calculationDisplay(e.result('B2')).value,14);
+ const output=new ExcelJS.Workbook();await output.xlsx.load((await writeSpreadsheet(b)).data);for(const ref of ['A1','A2','A3'])assert.deepEqual(output.worksheets[0].getCell(ref).result,{error:'#NAME?'});assert.equal(output.worksheets[0].getCell('B1').result,7);
+ s.cells.C1={raw:'=SUM(Missing)',cachedFormula:'=SUM(Missing)',cachedValue:999,xlsxFormula:{raw:'=SUM(Missing)',formula:'SUM(Missing)',dynamic:true,shareType:'array',ref:'C1:C2'}};s.cells.C2={raw:'',cachedValue:888};const a=createEvaluator(b,s.id);assert.equal(a.spills({includeBlocked:true}).find(r=>r.ref==='C1').cached,undefined);assert.equal(a.result('C2').cached,undefined);
+});
