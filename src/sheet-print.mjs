@@ -1,3 +1,4 @@
+import {renderPageHeaders,HEADER_FIELDS} from './print-headers.mjs';
 import {address,parseAddress,createEvaluator,formatValue} from './engine.mjs';
 import {tableBounds} from './table-schema.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
@@ -9,7 +10,7 @@ import {renderChartSVG} from './chart-render.mjs';
 import {chartRect} from './chart-geometry.mjs';
 import {drawingPreviews} from './xlsx-drawings.mjs';
 import {nativeCachedValue} from './native-plan.mjs';
-import {readPrintSettings,planPrintPages,checkPrintRange,printRowHeight,printColWidth} from './print-layout.mjs';
+import {readPrintSettings,planPrintPages,checkPrintRange,printRowHeight,printColWidth,MAX_PRINT_PAGES} from './print-layout.mjs';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function printRange(sheet,selection,spills=[]){
@@ -58,7 +59,7 @@ function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,
  * data, instead of being silently omitted or clipped at their screen position.
  * This is an immutable document, built with the worker's calculation session.
  */
-export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation,gridLines,ignorePrintArea=false,includeCharts=true,includeImages=true,evaluate}={}){
+export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation,gridLines,ignorePrintArea=false,includeCharts=true,includeImages=true,evaluate,now=new Date()}={}){
   const sheet=book.sheets.find(s=>s.id===sheetId);if(!sheet)throw Error('인쇄할 시트를 찾을 수 없습니다.');
   const settings=readPrintSettings(book,sheet,{orientation,ignorePrintArea:ignorePrintArea||scope!=='sheet',ignorePrintTitles:scope!=='sheet'});orientation=settings.orientation;gridLines??=settings.gridLines;
   if(!['sheet','selection','charts'].includes(scope)||!['portrait','landscape'].includes(orientation))throw Error('인쇄 설정이 올바르지 않습니다.');
@@ -68,7 +69,7 @@ export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,or
   if(scope==='selection'){settings.repeatRows=null;settings.repeatCols=null;}
   const ranges=chartOnly?[]:settings.areas.length?settings.areas:[printRange(sheet,scope==='selection'?selection:null,calculate.spills?.()||[])],plan=planPrintPages(sheet,ranges,settings);
   let cachedCount=0;
-  const pages=plan.pages.map((page,i)=>{const grid=gridHTML(book,sheet,page,{gridLines,evaluate:calculate});cachedCount+=grid.cachedCount||0;return '<section class="print-page" data-page="'+(i+1)+'" style="height:'+(contentHeight-1)+'px">'+grid.html+'</section>';});
+  const pages=plan.pages.map(page=>{const grid=gridHTML(book,sheet,page,{gridLines,evaluate:calculate});cachedCount+=grid.cachedCount||0;return {html:grid.html,scale:page.scale};});
   const charts=(includeCharts||chartOnly?sheet.charts||[]:[]).map(chart=>{
     const rect=chartRect(chart),plot=renderChartSVG(chart,sheet,book),scale=Math.min(1,contentWidth/rect.width,Math.max(20,contentHeight-40)/rect.height),width=rect.width*scale,height=rect.height*scale;
     return '<figure class="print-chart" data-chart="'+esc(chart.id)+'" style="width:'+width+'px;height:'+height+'px"><h2>'+esc(chart.title||'차트')+'</h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="'+esc(plot.viewBox)+'" role="img" aria-label="'+esc(chart.title||'차트')+'">'+plot.svg+'</svg></figure>';
@@ -77,9 +78,17 @@ export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,or
   const notes=[...settings.notes,...(previews.other&&scope!=='charts'?['미리 보기를 지원하지 않는 이미지·도형 '+previews.other+'개는 인쇄에서 제외했습니다. 원본은 XLSX에 유지됩니다.']:[])];
   if(cachedCount)notes.push('직접 계산할 수 없는 수식 '+cachedCount+'개는 Excel 파일에 저장된 계산값을 사용합니다.');
   if(chartOnly&&!charts.length)throw Error('인쇄할 차트가 없습니다.');
+  const bodies=[...pages,...[...charts,...images].map(html=>({html,scale:1,object:true}))];
+  if(!bodies.length)bodies.push({html:'<p>인쇄할 표시 셀이 없습니다.</p>',scale:1});
+  if(bodies.length>MAX_PRINT_PAGES)throw Error('차트·이미지를 포함한 인쇄 페이지가 500개를 넘습니다. 인쇄 대상을 줄이세요.');
+  for(const [kind,margin] of [['Header','top'],['Footer','bottom']])if(HEADER_FIELDS.filter(f=>f.endsWith(kind)).some(f=>settings.headerFooter[f])&&settings.margin[kind.toLowerCase()]>settings.margin[margin])throw Error('머리글·바닥글 위치가 인쇄 여백 밖에 있습니다. 페이지 설정에서 위치와 여백을 조정하세요.');
+  const printed=bodies.map((body,index)=>{const headers=renderPageHeaders(settings.headerFooter,{book,sheet,index,pageNumber:settings.firstPageNumber+index,totalPages:bodies.length,now,scale:settings.headerFooter.scaleWithDoc?body.scale:1});for(const note of headers.notes)if(!notes.includes(note))notes.push(note);return '<section class="print-page'+(body.object?' print-object-page':'')+'" data-page="'+(index+1)+'" style="height:'+(settings.paper.height*96/25.4-1)+'px;width:'+(settings.paper.width*96/25.4)+'px">'+headers.header+'<div class="print-page-body">'+body.html+'</div>'+headers.footer+'</section>';});
+  const mmToPx=96/25.4,m= settings.margin,headerSide='left:'+(settings.headerFooter.alignWithMargins?m.left:7.62)+'mm;right:'+(settings.headerFooter.alignWithMargins?m.right:7.62)+'mm;';
+
   const style=[
-    '@page{size:'+(settings.paper.name==='B5'?settings.paper.width+'mm '+settings.paper.height+'mm':settings.paper.name+' '+orientation)+';margin:'+['top','right','bottom','left'].map(k=>settings.margin[k]+'mm').join(' ')+'}*{box-sizing:border-box}body{margin:0;color:#222;font:11pt Arial}table{table-layout:fixed;border-collapse:collapse}td{padding:0;overflow:hidden;border:0}table.with-grid td{border:1px solid #ccc}.print-cell{padding:2px 4px;overflow:hidden}tr{break-inside:avoid}.print-page{break-after:page;overflow:hidden}.print-page:last-child{break-after:auto}.print-chart,.print-image{margin:18px 0;break-inside:avoid;max-width:100%;background:white}.print-chart{display:flex;flex-direction:column;border:1px solid #ddd;padding:12px 18px}.print-chart h2{font-size:13pt;text-align:center;margin:0 0 6px}.print-chart svg{display:block;flex:1;min-height:0;width:100%;overflow:visible}.print-note{font-size:9pt;color:#555}img{display:block}.print-objects{clear:both}'
+    '@page{size:'+(settings.paper.name==='B5'?settings.paper.width+'mm '+settings.paper.height+'mm':settings.paper.name+' '+orientation)+';margin:0}*{box-sizing:border-box}body{margin:0;color:#222;font:11pt Arial}table{table-layout:fixed;border-collapse:collapse}td{padding:0;overflow:hidden;border:0}table.with-grid td{border:1px solid #ccc}.print-cell{padding:2px 4px;overflow:hidden}tr{break-inside:avoid}.print-page{position:relative;break-after:page;padding:'+['top','right','bottom','left'].map(k=>settings.margin[k]+'mm').join(' ')+';}.print-page:last-of-type{break-after:auto}.print-page-body{height:100%;overflow:hidden}.print-object-page .print-page-body{display:flex;justify-content:center;align-items:flex-start}.print-object-page figure{margin:0}.print-chart,.print-image{margin:18px 0;break-inside:avoid;max-width:100%;background:white}.print-chart{display:flex;flex-direction:column;border:1px solid #ddd;padding:12px 18px}.print-chart h2{font-size:13pt;text-align:center;margin:0 0 6px}.print-chart svg{display:block;flex:1;min-height:0;width:100%;overflow:visible}.print-note{font-size:9pt;color:#555}img{display:block}.print-objects{clear:both}'
+    ,'.print-header,.print-footer{position:absolute;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;'+headerSide+'}.print-header{top:'+m.header+'mm;height:'+Math.max(0,(m.top-m.header)*mmToPx)+'px;align-items:start}.print-footer{bottom:'+m.footer+'mm;height:'+Math.max(0,(m.bottom-m.footer)*mmToPx)+'px;align-items:end}.print-header-cell{font-size:0;white-space:pre;max-height:100%;overflow:hidden;line-height:1.15}.print-header-cell.center{text-align:center}.print-header-cell.right{text-align:right}@media print{.print-notes{display:none}}'
   ].join('');
-  const content=(pages.join('')||(!chartOnly?'<p>인쇄할 표시 셀이 없습니다.</p>':''))+(charts.length||images.length?'<section class="print-objects">'+charts.join('')+images.join('')+'</section>':'')+notes.map(note=>'<p class="print-note">'+esc(note)+'</p>').join('');
-  return {html:'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:"><title>'+esc(book.name)+' · '+esc(sheet.name)+'</title><style>'+style+'</style></head><body>'+content+'</body></html>',dataCells:plan.dataCells,pageCount:pages.length,chartCount:charts.length,imageCount:images.length,notes};
+  const content=printed.join('')+(notes.length?'<aside class="print-notes">'+notes.map(note=>'<p class="print-note">'+esc(note)+'</p>').join('')+'</aside>':'');
+  return {html:'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:"><title>'+esc(book.name)+' · '+esc(sheet.name)+'</title><style>'+style+'</style></head><body>'+content+'</body></html>',dataCells:plan.dataCells,pageCount:bodies.length,chartCount:charts.length,imageCount:images.length,notes};
 }

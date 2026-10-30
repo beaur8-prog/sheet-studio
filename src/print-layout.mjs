@@ -1,6 +1,7 @@
 import {colIndex} from './engine.mjs';
 import {xml,child,children,attr} from './chart-xml.mjs';
 import {filteredRowsForSheet,tableBounds} from './table-schema.mjs';
+import {readHeaderFooter} from './print-headers.mjs';
 
 const mmToPx=96/25.4;
 const truth=value=>value==='1'||value==='true';
@@ -59,7 +60,7 @@ export function readPrintSettings(book,sheet,{orientation,ignorePrintArea=false,
   const paperId=number(setup,'paperSize',9,0,10000),paper={...(papers[paperId]||papers[9])};
   if(!papers[paperId])notes.push('지원하지 않는 용지 크기('+paperId+')는 이번 출력에서 A4로 사용합니다. 원래 설정은 파일에 유지됩니다.');
   if(orientation==='landscape')[paper.width,paper.height]=[paper.height,paper.width];
-  const margin=Object.fromEntries(['top','right','bottom','left'].map(k=>[k,Number((number(margins,k,12/25.4,0,100)*25.4).toFixed(6))]));
+  const margin=Object.fromEntries(['top','right','bottom','left','header','footer'].map(k=>[k,Number((number(margins,k,['header','footer'].includes(k)?0.3:12/25.4,0,100)*25.4).toFixed(6))]));
   const contentWidth=(paper.width-margin.left-margin.right)*mmToPx,contentHeight=(paper.height-margin.top-margin.bottom)*mmToPx;
   if(contentWidth<10*mmToPx||contentHeight<10*mmToPx)throw Error('용지보다 여백이 큽니다. Excel의 페이지 설정을 확인하세요.');
   const fit=truth(props&&attr(props,'fitToPage'));
@@ -77,7 +78,8 @@ export function readPrintSettings(book,sheet,{orientation,ignorePrintArea=false,
     else throw Error('저장된 인쇄 반복 제목을 해석할 수 없습니다.');
   }
   const breaks=name=>children(feature(sheet,name),'brk').filter(n=>truth(attr(n,'man'))).map(n=>({id:number(n,'id',0,0,1048576),min:number(n,'min',0,0,1048576),max:number(n,'max',1048576,0,1048576)}));
-  return {orientation,paper,margin,contentWidth,contentHeight,scale:fit?null:scale,fitToPage:fit,fitWidth,fitHeight,areas,repeatRows,repeatCols,rowBreaks:breaks('rowBreaks'),colBreaks:breaks('colBreaks'),pageOrder:setup&&attr(setup,'pageOrder')==='overThenDown'?'overThenDown':'downThenOver',gridLines:truth(options&&attr(options,'gridLines')),notes};
+  const firstPageNumber=setup&&attr(setup,'useFirstPageNumber')!=='0'&&attr(setup,'useFirstPageNumber')!=='false'?Math.max(1,Math.trunc(number(setup,'firstPageNumber',1,0,32767))):1;
+  return {orientation,paper,paperId,margin,contentWidth,contentHeight,scale:fit?null:scale,fitToPage:fit,fitWidth,fitHeight,areas,repeatRows,repeatCols,rowBreaks:breaks('rowBreaks'),colBreaks:breaks('colBreaks'),pageOrder:setup&&attr(setup,'pageOrder')==='overThenDown'?'overThenDown':'downThenOver',gridLines:truth(options&&attr(options,'gridLines')),headerFooter:readHeaderFooter(sheet),firstPageNumber,notes};
 }
 export const printRowHeight=(sheet,r)=>sheet.rowHeights?.[r]??sheet.defaultRowHeight??25;
 export const printColWidth=(sheet,c)=>sheet.columnWidths?.[c]??sheet.defaultColumnWidth??90;

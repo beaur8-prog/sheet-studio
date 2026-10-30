@@ -16,7 +16,7 @@ test('saved Excel print areas, paper, orientation, margins and fit settings affe
   for(let round=0;round<3;round++){
     const s=book.sheets[0];s.cells.A1000000={raw:'outside private content'};s.cells.B2.raw='=A2*4';
     const before=JSON.stringify(book),settings=readPrintSettings(book,s),out=buildSheetPrintDocument(book,s.id);
-    assert.equal(JSON.stringify(book),before);assert.equal(settings.areas.length,1);assert.equal(out.dataCells,60);assert.equal(out.pageCount,1);assert.match(out.html,/size:A4 landscape/);assert.match(out.html,/margin:12\.7mm 10\.16mm 15\.24mm 7\.62mm/);assert.match(out.html,/>12<\/div>/);assert.doesNotMatch(out.html,/outside private content|data-ref="A1000000"/);
+    assert.equal(JSON.stringify(book),before);assert.equal(settings.areas.length,1);assert.equal(out.dataCells,60);assert.equal(out.pageCount,1);assert.match(out.html,/size:A4 landscape/);assert.match(out.html,/padding:12\.7mm 10\.16mm 15\.24mm 7\.62mm/);assert.match(out.html,/>12<\/div>/);assert.doesNotMatch(out.html,/outside private content|data-ref="A1000000"/);
     book=await readSpreadsheet((await writeSpreadsheet(book)).data,'again.xlsx');
   }
 });
