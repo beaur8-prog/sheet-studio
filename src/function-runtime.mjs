@@ -183,7 +183,7 @@ export function createFunctionRuntime(h) {
       for(const [r] of checks)if(r.rows!==result.rows||r.cols!==result.cols)fail('#VALUE!');
       let total=0,matched=0,minimum=Infinity,maximum=-Infinity;
       result.values.forEach((value,i)=>{if(!checks.every(([r,test])=>test(r.values[i])))return;
-        if(count){matched++;return;}checked(value);if(typeof value!=='number')return;total+=value;matched++;minimum=Math.min(minimum,value);maximum=Math.max(maximum,value);
+        if(count){matched++;return;}checked(value);if(['SUMIFS','AVERAGEIFS'].includes(name)&&typeof value==='boolean')value=Number(value);if(typeof value!=='number')return;total+=value;matched++;minimum=Math.min(minimum,value);maximum=Math.max(maximum,value);
       });
       if(count)return matched;
       if(name.startsWith('AVERAGE'))return matched?finite(total/matched):fail('#DIV/0!');

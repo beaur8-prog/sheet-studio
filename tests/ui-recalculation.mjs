@@ -42,6 +42,13 @@ try{
   for(const [ref,formula,expected] of [['E1','=COUNTIF(A1:A4,">3/1/2010")',3],['E2','=SUMIF(A1:A4,">2010-03-01",B1:B4)',80],['E3','=AVERAGEIFS(B1:B3,C1:C3,0)',15],['E4','=AVERAGEIF(B1:B3,">0",B1)',20]]){await edit(ref,formula);assert.equal(await value(ref),expected,formula);}
   file=await save();await page.locator('#file-input').setInputFiles(file);await settle();
   for(const [ref,expected] of [['E1',3],['E2',80],['E3',15],['E4',20]])assert.equal(await value(ref),expected);
+  book=createWorkbook();book.sheets[0].cells=Object.fromEntries(Object.entries({A1:'1',A2:'1',A3:'1',B1:'TRUE',B2:'FALSE',B3:'3',E1:'=SUMIFS(B1:B3,A1:A3,1)',E2:'=AVERAGEIFS(B:B,A:A,1)'}).map(([ref,raw])=>[ref,{raw}]));await load(book);
+  assert.equal(await value('E1'),4);assert.equal(await value('E2'),4/3);
+  await edit('B1','FALSE');assert.equal(await value('E1'),3);assert.equal(await value('E2'),1);
+  await page.locator('#undo').click();await settle();assert.equal(await value('E1'),4);assert.equal(await value('E2'),4/3);
+  await page.locator('#redo').click();await settle();assert.equal(await value('E1'),3);assert.equal(await value('E2'),1);
+  file=await save();saved=new ExcelJS.Workbook();await saved.xlsx.load(await fs.readFile(file));assert.equal(saved.worksheets[0].getCell('E1').result,3);assert.equal(saved.worksheets[0].getCell('E2').result,1);
+  await page.locator('#file-input').setInputFiles(file);await settle();assert.equal(await value('E1'),3);assert.equal(await value('E2'),1);
   const source=new ExcelJS.Workbook();source.properties.date1904=true;const dateSheet=source.addWorksheet('Dates');
   dateSheet.getCell('A1').value='날짜';dateSheet.getCell('B1').value='날짜 차이';
   dateSheet.getCell('A2').value=new Date('2011-07-05T00:00:00Z');dateSheet.getCell('A2').numFmt='yyyy-mm-dd';
@@ -59,6 +66,6 @@ try{
   assert.deepEqual(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].autoFilter.hiddenRows),[1]);
   file=await save();saved=new ExcelJS.Workbook();await saved.xlsx.load(await fs.readFile(file));assert.equal(saved.properties.date1904,true);assert.equal(saved.worksheets[0].getCell('B2').result,1);
   await page.locator('#file-input').setInputFiles(file);await settle();assert.equal(await value('B2'),1);
-  assert.deepEqual(errors,[]);console.log('PASS: Calculate Now and F9 refresh RAND and dependents; displayed values match XLSX caches; 10,000-cell chain navigation/edit/undo/redo/save/reopen; date, blank and AVERAGEIF criteria entered through the UI; 1904 XLSX XML-boolean date display, formulas, date filter and roundtrip');
+  assert.deepEqual(errors,[]);console.log('PASS: Calculate Now and F9 refresh RAND and dependents; displayed values match XLSX caches; 10,000-cell chain navigation/edit/undo/redo/save/reopen; date/blank criteria; SUMIFS/AVERAGEIFS Boolean results, edit/undo/redo/save/reopen; 1904 XLSX XML-boolean date display, formulas, date filter and roundtrip');
 }catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/recalculation-failure.png')});throw error;}
 finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

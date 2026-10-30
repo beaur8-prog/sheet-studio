@@ -35,7 +35,7 @@ export function sparseFunction(name,nodes,evaluate,h){
     if(checks.some(([r])=>r.rows!==target.rows||r.cols!==target.cols))fail('#VALUE!');
     const indexes=new Set(checks.flatMap(([r])=>r.indices));if(!count)for(const i of target.indices)indexes.add(i);
     const matchesBlank=checks.every(([,test])=>test(BLANK)),implicit=matchesBlank?target.rows*target.cols-indexes.size:0;let matched=count?implicit:0,total=0,low=Infinity,high=-Infinity;
-    for(const index of indexes){if(!checks.every(([r,test])=>test(read(r,index))))continue;if(count){matched++;continue;}const v=checked(read(target,index));if(typeof v!=='number')continue;total+=v;matched++;low=Math.min(low,v);high=Math.max(high,v);}
+    for(const index of indexes){if(!checks.every(([r,test])=>test(read(r,index))))continue;if(count){matched++;continue;}let v=checked(read(target,index));if(['SUMIFS','AVERAGEIFS'].includes(name)&&typeof v==='boolean')v=Number(v);if(typeof v!=='number')continue;total+=v;matched++;low=Math.min(low,v);high=Math.max(high,v);}
     return result(count?matched:average?matched?finite(total/matched):fail('#DIV/0!'):minimum?matched?low:0:maximum?matched?high:0:finite(total));
   }
   if(name==='VLOOKUP'){
