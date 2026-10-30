@@ -21,7 +21,8 @@
     "package:win": "npm run build && node scripts/package.cjs --win",
     "runtime:install": "node node_modules/electron/install.js",
     "package:linux": "npm run build && node scripts/package.cjs --linux",
-    "test:parity-ui": "npm run build && node tests/ui-parity-audit.mjs"
+    "test:parity-ui": "npm run build && node tests/ui-parity-audit.mjs",
+    "test:interop:libreoffice": "node tests/libreoffice-interop.mjs"
   },
   "dependencies": {
     "@formulajs/formulajs": "4.6.1",

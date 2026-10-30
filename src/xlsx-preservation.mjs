@@ -16,6 +16,10 @@ export async function worksheetParts(zip){
  */
 export async function prepareWorksheetFeatures(zip){
   const features=new Map(),styleRows=new Map(),normalCells=new Map(),loader=zip.clone();loader.files={...zip.files};let stripped=false,hasTables=false;
+  // XML boolean 'true' is valid, but ExcelJS 4.4 only recognizes '1' here.
+  // Normalize the private loader before it converts any date serials to Date.
+  const workbook=xml(await zip.file('xl/workbook.xml').async('string')),properties=child(workbook.documentElement,'workbookPr');
+  if(attr(properties,'date1904')==='true'){properties.setAttribute('date1904','1');loader.file('xl/workbook.xml',stringify(workbook));stripped=true;}
   for(const part of await worksheetParts(zip)){
     if(!part.type?.endsWith('/worksheet'))continue;
     const text=await zip.file(part.path).async('string');

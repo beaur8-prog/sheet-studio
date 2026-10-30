@@ -61,7 +61,7 @@ jobs:
       - name: Verify packaged table, formula, chart and cross-document scenarios
         shell: bash
         run: |
-          for spec in table-editing let chart-axis clipboard-types; do
+          for spec in table-editing let chart-axis clipboard-types style-defaults recalculation; do
             if [ "$RUNNER_OS" = Linux ]; then
               xvfb-run -a node "tests/ui-$spec.mjs" --packaged
             else

@@ -83,3 +83,12 @@ test('1904 dates render consistently in charts, chart XML and rich clipboard tex
   assert.equal(pastePlan(target,{...clip,date1904:false,data:[[{raw:'40729',style:{format:'date'}}]],values:[[40729]]},{r:0,c:0},{date1904:true,mode:'values'}).updates[0].cell.raw,'39267');
   const numberClip={...clip,data:[[{raw:'39267'}]]};assert.equal(pastePlan(target,numberClip,{r:0,c:0},{date1904:false}).updates[0].cell.raw,'39267');
 });
+
+
+test('valid XML true/false date-system flags are decoded before ExcelJS parses date values',async()=>{
+  for(const [flag,date1904] of [['true',true],['1',true],['false',false],['0',false]]){
+    const source=new ExcelJS.Workbook();source.properties.date1904=date1904;const sheet=source.addWorksheet('Boolean dates');sheet.getCell('A1').value=new Date('2011-07-05T00:00:00Z');sheet.getCell('A1').numFmt='yyyy-mm-dd';sheet.getCell('B1').value={formula:'DATE(2011,7,5)-'+(date1904?39267:40729),result:0};sheet.getCell('C1').value={formula:'A1+1',result:new Date('2011-07-06T00:00:00Z')};sheet.getCell('C1').numFmt='yyyy-mm-dd';
+    const zip=await JSZip.loadAsync(await source.xlsx.writeBuffer());zip.file('xl/workbook.xml',(await zip.file('xl/workbook.xml').async('string')).replace(/date1904="[^"]*"/,`date1904="${flag}"`));const bytes=await zip.generateAsync({type:'uint8array'}),book=await readSpreadsheet(bytes,'boolean-dates.xlsx'),s=book.sheets[0];assert.equal(book.date1904===true,date1904);assert.equal(s.cells.A1.raw,String(date1904?39267:40729));assert.equal(evaluateCell(book,s.id,'B1'),0);assert.equal(s.cells.C1.cachedValue,date1904?39268:40730);assert.equal(formatValue(Number(s.cells.A1.raw),s.cells.A1.style,book),'2011-07-05');
+    const again=await readSpreadsheet((await writeSpreadsheet(book)).data,'again.xlsx');assert.equal(again.date1904===true,date1904);assert.equal(again.sheets[0].cells.A1.raw,s.cells.A1.raw);
+  }
+});

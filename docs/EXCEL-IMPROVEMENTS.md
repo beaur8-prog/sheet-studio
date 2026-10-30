@@ -259,3 +259,11 @@
 - XLSX의 셀 수식과 계산 열 정의를 함께 정규화한다. 현재 표의 암시적 참조에 표 이름을 넣고, 현재 행의 @ 표기를 #This Row로 저장한다. 문자열·외부 링크·알 수 없는 열은 바꾸지 않으며 이스케이프된 열 이름과 열 구간, 미래 함수 접두어를 유지한다. 화면에서 입력하는 짧은 표기는 계속 지원한다.
 - 검증: 문자열/특수문자/구간/명시·암시 참조, LET 접두어와 원래 매개변수, 세 번의 XLSX 왕복을 추가 검사했다. 전체 325개 중 324개 통과, Windows 전용 1개 제외. 실제 Mac Electron의 표 편집/정렬/계산·행열 구조 변경/일반 범위 변환·저장/재열기를 확인했다.
 - 참고: [Microsoft 구조화 참조 규격](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oe376/bcd72180-31a3-423b-8f83-d224b2286da3), [구조화 참조 사용](https://support.microsoft.com/en-us/excel/using-structured-references-with-excel-tables).
+
+### 31차: XML 불리언 날짜 체계와 독립 파일 검사
+
+- LibreOffice가 저장한 유효한 `date1904="true"`를 ExcelJS 4.4가 false로 읽어 날짜 체계가 사라지는 문제를 찾았다. 실제 이전 Mac 패키지도 해당 파일의 날짜 체계를 인식하지 못했다. 라이브러리가 날짜 번호를 Date 객체로 바꾸기 전에 검사용 ZIP 복사본에서 true를 1로 정규화한다. 원본 입력 ZIP은 바꾸지 않는다.
+- true/1/false/0의 두 날짜 체계를 날짜 상수·날짜 수식 결과·일반 숫자 수식·저장/재열기에서 확인했다. 전체 326개 중 325개 통과, Windows 전용 1개 제외. 실제 Mac Electron에서 true 문서 열기→날짜·수식·날짜 필터→저장/재열기를 통과했다.
+- 설치된 LibreOffice 26.8.0.3의 별도 프로필에서 항상 재계산을 설정하고, 생성 파일의 숫자 캐시 하나를 일부러 -999로 바꾼 뒤 열기/재계산/저장을 검사했다. 표/구조화 참조/LET·전체 열 조건 집계, 1904 날짜, 이름/기존 배열, 상속 서식 정렬, 18개 차트 조합 등 5문서를 확인했다. 23개 값 중 22개가 일치했고 18개 차트를 다시 읽었다. 캐시를 그대로 재사용하는 검사는 통과로 세지 않는다.
+- 중첩 LET 한 식은 앱 결과 5와 LibreOffice #NAME?가 달랐다. 명시적인 매개변수 접두어와 서로 다른 내부 이름으로도 차이를 확인했다. 독립 프로그램과의 미해결 호환성 차이로 기록하며 실제 Microsoft Excel/VBA 검증을 한 것으로 해석하지 않는다. 이 한 식을 제외한 표 계산·배열 결과·날짜·차트 보존은 독립 왕복을 통과했다.
+- 재현 명령은 `npm run test:interop:libreoffice`이며, LibreOffice를 별도 설치한 환경에서만 실행한다. 사용자의 프로그램 프로필이나 문서를 사용하지 않는다. [LibreOffice 재계산 설정](https://books.libreoffice.org/en/CG262/CG26216-SettingUpCustomizing.html), [설정 값 정의](https://github.com/LibreOffice/core/blob/master/officecfg/registry/schema/org/openoffice/Office/Calc.xcs)를 참고했다.

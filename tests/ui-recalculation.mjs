@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import platform from '../scripts/platform.cjs';
 import {createWorkbook} from '../src/engine.mjs';
 
@@ -46,7 +47,8 @@ try{
   dateSheet.getCell('A2').value=new Date('2011-07-05T00:00:00Z');dateSheet.getCell('A2').numFmt='yyyy-mm-dd';
   dateSheet.getCell('A3').value=new Date('2011-07-06T00:00:00Z');dateSheet.getCell('A3').numFmt='yyyy-mm-dd';
   dateSheet.getCell('B2').value={formula:'DATE(2011,7,5)-39267',result:0};dateSheet.getCell('B3').value=2;
-  await page.locator('#file-input').setInputFiles({name:'epoch-1904.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await source.xlsx.writeBuffer())});
+  const dateZip=await JSZip.loadAsync(await source.xlsx.writeBuffer());dateZip.file('xl/workbook.xml',(await dateZip.file('xl/workbook.xml').async('string')).replace('date1904="1"','date1904="true"'));
+  await page.locator('#file-input').setInputFiles({name:'epoch-1904.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await dateZip.generateAsync({type:'uint8array'}))});
   await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='epoch-1904');await settle();await go('A2');
   assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().date1904),true);
   assert.equal(await page.getByRole('gridcell',{name:'A2',exact:true}).innerText(),'2011-07-05');assert.equal(await value('B2'),0);
@@ -57,6 +59,6 @@ try{
   assert.deepEqual(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].autoFilter.hiddenRows),[1]);
   file=await save();saved=new ExcelJS.Workbook();await saved.xlsx.load(await fs.readFile(file));assert.equal(saved.properties.date1904,true);assert.equal(saved.worksheets[0].getCell('B2').result,1);
   await page.locator('#file-input').setInputFiles(file);await settle();assert.equal(await value('B2'),1);
-  assert.deepEqual(errors,[]);console.log('PASS: Calculate Now and F9 refresh RAND and dependents; displayed values match XLSX caches; 10,000-cell chain navigation/edit/undo/redo/save/reopen; date, blank and AVERAGEIF criteria entered through the UI; 1904 XLSX date display, formulas, date filter and roundtrip');
+  assert.deepEqual(errors,[]);console.log('PASS: Calculate Now and F9 refresh RAND and dependents; displayed values match XLSX caches; 10,000-cell chain navigation/edit/undo/redo/save/reopen; date, blank and AVERAGEIF criteria entered through the UI; 1904 XLSX XML-boolean date display, formulas, date filter and roundtrip');
 }catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/recalculation-failure.png')});throw error;}
 finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}
