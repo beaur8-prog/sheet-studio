@@ -1,3 +1,4 @@
+import {calculationDisplay} from './calculation-display.mjs';
 import {arrayRegions} from './cell-constraints.mjs';
 import {sortStyleResolver} from './sort-style.mjs';
 import {worksheetFilterStyle} from './cell-style.mjs';
@@ -16,7 +17,7 @@ export const filterActive=s=>!!(Object.keys(s.autoFilter?.columns||{}).length||s
 export const valueKey=value=>String(value??'').toLocaleLowerCase();
 export function filterValue(sheet,evaluate,r,c){
   const cell=sheet.cells[address(r,c)];
-  return (!cell?.raw||cell.raw==="'")&&!evaluate.isComputed?.(address(r,c))?'':evaluate(address(r,c));
+  if((!cell?.raw||cell.raw==="'")&&!evaluate.isComputed?.(address(r,c)))return '';const result=evaluate.result?.(address(r,c));return result?calculationDisplay(result).value:evaluate(address(r,c));
 }
 export function inferFilterRange(sheet,selection){
   const points=[];for(const ref in sheet.cells)if(sheet.cells[ref].raw){const p=parseAddress(ref);if(p)points.push(p);}const arrays=arrayRegions(sheet),intersects=(a,b)=>a.r1<=b.r2&&a.r2>=b.r1&&a.c1<=b.c2&&a.c2>=b.c1;

@@ -1,0 +1,30 @@
+import {desktopLaunch} from './electron-launch.mjs';
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import JSZip from 'jszip';
+import {externalLinksFixture} from './fixtures/external-links.mjs';
+import {createWorkbook} from '../src/engine.mjs';
+const root=path.resolve(import.meta.dirname,'..'),profile=path.join(root,'.package','external-links-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:profile};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch(desktopLaunch(root,env)),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
+await app.evaluate(({ipcMain})=>{ipcMain.removeHandler('sheet:write-clipboard');ipcMain.handle('sheet:write-clipboard',(_event,payload)=>{globalThis.testExternalClipboard=payload;});});
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());},go=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();},cell=ref=>page.getByRole('gridcell',{name:ref,exact:true}),value=ref=>page.evaluate(ref=>sheetStudio.evaluateAsync(ref),ref);
+const edit=async(ref,text)=>{await go(ref);await page.keyboard.press('F2');await page.locator('#editor').fill(text);await page.locator('#editor').press('Enter');await settle();};
+const copy=async()=>{await page.locator('[data-action="copy"]').click();await settle();return app.evaluate(()=>globalThis.testExternalClipboard.text);};
+const paste=async text=>{await page.locator('#grid').focus();await page.evaluate(text=>{const data=new DataTransfer();data.setData('text/plain',text);document.querySelector('#grid').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));},text);await settle();};
+const load=async(bytes,name)=>{await page.locator('#file-input').setInputFiles({name,mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(bytes)});await settle();};
+const save=async name=>{const file=path.join(profile,name);await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},file);await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');return file;};
+try{
+ await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.locator('.cell').first().waitFor();const bytes=await externalLinksFixture();await load(bytes,'external.xlsx');
+ for(const [ref,expected] of [['A1','42'],['A2','TRUE'],['A3','001'],['A4','#N/A'],['A5','#N/A'],['C1','84']])assert.equal(await cell(ref).textContent(),expected,ref);assert.match(await cell('A1').getAttribute('title'),/저장된 계산값/);assert.equal(await value('A1'),42);
+ await go('A1:C1');assert.match(await page.locator('#stats').textContent(),/합계: 126/);
+ await go('A1');const copied=await copy();assert.equal(copied,'42');await edit('E1','changed');assert.equal(await cell('A1').textContent(),'#NAME?');assert.equal(await value('C1'),'#NAME?');await page.locator('#undo').click();await settle();assert.equal(await cell('A1').textContent(),'42');await page.locator('#redo').click();await settle();assert.equal(await cell('A1').textContent(),'#NAME?');
+ const stale=await save('external-stale.xlsx'),zip=await JSZip.loadAsync(await fs.readFile(stale));assert.match(await zip.file('xl/workbook.xml').async('string'),/externalReferences/);await page.locator('#file-input').setInputFiles(stale);await settle();assert.equal(await cell('A1').textContent(),'#NAME?');assert.equal((await page.evaluate(()=>sheetStudio.getWorkbook())).referenceCachesValid,false);
+ // Cross-document formula transfer must not silently bind index 1 to a different file.
+ await load(bytes,'external-fresh.xlsx');await go('A1');await copy();const destination=createWorkbook();destination.name='External paste destination';await load(Buffer.from(JSON.stringify(destination)),'destination.sheet.json');await go('B2');await page.locator('[data-action="paste-special"]').click();await page.locator('#paste-mode').selectOption('formulas');await page.getByRole('dialog').getByRole('button',{name:'확인',exact:true}).click();assert.match(await page.locator('#paste-error').textContent(),/다른 문서의 외부 참조/);assert.equal(await page.evaluate(()=>sheetStudio.getCell('B2')),undefined);await page.locator('#paste-mode').selectOption('values');await page.getByRole('dialog').getByRole('button',{name:'확인',exact:true}).click();await settle();assert.equal(await value('B2'),42);assert.equal((await page.evaluate(()=>sheetStudio.getCell('B2'))).xlsxExternal,undefined);
+ // The same workbook keeps external definitions when formulas are shifted.
+ await load(bytes,'external-copy.xlsx');await go('A1');const same=await copy();await go('B2');await paste(same);const pasted=await page.evaluate(()=>sheetStudio.getCell('B2'));assert.equal(pasted.raw,"='[1]Data'!B2");assert.equal(pasted.xlsxExternal.raw,pasted.raw);assert.equal(await value('B2'),'#NAME?');await save('external-copy.xlsx');
+ assert.deepEqual(errors,[]);await page.screenshot({path:path.join(root,'test-results/external-links.png')});console.log('PASS: inert external-link preservation, typed labelled caches, dependent/stats display, edit/undo/redo staleness, XLSX reopen, safe cross-document value paste and same-document formula shifts');
+}catch(error){await page.screenshot({path:path.join(root,'test-results/external-links-failure.png')});throw error;}
+finally{await app.close();await fs.rm(profile,{recursive:true,force:true});}

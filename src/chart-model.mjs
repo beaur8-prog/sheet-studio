@@ -1,3 +1,4 @@
+import {calculationDisplay} from './calculation-display.mjs';
 import {worksheetCellStyle} from './cell-style.mjs';
 import {filteredRowsForSheet} from './table-schema.mjs';
 import {address,parseAddress,createEvaluator,transformFormulaReferences,formatValue,numberFormatKind,formulaReference} from './engine.mjs';
@@ -26,7 +27,7 @@ export function refFormula(ref,workbook,names,offsets){
   return "'"+name.replace(/'/g,"''")+"'!"+range;
 }
 function chartCellValue(cell,evaluate,key,onCached,workbook){
-  const result=evaluate.result?.(key),value=result?result.value:evaluate(key);
+  const original=evaluate.result?.(key),result=original?calculationDisplay(original):null,value=result?result.value:evaluate(key);if(original?.cached&&!original.stale)onCached?.();
   // A calculation error is current data, not a reason to resurrect an old
   // successful result. Only an unchanged, unsupported formula may use a cache.
   if((result?result.error==='#NAME?':value==='#NAME?')&&workbook?.referenceCachesValid!==false&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){onCached?.();return cell.cachedValue;}

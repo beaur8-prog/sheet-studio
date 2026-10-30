@@ -1,3 +1,4 @@
+import {readExternalLinks,addExternalLinks} from './external-xlsx.mjs';
 import {tableBounds} from './table-schema.mjs';
 import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
@@ -20,7 +21,7 @@ import {addFilterParts,restoreFilterParts} from './filter-xlsx.mjs';
 import JSZip from 'jszip';
 import {createColorResolver} from './spreadsheet-colors.mjs';
 import ExcelJS from 'exceljs/dist/exceljs.min.js';
-import { createEvaluator,transformFormulaReferences,formulaForXlsx,formulaForEditing,formulaHasDynamicArrays } from './engine.mjs';
+import { createEvaluator,transformFormulaReferences,formulaForXlsx,formulaForEditing,formulaHasDynamicArrays,formulaHasExternalReferences } from './engine.mjs';
 import { attachNativeSource } from './native-plan.mjs';
 import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
 import {applyPivot,sourceData} from './pivot.mjs';
@@ -147,7 +148,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   // JSZip 3.10.2 exposes the central-directory size on its pinned compressed
   // entry. Check before ExcelJS inflates cell XML into its in-memory model.
   for(const file of Object.values(colorZip.files))if(!file.dir){const size=file._data?.uncompressedSize;if(!Number.isSafeInteger(size)||size<0)throw Error('XLSX 압축 정보를 읽을 수 없습니다.');expanded+=size;if(expanded>512*1024*1024)throw Error('압축 해제 후 512 MB 이하인 XLSX 파일을 선택하세요.');}
-  const arrayMetadata=await readArrayMetadata(colorZip),preserved=await prepareWorksheetFeatures(colorZip,{onMetadataCell:arrayMetadata.collect});
+  const externalLinks=await readExternalLinks(colorZip),arrayMetadata=await readArrayMetadata(colorZip),preserved=await prepareWorksheetFeatures(colorZip,{onMetadataCell:arrayMetadata.collect});
   const styleModels=[],styleIndexes=new Map(),styleObjects=new WeakMap();
   const rememberStyle=(cell,baseline)=>{if(!Object.keys(cell.style||{}).length)return undefined;let index=styleObjects.get(cell.style);if(index!==undefined)return index;const key=JSON.stringify(cell.style);index=styleIndexes.get(key);if(index===undefined){index=styleModels.length;styleIndexes.set(key,index);styleModels.push({style:plainCopy(cell.style),baseline:plainCopy(baseline)});}styleObjects.set(cell.style,index);return index;};
   const book = new ExcelJS.Workbook();
@@ -181,6 +182,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       const originalStyle=rememberStyle(cell,style);if(originalStyle!==undefined)entry.xlsxStyle=originalStyle;
       if(value?.richText||value?.hyperlink)entry.xlsxValue={raw,value:plainCopy(value)};
       if(cell.formula&&(value?.shareType==='array'||/_xlfn\.|_xlws\./i.test(cell.formula)))entry.xlsxFormula={raw,formula:cell.formula,...(value?.shareType==='array'?{shareType:'array',ref:value.ref}:{})};
+      if(cell.formula&&formulaHasExternalReferences('='+cell.formula)){entry.xlsxExternal={raw};entry.xlsxFormula||={raw,formula:cell.formula};}
       const metadata=arrayMetadata.cells.get(source.name)?.get(cell.address);
       if(metadata){entry.xlsxMetadata={raw,...(metadata.cm!==undefined?{cm:metadata.cm}:{}),...(metadata.vm!==undefined?{vm:metadata.vm}:{})};if(metadata.dynamic&&cell.formula)entry.xlsxFormula={raw,formula:cell.formula,shareType:'array',ref:metadata.ref||value?.ref||cell.address,dynamic:true};}
       if (typeof cell.note === 'string') entry.note = cell.note;
@@ -228,6 +230,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   const properties=documentProperties(book);if(Object.keys(properties).length)result.xlsxProperties=properties;
   if(preserved.colors)result.xlsxColors=preserved.colors;
   if(arrayMetadata.preserved)result.xlsxMetadata=arrayMetadata.preserved;
+  if(externalLinks)result.xlsxExternalLinks=externalLinks;
   if(arrayMetadata.stale)result.referenceCachesValid=false;
   if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
   await restoreSheetKinds(colorZip,result,newSheet);
@@ -311,10 +314,10 @@ function safeSheetName(name, used) {
   used.add(value.toLowerCase());
   return value;
 }
-function cachedResult(evaluate, workbook, sheet, addr, cell,detailed=evaluate?.result) {
+function cachedResult(evaluate, workbook, sheet, addr, cell,detailed=evaluate?.result,preserveOriginal=false) {
   let value,error;
   try {if(detailed){const result=detailed(workbook,sheet.id,addr);value=result.value;error=result.error;}else{value=evaluate?.(workbook,sheet.id,addr);error=errors.has(value)?value:null;}} catch { /* Excel can recalculate an unsupported formula. */ }
-  if (value === undefined || ['#NAME?','#ERROR!'].includes(error)){value=workbook.referenceCachesValid!==false&&(!cell.cachedFormula || cell.cachedFormula === cell.raw)?cell.cachedValue:undefined;error=cell.cachedError===false?null:errors.has(value)?value:null;}
+  if (value === undefined || ['#NAME?','#ERROR!'].includes(error)){const original=preserveOriginal&&(workbook.xlsxExternalLinks||cell.xlsxFormula?.raw===cell.raw),stored=(workbook.referenceCachesValid!==false||original)&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)&&cell.cachedValue!==undefined;if(stored){value=cell.cachedValue;error=cell.cachedError===false?null:errors.has(value)?value:null;}else if(error){value=error;}else value=undefined;}
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'number') return Number.isFinite(value) ? value : { error: '#NUM!' };
   if (typeof value === 'boolean') return value;
@@ -414,7 +417,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       const targetCell = target.getCell(offset?address(pos.col,pos.row+offset):addr);
       const contextTable=tableRanges.find(b=>pos.row>=b.r1&&pos.row<=b.r2&&pos.col>=b.c1&&pos.col<=b.c2)?.table;
       if (typeof cell.raw === 'string' && cell.raw.startsWith('=')) {
-        const result = dynamicByRef.get(addr)?.cached?originalCachedResult(cell):cachedResult(evaluate, workbook, sheet, addr, cell,detailed);
+        const result = dynamicByRef.get(addr)?.cached?originalCachedResult(cell):cachedResult(evaluate, workbook, sheet, addr, cell,detailed,true);
         let formula=cell.raw;
         for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
         const original=cell.xlsxFormula,keepOriginal=original?.raw===formula;
@@ -470,5 +473,5 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if(workbook.xlsxDefaultStyle!==undefined){normalProbe='_SheetStudio_Normal';for(let n=2;book.getWorksheet(normalProbe);n++)normalProbe='_SheetStudio_Normal_'+n;const probe=book.addWorksheet(normalProbe);probe.getCell('A1').value=0;probe.getCell('A1').style=plainCopy(workbook.xlsxStyles[workbook.xlsxDefaultStyle].style);}
   const baseBytes=await applyDefaultStyleProbe(new Uint8Array(await book.xlsx.writeBuffer()),normalProbe),pivotBytes = await addPivotParts(baseBytes,workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
-  return { data:await addArrayMetadata(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook,exportNames,dynamicArrays), mime: XLSX_MIME, extension: 'xlsx' };
+  return { data:await addArrayMetadata(await addExternalLinks(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook),workbook,exportNames,dynamicArrays), mime: XLSX_MIME, extension: 'xlsx' };
 }

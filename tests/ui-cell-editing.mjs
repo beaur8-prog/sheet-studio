@@ -15,7 +15,7 @@ const cell=a=>page.getByRole('gridcell',{name:a,exact:true});
 const raw=a=>page.evaluate(a=>sheetStudio.getWorkbook().sheets[0].cells[a]?.raw||'',a);
 const go=async a=>{await page.locator('#name-box').fill(a);await page.locator('#name-box').press('Enter');await frame();};
 async function doubleClick(a,{x=45,y}={}){
-  await frame();const box=await cell(a).boundingBox();await page.mouse.move(box.x+x,box.y+(y??box.height/2));
+  await page.evaluate(()=>sheetStudio.whenIdle());await cell(a).waitFor({state:'visible'});const box=await cell(a).boundingBox();assert.ok(box,`${a} must be visible before a pointer double click`);await page.mouse.move(box.x+x,box.y+(y??box.height/2));
   // Keep each button press long enough for the virtualized cells to be replaced.
   for(const count of [1,2]){await page.mouse.down({clickCount:count});await page.waitForTimeout(70);await page.mouse.up({clickCount:count});if(count===1)await page.waitForTimeout(100);}
   await frame();assert.equal(await page.locator('#editor').isVisible(),true);assert.equal(await page.evaluate(()=>document.activeElement.id),'editor');

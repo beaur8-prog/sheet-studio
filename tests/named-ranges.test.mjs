@@ -37,5 +37,5 @@ test('changing a named range updates chart data and cache invalidation prevents 
   const doc=xml(await outZip.file(part).async('string'));assert.ok(all(doc,'f').some(n=>n.textContent==='Values'));assert.ok(all(doc,'numCache').some(n=>all(n,'v').map(v=>Number(v.textContent)).join(',')==='3,4'));
   imported.chartNames=imported.chartNames.filter(n=>!['Values','Alias'].includes(n.name));sheet.cells.Z1={raw:'=DeletedName',cachedFormula:'=DeletedName',cachedValue:99};
   assert.deepEqual(refValues({sheetId:sheet.id,range:'Z1:Z1'},imported),['#NAME?']);assert.deepEqual(chartData(sheet.charts[0],sheet,imported),[]);
-  const excel=new ExcelJS.Workbook();await excel.xlsx.load((await writeSpreadsheet(imported)).data);assert.equal(excel.worksheets[0].getCell('Z1').result,undefined);
+  const excel=new ExcelJS.Workbook();await excel.xlsx.load((await writeSpreadsheet(imported)).data);assert.deepEqual(excel.worksheets[0].getCell('Z1').result,{error:'#NAME?'});
 });

@@ -1,7 +1,7 @@
 import {createEditTextBudget} from './edit-text-budget.mjs';
 import {stripRichTextFormat} from './cell-format-reset.mjs';
 import {cloneData} from './clone.mjs';
-import {address,parseAddress,shiftFormula,transposeFormula,numberFormatKind,formulaForXlsx} from './engine.mjs';
+import {address,parseAddress,shiftFormula,transposeFormula,numberFormatKind,formulaForXlsx,formulaHasExternalReferences} from './engine.mjs';
 import {tableBounds,overlaps} from './table-schema.mjs';
 import {isErrorText,entryRaw} from './cell-values.mjs';
 export function scalarRaw(value,{error=false}={}) {
@@ -58,6 +58,7 @@ export function pastePlan(sheet, clip, start, options={}) {
       }
       checkText(raw);cell=mode==='all'&&!clip.plainText?cloneData(source):cloneData(old);
       cell.raw=raw;delete cell.cachedValue;delete cell.cachedFormula;delete cell.cachedError;
+      if(formulaHasExternalReferences(raw))cell.xlsxExternal={raw};else delete cell.xlsxExternal;
       if(source.xlsxFormula?.shareType==='array'&&arrays){const range=tableBounds(source.xlsxFormula.ref||address(clip.r+sr,clip.c+sc)),origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]},rows=range.r2-range.r1+1,cols=range.c2-range.c1+1,b={r1:dest.r,c1:dest.c,r2:dest.r+(transpose?cols:rows)-1,c2:dest.c+(transpose?rows:cols)-1};if((sheet.tables||[]).some(t=>overlaps(tableBounds(t.range),b)))throw Error('표 안에는 배열 수식을 붙여넣을 수 없습니다.');cell.xlsxFormula=cloneData(source.xlsxFormula);cell.xlsxFormula.ref=address(b.r1,b.c1)+':'+address(b.r2,b.c2);cell.xlsxFormula.raw=raw;cell.xlsxFormula.formula=formulaForXlsx(raw,source.xlsxFormula.formula).slice(1);}
       else if(source.xlsxFormula&&mode!=='values'&&operation==='none'&&raw.startsWith('='))cell.xlsxFormula={...cloneData(source.xlsxFormula),raw,formula:formulaForXlsx(raw,source.xlsxFormula.formula).slice(1)};
       else if(mode!=='formats')delete cell.xlsxFormula;

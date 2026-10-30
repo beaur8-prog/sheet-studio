@@ -1,3 +1,4 @@
+import {calculationDisplay} from './calculation-display.mjs';
 import {assertNativeCellTransfers} from './native-cell-features.mjs';
 import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} from './tables.mjs';
 import {tableConversionPlan} from './table-conversion.mjs';
@@ -90,9 +91,9 @@ async function handle(type, data) {
   if (data.revision !== revision) throw Error('문서가 변경되었습니다. 작업을 다시 실행하세요.');
   if (type === 'recalculate') { evaluators=new Map();conditionals=new Map();arraysSent=false; }
   if (type === 'calculate' || type === 'recalculate') {const values=data.refs.map(([id, ref]) => {
-    const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),result=evaluate.result(ref),value=result.value,position=parseAddress(ref);
+    const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),result=calculationDisplay(evaluate.result(ref)),value=result.value,position=parseAddress(ref);
     if(!conditionals.has(id))conditionals.set(id,sheet?createConditionalEvaluator(book,sheet,evaluate):()=>({}));
-    return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{},result.error,result.cached?{cached:true,stale:result.stale,cachedValue:result.cachedValue,cachedError:result.cachedError}:null];
+    return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{},result.error,result.cached?{cached:true,stale:result.stale,cachedValue:result.cachedValue,cachedError:result.cachedError,cacheSource:result.cacheSource,calculationError:result.calculationError}:null];
   });const arrays=!data.includeArrays||arraysSent?undefined:book.sheets.map(sheet=>[sheet.id,evaluator(sheet.id).spills({includeBlocked:true})]);if(arrays)arraysSent=true;return {revision,values,arrays};}
   if(type==='print'){
     const snapshot={...book},shared=(id,ref)=>evaluator(id)(ref);shared.result=(id,ref)=>evaluator(id).result(ref);shared.isComputed=(id,ref)=>evaluator(id).isComputed(ref);setExternalEvaluator(snapshot,shared);

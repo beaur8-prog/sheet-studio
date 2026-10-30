@@ -1,3 +1,4 @@
+import {validateExternalLinks} from './external-xlsx.mjs';
 import {isErrorText,readErrorToken} from './cell-values.mjs';
 import {validateStoredParts} from './xlsx-part-store.mjs';
 import {validateSheetKind} from './sheet-kinds.mjs';
@@ -457,9 +458,9 @@ function readCell(ctx, sheet, ref) {
   const original = ctx.sheet, originalPosition=ctx.position,originalArrayMode=ctx.arrayMode,originalLocals=ctx.locals;
   try {
     ctx.sheet = sheet;ctx.position=pos;ctx.arrayMode=true;ctx.locals=null;
-    const known=ctx.spills?.candidateByKey.get(key)?.node;
-    const node=external?null:ctx.frame?.key===key?(ctx.frame.ast??=known||new Parser(raw).parse()):known||new Parser(raw).parse();
-    const supplied=external?.result?.(sheet.id,ref),computed=external?(supplied?supplied.error?new FormulaError(supplied.error):supplied.value:external(sheet.id,ref)):evaluateNode(node,ctx,0);
+    const known=ctx.spills?.candidateByKey.get(key)?.node,externalFormula=sheet.cells[ref].xlsxExternal?.raw===raw||raw.includes('[')&&formulaHasExternalReferences(raw);
+    const node=external||externalFormula?null:ctx.frame?.key===key?(ctx.frame.ast??=known||new Parser(raw).parse()):known||new Parser(raw).parse();
+    const supplied=external?.result?.(sheet.id,ref),computed=external?(supplied?supplied.error?new FormulaError(supplied.error):supplied.value:external(sheet.id,ref)):externalFormula?fail('#NAME?'):evaluateNode(node,ctx,0);
     if(array){const result=asRange(computed);(ctx.arrayResults??=new Map()).set(key,result);value=checked(result.values[0]);}
     else if(!external&&isRange(computed)&&(computed.values.length>1||computed.dynamic||sheet.cells[ref].xlsxFormula?.dynamic))value=checked(registerSpill(ctx,sheet,ref,pos,computed));
     else value=checked(computed);
@@ -1074,6 +1075,10 @@ export function createEvaluator(workbook, sheetId) {
       const result=detailedGuard(()=>{prepareSpills(ctx);ctx.steps=0;return runCalculation(ctx,()=>readCell(ctx,target,ref));});
       const p=parseAddress(ref),spill=p&&ctx.spills?.indices.get(id)?.at(p)||p&&ctx.spills&&spillIndex(ctx,target).at(p);
       if(spill?.cached){const saved=spill.result.values[(p.r-spill.r1)*spill.result.cols+p.c-spill.c1];result.cached=true;result.stale=!!spill.stale;result.cachedValue=guard(()=>saved);result.cachedError=saved instanceof FormulaError?saved.code:null;}
+      const cell=target.cells[ref];
+      if(!result.cached&&result.error==='#NAME?'&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){
+        result.cached=true;result.stale=workbook.referenceCachesValid===false;result.cachedValue=cell.cachedValue;result.cachedError=cell.cachedError?String(cell.cachedValue):null;result.cacheSource=cell.xlsxExternal?.raw===cell.raw?'external':'unsupported';
+      }
       return result;
     };
     const evaluate=ref=>detailed(ref).value;evaluate.result=detailed;evaluate.forSheet=forSheet;
@@ -1114,6 +1119,9 @@ function arrayFormulaSyntax(formula,xlsx){
     return text+body.slice(cursor,end);
   };
   return (offset?'=':'')+render(0,body.length);
+}
+export function formulaHasExternalReferences(formula){
+  try{const tokens=tokenize(String(formula).replace(/^=/,''));return tokens.some((t,i)=>(['word','sheet'].includes(t.type)&&tokens[i+1]?.value==='!'&&/\[[^\]]+\]/.test(t.value))||(t.type==='structured'&&/^\[[^\]]+\]$/.test(t.value)&&(tokens[i+1]?.value==='!'||tokens[i+2]?.value==='!')));}catch{return false;}
 }
 export function formulaHasDynamicArrays(formula){
   try{const tokens=tokenize(String(formula).replace(/^=/,''));return tokens.some((t,i)=>t.value==='#'||t.type==='word'&&tokens[i+1]?.value==='('&&['FILTER','SORT','UNIQUE','SEQUENCE','ANCHORARRAY'].includes(normalizeFunctionName(t.value)));}catch{return false;}
@@ -1447,6 +1455,7 @@ export function validateCell(ref, cell) {
   if(cell.xlsxValue!==undefined){const v=cell.xlsxValue;if(!object(v)||typeof v.raw!=='string'||v.raw.length>32768||!object(v.value)||!v.value.richText&&!v.value.hyperlink)throw Error(`보존된 셀 값이 올바르지 않습니다: ${ref}`);validatePreservedData(v,1_000_000);}
   if(cell.xlsxFormula!==undefined){const f=cell.xlsxFormula;if(!object(f)||typeof f.raw!=='string'||f.raw.length>32768||typeof f.formula!=='string'||f.formula.length>32768||f.shareType!==undefined&&f.shareType!=='array'||f.ref!==undefined&&(typeof f.ref!=='string'||!/^\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?$/.test(f.ref)))throw Error(`보존된 배열 수식이 올바르지 않습니다: ${ref}`);if(f.shareType==='array'){const b=tableBounds(f.ref||ref),p=parseAddress(ref);if(!b||b.r1!==p.r||b.c1!==p.c)throw Error(`배열 범위의 첫 셀이 수식 위치와 다릅니다: ${ref}`);}}
   if(cell.xlsxFormula?.dynamic!==undefined&&typeof cell.xlsxFormula.dynamic!=='boolean')throw Error('동적 배열 표식이 올바르지 않습니다.');
+  if(cell.xlsxExternal!==undefined&&(!object(cell.xlsxExternal)||typeof cell.xlsxExternal.raw!=='string'||cell.xlsxExternal.raw.length>32768))throw Error('외부 참조 수식 정보가 올바르지 않습니다.');
   if(cell.xlsxMetadata!==undefined){const m=cell.xlsxMetadata;if(!object(m)||typeof m.raw!=='string'||m.raw.length>32768||['cm','vm'].some(key=>m[key]!==undefined&&(!Number.isInteger(m[key])||m[key]<0||m[key]>1000000)))throw Error('보존된 셀 메타데이터가 올바르지 않습니다.');}
   if (cell.style) {
     if (cell.style.borders !== undefined) validateBorders(cell.style.borders);
@@ -1529,6 +1538,7 @@ export function validateWorkbook(data) {
   if(data.xlsxTableStyles!==undefined){if(!Array.isArray(data.xlsxTableStyles)||data.xlsxTableStyles.length>10000)throw Error('원래 표 스타일이 올바르지 않습니다.');for(const style of data.xlsxTableStyles)validatePreservedXML(style,'tableStyle');}
   if(data.xlsxColors!==undefined)validatePreservedXML(data.xlsxColors,'colors');
   if(data.xlsxMetadata!==undefined)validateArrayMetadata(data.xlsxMetadata);
+  if(data.xlsxExternalLinks!==undefined)validateExternalLinks(data.xlsxExternalLinks);
   if(data.xlsxStyles!==undefined){if(!Array.isArray(data.xlsxStyles)||data.xlsxStyles.length>65536||data.xlsxStyles.some(s=>!object(s)||!object(s.style)||!object(s.baseline)))throw Error('보존된 Excel 서식 목록이 올바르지 않습니다.');validatePreservedData(data.xlsxStyles,32_000_000);}
   if(data.xlsxDefaultStyle!==undefined&&(!Number.isInteger(data.xlsxDefaultStyle)||data.xlsxDefaultStyle<0||!data.xlsxStyles?.[data.xlsxDefaultStyle]))throw Error('통합 문서의 기본 서식이 올바르지 않습니다.');
   if(data.xlsxProperties!==undefined)validateDocumentProperties(data.xlsxProperties);

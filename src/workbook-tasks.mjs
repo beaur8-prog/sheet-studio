@@ -3,7 +3,7 @@ import {workbookMetadata} from './recovery-store.mjs';
 export function createWorkbookTasks({onSave, onCalculated, onError}) {
   const worker = new Worker(new URL('./workbook-worker.mjs', import.meta.url), {type: 'module'});
   let sequence = 0, revision = 0, calculationEpoch = 0, synced = Promise.resolve(), flushTimer, saveRevision = 0, failed = null;
-  let baseline = new Map(), values = new Map(), styles = new Map(), calculationErrors=new Map(),provenance=new Map(),pendingRefs = new Map(), calculateScheduled = false;
+  let baseline = new Map(), values = new Map(), styles = new Map(), calculationErrors=new Map(),provenance=new Map(),pendingRefs = new Map(), calculateScheduled = false,calculating=0;
   const pending = new Map();
   worker.onmessage = ({data}) => {
     const item = pending.get(data.id);
@@ -53,6 +53,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
         calculateScheduled = false;
         const requestedRevision = revision, requestedEpoch = calculationEpoch, refs = [...pendingRefs.values()]; pendingRefs.clear();
         if (!refs.length) return;
+        calculating++;
         try {
           await synced;
           if (requestedRevision !== revision || requestedEpoch !== calculationEpoch) return;
@@ -61,6 +62,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
           for (const [id, address, computed, style,error,origin] of result.values) {const key=id+'!'+address; values.set(key, computed); styles.set(key, style);calculationErrors.set(key,error||null);if(origin)provenance.set(key,origin); }
           onCalculated(result.arrays);
         } catch (error) { if (requestedRevision === revision && requestedEpoch === calculationEpoch) onError(error); }
+        finally { calculating--; }
       });
     }
     return '계산 중…';
@@ -84,6 +86,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
   }
   return {
     get revision() { return revision; },
+    get calculated() { return !calculateScheduled&&!pendingRefs.size&&!calculating; },
     get saving() { return saveRevision !== revision; },
     async load(legacy) { const result = await call('load', {legacy}); adopt(result.book); return result; },
     async import(bytes, name) { return call('import', {bytes, name}, [bytes.buffer]); },

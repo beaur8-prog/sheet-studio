@@ -65,12 +65,13 @@ function dynamicRecord(doc){
 }
 
 export async function addArrayMetadata(bytes,book,names,arrays){
-  const hasArrays=[...arrays.values()].some(a=>a.length);
-  if(!book.xlsxMetadata&&!hasArrays)return bytes;
+  const hasArrays=[...arrays.values()].some(a=>a.length);let staleCaches=false;
+  if(book.referenceCachesValid===false)outer:for(const sheet of book.sheets)for(const ref in sheet.cells){const cell=sheet.cells[ref];if(cell.raw?.startsWith('=')&&cell.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){staleCaches=true;break outer;}}
+  if(!book.xlsxMetadata&&!hasArrays&&!staleCaches)return bytes;
   const zip=await JSZip.loadAsync(bytes),metadata=book.xlsxMetadata,doc=xml(metadata?.xml||'<metadata xmlns="'+NS+'" xmlns:xda="'+XDA+'"/>'),cm=hasArrays?dynamicRecord(doc):null;
   let extensions=child(doc.documentElement,'extLst');
   for(const old of children(extensions,'ext').filter(n=>attr(n,'uri')===calculationStateURI))extensions.removeChild(old);
-  if(book.referenceCachesValid===false&&[...arrays.values()].some(list=>list.some(a=>a.cached))){
+  if(staleCaches){
     if(!extensions){extensions=node(doc,'extLst');doc.documentElement.appendChild(extensions);}
     const ext=node(doc,'ext'),state=doc.createElementNS(calculationStateNS,'ss:calculationState');ext.setAttribute('uri',calculationStateURI);state.setAttribute('staleCaches','1');ext.appendChild(state);extensions.appendChild(ext);
   }

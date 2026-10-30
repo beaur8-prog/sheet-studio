@@ -1,5 +1,5 @@
 import {unwrap} from './clone.mjs';
-import {address,parseAddress,evaluateCell,evaluateFormula,evaluateFormulaArray,shiftFormula,formulaHasDynamicArrays} from './engine.mjs';
+import {address,parseAddress,evaluateCell,evaluateFormula,evaluateFormulaArray,shiftFormula,formulaHasDynamicArrays,formulaHasExternalReferences} from './engine.mjs';
 import {calculatedArrayRegions} from './calculated-arrays.mjs';
 import {xml,all,attr} from './chart-xml.mjs';
 
@@ -39,6 +39,7 @@ export function assertCellUpdates(book,sheet,updates,{editAnchor=false,formatOnl
     if(count&&book.nativeSource)throw Error('XLSM의 배열 수식은 Excel에서 편집하거나 XLSX 사본을 사용하세요.');
     if(count&&count!==(a.r2-a.r1+1)*(a.c2-a.c1+1)&&!(a.dynamic&&keys.has(a.ref))&&!(editAnchor&&count===1&&keys.has(a.ref)&&(formula===undefined||formula.startsWith('='))))throw Error('배열 수식 결과의 일부를 변경할 수 없습니다. 배열 전체를 선택하거나 첫 셀의 수식을 편집하세요.');
   }
+  if(!book.xlsxExternalLinks&&updates.some(u=>formulaHasExternalReferences(u.cell?.raw)))throw Error('이 문서에는 외부 통합 문서 연결 정의가 없습니다. 외부 참조는 값으로 붙여넣거나 Excel에서 만드세요.');
   if(book.nativeSource&&updates.some(u=>u.cell?.xlsxFormula?.shareType==='array'||formulaHasDynamicArrays(u.cell?.raw)))throw Error('XLSM의 동적·배열 수식 편집은 Excel에서 진행하거나 XLSX 사본을 사용하세요.');
 }
 export function assertStructureAllowed(sheet,axis,index,count,delta){
