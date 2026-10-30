@@ -272,7 +272,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if (!workbook?.sheets?.length) throw new Error('통합 문서에 시트가 없습니다.');
   if (workbook.nativeSource && !options.allowMacroLoss) throw new Error('VBA 보존을 위해 XLSM 저장을 사용하세요. 일반 형식 변환에는 매크로 제외 확인이 필요합니다.');
   if (!['xlsx', 'csv', 'tsv'].includes(kind)) throw new Error('지원되지 않는 저장 형식입니다.');
-  const evaluate = await evaluator(),styleCache=new Map();
+  const evaluate = typeof options.evaluate === 'function' ? options.evaluate : await evaluator(),styleCache=new Map();
   if (kind === 'csv' || kind === 'tsv') {
     const sheet = workbook.sheets.find(item => item.id === workbook.activeSheetId) || workbook.sheets[0];
     let maxRow = -1, maxCol = -1;

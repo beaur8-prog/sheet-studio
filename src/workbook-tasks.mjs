@@ -2,7 +2,7 @@ import {workbookMetadata} from './recovery-store.mjs';
 
 export function createWorkbookTasks({onSave, onCalculated, onError}) {
   const worker = new Worker(new URL('./workbook-worker.mjs', import.meta.url), {type: 'module'});
-  let sequence = 0, revision = 0, synced = Promise.resolve(), flushTimer, saveRevision = 0, failed = null;
+  let sequence = 0, revision = 0, calculationEpoch = 0, synced = Promise.resolve(), flushTimer, saveRevision = 0, failed = null;
   let baseline = new Map(), values = new Map(), styles = new Map(), pendingRefs = new Map(), calculateScheduled = false;
   const pending = new Map();
   worker.onmessage = ({data}) => {
@@ -36,7 +36,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
       if (baseline.get(sheet.id) !== sheet.cells && !token) sheets.push({id: sheet.id, cells: sheet.cells});
       else if (dirty.has(sheet.cells)) sheets.push({id: sheet.id, entries: [...dirty.get(sheet.cells)].map(ref => [ref, sheet.cells[ref] || null])});
     }
-    adopt(book); values = new Map(); styles = new Map(); pendingRefs.clear(); ++revision;
+    adopt(book); values = new Map(); styles = new Map(); pendingRefs.clear(); ++revision; ++calculationEpoch;
     onSave('saving');
     synced = call('sync', {metadata, sheets, revision, token});
     synced.catch(error => { baseline=new Map();onSave('failed'); onError(error); });
@@ -51,28 +51,45 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
       calculateScheduled = true;
       queueMicrotask(async () => {
         calculateScheduled = false;
-        const requestedRevision = revision, refs = [...pendingRefs.values()]; pendingRefs.clear();
+        const requestedRevision = revision, requestedEpoch = calculationEpoch, refs = [...pendingRefs.values()]; pendingRefs.clear();
         if (!refs.length) return;
         try {
           await synced;
-          if (requestedRevision !== revision) return;
+          if (requestedRevision !== revision || requestedEpoch !== calculationEpoch) return;
           const result = await call('calculate', {refs, revision: requestedRevision});
-          if (result.revision !== revision) return;
+          if (result.revision !== revision || requestedEpoch !== calculationEpoch) return;
           for (const [id, address, computed, style] of result.values) { values.set(id + '!' + address, computed); styles.set(id + '!' + address, style); }
           onCalculated();
-        } catch (error) { if (requestedRevision === revision) onError(error); }
+        } catch (error) { if (requestedRevision === revision && requestedEpoch === calculationEpoch) onError(error); }
       });
     }
     return '계산 중…';
+  }
+  async function recalculate(){
+    const refs=new Map(pendingRefs);
+    for(const key of values.keys()){
+      const split=key.lastIndexOf('!');refs.set(key,[key.slice(0,split),key.slice(split+1)]);
+    }
+    const requestedEpoch=++calculationEpoch;
+    values=new Map();styles=new Map();pendingRefs.clear();
+    // Queue this after already-posted edits and before subsequent edits. Do not
+    // change the document revision merely because volatile formulas recalculate.
+    const request=call('recalculate',{refs:[...refs.values()],revision});
+    const ready=Promise.all([synced,request]);synced=ready.then(()=>undefined);
+    const [,result]=await ready;
+    if(result.revision!==revision||requestedEpoch!==calculationEpoch)return;
+    for(const [id,ref,value,style] of result.values){values.set(id+'!'+ref,value);styles.set(id+'!'+ref,style);}
+    onCalculated();
+    return result;
   }
   return {
     get revision() { return revision; },
     get saving() { return saveRevision !== revision; },
     async load(legacy) { const result = await call('load', {legacy}); adopt(result.book); return result; },
     async import(bytes, name) { return call('import', {bytes, name}, [bytes.buffer]); },
-    sync, flush, value,
+    sync, flush, value, recalculate,
     style(sheetId,ref) { const key=sheetId+'!'+ref;if(styles.has(key))return styles.get(key);value(sheetId,ref);return {}; },
     async run(type, payload = {}) { await synced; return call(type, {...payload, revision}); },
-    destroy() { worker.terminate(); },
+    destroy() { clearTimeout(flushTimer); worker.terminate(); },
   };
 }

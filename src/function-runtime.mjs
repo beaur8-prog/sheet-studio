@@ -137,7 +137,7 @@ export function createFunctionRuntime(h) {
       const index=integer(evaluate(nodes[0]));if(index<1||index>=nodes.length)fail('#VALUE!');return evaluate(nodes[index]);
     }
     if(['ISERROR','ISERR','ISNA','ISBLANK','ISNUMBER','ISTEXT','ISNONTEXT','ISLOGICAL','ERROR.TYPE','TYPE','N','T'].includes(name)){
-      if(name==='TYPE'){try{const v=evaluate(nodes[0]);if(isRange(v))return 64;}catch{}}
+      if(name==='TYPE'){try{const v=evaluate(nodes[0]);if(isRange(v))return 64;}catch(error){if(!(error instanceof FormulaError))throw error;}}
       const value=capture(nodes[0],evaluate),error=value instanceof FormulaError;
       if(name==='ISERROR')return error;
       if(name==='ISERR')return error&&value.code!=='#N/A';
@@ -153,7 +153,7 @@ export function createFunctionRuntime(h) {
     }
     if(name==='NA')fail('#N/A');
     if(name==='TRUE'||name==='FALSE')return name==='TRUE';
-    if(name==='ISREF'){try{const v=evaluate(nodes[0]);return !!(isRef(v)||isRange(v)&&v.sheet);}catch{return false;}}
+    if(name==='ISREF'){try{const v=evaluate(nodes[0]);return !!(isRef(v)||isRange(v)&&v.sheet);}catch(error){if(!(error instanceof FormulaError))throw error;return false;}}
     if(['ROW','COLUMN','ROWS','COLUMNS','FORMULATEXT','ISFORMULA','OFFSET','INDIRECT','ADDRESS','SHEET','SHEETS','SUBTOTAL'].includes(name))return ctx.referenceFunction(name,nodes,evaluate);
     if(name==='TEXTAFTER'||name==='TEXTBEFORE'){
       const source=textual(evaluate(nodes[0])),delimiter=textual(evaluate(nodes[1]));
@@ -176,8 +176,10 @@ export function createFunctionRuntime(h) {
     if(['SUMIFS','COUNTIFS','AVERAGEIFS','MINIFS','MAXIFS','AVERAGEIF'].includes(name)){
       const single=name==='AVERAGEIF',count=name==='COUNTIFS',offset=count?0:1;
       if(!single&&(args.length-offset)%2)fail('#VALUE!');
-      const result=asRange(single?(args[2]??args[0]):args[0]);
-      const checks=single?[[asRange(args[0]),criterion(args[1])]]:Array.from({length:(args.length-offset)/2},(_,i)=>[asRange(args[offset+2*i]),criterion(args[offset+2*i+1])]);
+      let result=asRange(single?(args[2]??args[0]):args[0]);
+      const criteriaOptions=name==='AVERAGEIFS'?{blankAsZero:true,booleanAsNumber:true}:{};
+      const checks=single?[[asRange(args[0]),criterion(args[1])]]:Array.from({length:(args.length-offset)/2},(_,i)=>[asRange(args[offset+2*i]),criterion(args[offset+2*i+1],criteriaOptions)]);
+      if(single&&result.sheet)result=ctx.getRange(result.sheet,result.top,result.left,checks[0][0].rows,checks[0][0].cols);
       for(const [r] of checks)if(r.rows!==result.rows||r.cols!==result.cols)fail('#VALUE!');
       let total=0,matched=0,minimum=Infinity,maximum=-Infinity;
       result.values.forEach((value,i)=>{if(!checks.every(([r,test])=>test(r.values[i])))return;

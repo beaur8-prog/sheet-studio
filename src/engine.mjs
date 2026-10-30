@@ -21,6 +21,12 @@ export function setExternalEvaluator(workbook, evaluator) { externalEvaluators.s
 class FormulaError extends Error {
   constructor(code) { super(code); this.code = code; }
 }
+// Internal scheduling signals are not formula errors: IFERROR/ISERROR must not
+// swallow them while an unfinished dependency is being calculated.
+class PendingCell {
+  constructor(sheet,ref){this.sheet=sheet;this.ref=ref;this.key=sheet.id+'!'+ref;}
+}
+class CalculationLimit {}
 const fail = code => { throw new FormulaError(code); };
 const validPosition = (r, c) => Number.isInteger(r) && Number.isInteger(c) && r >= 0 && c >= 0 && r < MAX_ROWS && c < MAX_COLS;
 const isRef = value => value && value.kind === 'reference';
@@ -257,7 +263,7 @@ function context(workbook, sheetId) {
   if (!sheet) fail('#REF!');
   return { workbook, sheet, position:{r:0,c:0}, active: new Set(), cache: new Map(), steps: 0, depth: 0 };
 }
-function step(ctx) { if (++ctx.steps > MAX_STEPS) fail('#NUM!'); }
+function step(ctx) { if (++ctx.steps > MAX_STEPS) throw new CalculationLimit(); }
 function resolveSheet(ctx, name) {
   if (!name) return ctx.sheet;
   return ctx.workbook.sheets.find(sheet => sheet.name.toLowerCase() === name.toLowerCase()) || fail('#REF!');
@@ -284,6 +290,10 @@ function readCell(ctx, sheet, ref) {
   const key = `${sheet.id}!${ref}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key);
   if (ctx.active.has(key)) return new FormulaError('#CYCLE!');
+  if(ctx.scheduling&&ctx.frame.key!==key){
+    if(ctx.waiting.has(key))return new FormulaError('#CYCLE!');
+    throw new PendingCell(sheet,ref);
+  }
   if (ctx.depth >= MAX_DEPTH) return new FormulaError('#NUM!');
   ctx.active.add(key);
   ctx.depth++;
@@ -292,13 +302,34 @@ function readCell(ctx, sheet, ref) {
   try {
     ctx.sheet = sheet;ctx.position=pos;
     const external = externalEvaluators.get(unwrap(ctx.workbook));
-    value = typeof raw === 'string' && raw.startsWith('=') ? (external ? external(sheet.id, ref) : checked(evaluateNode(new Parser(raw).parse(), ctx, 0))) : literal(raw);
+    const node=external?null:ctx.frame?.key===key?(ctx.frame.ast??=new Parser(raw).parse()):new Parser(raw).parse();
+    value = external ? external(sheet.id, ref) : checked(evaluateNode(node, ctx, 0));
     if (value === BLANK && raw.startsWith('=')) value = 0;
   } catch (error) {
+    if(error instanceof PendingCell||error instanceof CalculationLimit)throw error;
     value = error instanceof FormulaError ? error : new FormulaError('#VALUE!');
   } finally { ctx.sheet = original;ctx.position=originalPosition; ctx.depth--; ctx.active.delete(key); }
   ctx.cache.set(key, value);
   return value;
+}
+function runCalculation(ctx,compute){
+  const frames=[{key:null,compute,memo:new Map(),ranges:new Map()}];
+  ctx.scheduling=true;ctx.waiting=new Set();
+  try{
+    while(frames.length){
+      const frame=frames.at(-1);ctx.frame=frame;
+      try{
+        const value=frame.compute();frames.pop();if(frame.key)ctx.waiting.delete(frame.key);
+        if(!frames.length)return value;
+      }catch(error){
+        if(!(error instanceof PendingCell))throw error;
+        if(frames.length>MAX_FORMULA_CELLS)throw new CalculationLimit();
+        const {sheet,ref,key}=error;
+        ctx.waiting.add(key);
+        frames.push({key,compute:()=>readCell(ctx,sheet,ref),memo:new Map(),ranges:new Map()});
+      }
+    }
+  }finally{ctx.frame=null;ctx.waiting=null;ctx.scheduling=false;}
 }
 function compare(left, right) {
   left = checked(left); right = checked(right);
@@ -314,6 +345,13 @@ function compare(left, right) {
   return left === right ? 0 : left < right ? -1 : 1;
 }
 function evaluateNode(node, ctx, depth) {
+  const memo=ctx.frame?.memo;
+  if(memo?.has(node))return memo.get(node);
+  const value=evaluateNodeUncached(node,ctx,depth);
+  memo?.set(node,value);
+  return value;
+}
+function evaluateNodeUncached(node, ctx, depth) {
   step(ctx);
   if (depth > MAX_DEPTH) fail('#NUM!');
   const evaluate = child => evaluateNode(child, ctx, depth + 1);
@@ -396,7 +434,7 @@ function wildcardRegex(pattern) {
   }
   return new RegExp(source + '$', 'iu');
 }
-function criterion(test) {
+function criterion(test,{blankAsZero=false,booleanAsNumber=false,dateOffset=0}={}) {
   test = checked(test);
   if (test === BLANK) test = 0;
   let op = '=', target = test;
@@ -405,7 +443,12 @@ function criterion(test) {
     if (match) { op = match[1]; target = match[2]; }
     if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(target)) target = Number(target);
     else if (/^(true|false)$/i.test(target)) target = /^true$/i.test(target);
+    else {
+      const parsed=parseDateText(target);
+      if(parsed!==null)target=parsed-dateOffset;
+    }
   }
+  if(booleanAsNumber&&typeof target==='boolean')target=Number(target);
   const wildcard = typeof target === 'string' && /[*?~]/.test(target) ? wildcardRegex(target) : null;
   return value => {
     value = scalar(value);
@@ -416,8 +459,9 @@ function criterion(test) {
     }
     if(test==='=')return value===BLANK;
     if(test==='<>')return value!==BLANK;
-    if(value===BLANK)return target===''&&op==='=';
+    if(value===BLANK){if(blankAsZero&&typeof target==='number')value=0;else return target===''&&op==='=';}
     if(value==='')return target===''?(op==='='||op==='>='||op==='<='):op==='<>';
+    if(booleanAsNumber&&typeof value==='boolean')value=Number(value);
     if(typeof target!==typeof value){
       if(typeof target==='number'&&typeof value==='string'&&['=','<>'].includes(op)&&value.trim()&&Number.isFinite(Number(value)))value=Number(value);
       else return op==='<>';
@@ -425,6 +469,20 @@ function criterion(test) {
     const order = compare(value, target);
     return ({ '=': order === 0, '<>': order !== 0, '<': order < 0, '>': order > 0, '<=': order <= 0, '>=': order >= 0 })[op];
   };
+}
+
+// Excel criteria accept date strings as serial values. Keep this parser
+// explicit and deterministic instead of relying on Date.parse and OS locale.
+function parseDateText(value){
+  if(typeof value!=='string')return null;
+  const text=value.trim();
+  let match=/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(text),year,month,day;
+  if(match){year=+match[1];month=+match[2];day=+match[3];}
+  else {match=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);if(!match)return null;month=+match[1];day=+match[2];year=+match[3];}
+  if(year<1900||year>9999||month<1||month>12)return null;
+  const days=year===1900&&month===2?29:new Date(Date.UTC(year,month,0)).getUTCDate();
+  if(day<1||day>days)return null;
+  return year===1900&&month===2&&day===29?60:dateSerial(year,month,day);
 }
 
 function dateSerial(year, month, day) {
@@ -463,9 +521,13 @@ function rounded(value, digits, mode = 'nearest') {
 function getRange(ctx,sheet,top,left,rows,cols) {
   if(!validPosition(top,left)||!validPosition(top+rows-1,left+cols-1)||rows<1||cols<1)fail('#REF!');
   if(rows*cols>MAX_RANGE_CELLS)fail('#NUM!');
-  const values=[];
-  for(let r=top;r<top+rows;r++)for(let c=left;c<left+cols;c++)values.push(readCell(ctx,sheet,address(r,c)));
-  return {kind:'range',sheet,top,left,rows,cols,values};
+  const key=[sheet.id,top,left,rows,cols].join(':'),ranges=ctx.frame?.ranges;
+  let result=ranges?.get(key);
+  if(!result){result={kind:'range',sheet,top,left,rows,cols,values:[]};ranges?.set(key,result);}
+  // Resume a partially read range after a deferred formula completes. Restarting
+  // at its first cell for every dependency makes large SUM ranges quadratic.
+  for(let i=result.values.length;i<rows*cols;i++)result.values.push(readCell(ctx,sheet,address(top+Math.floor(i/cols),left+i%cols)));
+  return result;
 }
 function referenceFunction(ctx,name,nodes,evaluate) {
   const origin={sheet:ctx.sheet,top:ctx.position.r,left:ctx.position.c,rows:1,cols:1};
@@ -517,14 +579,19 @@ function referenceFunction(ctx,name,nodes,evaluate) {
     if(!target||code!==index&&code!==index+100)fail('#VALUE!');
     const values=[];for(const node of nodes.slice(1)){
       const ref=metadata(node);if(!ref.sheet)fail('#VALUE!');if(ref.rows*ref.cols>MAX_RANGE_CELLS)fail('#NUM!');
-      const hidden=new Set(ref.sheet.autoFilter?.hiddenRows||[]);
-      for(let r=ref.top;r<ref.top+ref.rows;r++)for(let c=ref.left;c<ref.left+ref.cols;c++){
+      const key=JSON.stringify([code,ref.sheet.id,ref.top,ref.left,ref.rows,ref.cols]);
+      const cache=ctx.frame?(ctx.frame.subtotals??=new Map()):new Map();
+      let progress=cache.get(key);
+      if(!progress){progress={next:0,values:[],hidden:new Set(ref.sheet.autoFilter?.hiddenRows||[])};cache.set(key,progress);}
+      for(;progress.next<ref.rows*ref.cols;progress.next++){
+        const r=ref.top+Math.floor(progress.next/ref.cols),c=ref.left+progress.next%ref.cols;
         const raw=ref.sheet.cells?.[address(r,c)]?.raw??'';
         if(/^\s*=\s*(?:_xlfn\.)?(?:SUBTOTAL|AGGREGATE)\s*\(/i.test(raw))continue;
-        if(hidden.has(r))continue;
+        if(progress.hidden.has(r))continue;
         if(code>100&&ref.sheet.rowHeights?.[r]===0)continue;
-        values.push(readCell(ctx,ref.sheet,address(r,c)));
+        progress.values.push(readCell(ctx,ref.sheet,address(r,c)));
       }
+      for(const value of progress.values)values.push(value);
     }
     return callFunction(target,[{type:'literal',value:{kind:'range',values,rows:values.length,cols:1}}],evaluate,ctx);
   }
@@ -687,17 +754,18 @@ function publicValue(value) {
   return value === BLANK ? '' : typeof value === 'number' ? finite(value) : value;
 }
 function guard(callback) {
-  try { return publicValue(callback()); } catch (error) { return error instanceof FormulaError ? error.code : '#VALUE!'; }
+  try { return publicValue(callback()); } catch (error) { return error instanceof CalculationLimit ? '#NUM!' : error instanceof FormulaError ? error.code : '#VALUE!'; }
 }
 
 export function evaluateCell(workbook, sheetId, ref) {
-  return guard(() => { const ctx = context(workbook, sheetId); return readCell(ctx, ctx.sheet, ref); });
+  return createEvaluator(workbook,sheetId)(ref);
 }
 
 export function evaluateFormula(workbook, sheetId, formula) {
   return guard(() => {
     const ctx = context(workbook, sheetId);
-    const result = checked(evaluateNode(new Parser(String(formula)).parse(), ctx, 0));
+    const node=new Parser(String(formula)).parse();
+    const result = checked(runCalculation(ctx,()=>evaluateNode(node, ctx, 0)));
     return result === BLANK ? 0 : result;
   });
 }
@@ -706,7 +774,7 @@ export function evaluateFormula(workbook, sheetId, formula) {
 export function createEvaluator(workbook, sheetId) {
   let ctx;
   try { ctx = context(workbook, sheetId); } catch { return () => '#REF!'; }
-  return ref => guard(() => { ctx.steps = 0; return readCell(ctx, ctx.sheet, ref); });
+  return ref => guard(() => { ctx.steps = 0; return runCalculation(ctx,()=>readCell(ctx, ctx.sheet, ref)); });
 }
 
 export function formulaForXlsx(formula) {
