@@ -1,7 +1,7 @@
 import {cloneData} from './clone.mjs';
 import {address,parseAddress,shiftFormula,transposeFormula,numberFormatKind,formulaForXlsx} from './engine.mjs';
 import {tableBounds,overlaps} from './table-schema.mjs';
-import {isErrorText} from './cell-values.mjs';
+import {isErrorText,entryRaw} from './cell-values.mjs';
 export function scalarRaw(value,{error=false}={}) {
   if(value===null||value===undefined)return '';
   if(typeof value==='boolean')return value?'TRUE':'FALSE';
@@ -34,8 +34,9 @@ export function pastePlan(sheet, clip, start, options={}) {
     const key=address(targetRows[r],targetCols[c]),old=sheet.cells[key]||{raw:''};let cell;
     if(mode==='formats'){cell={...cloneData(old),style:cloneData(source.style||{})};if(source.xlsxStyle!==undefined)cell.xlsxStyle=source.xlsxStyle;else delete cell.xlsxStyle;if(source.xlsxNormal)cell.xlsxNormal=true;else delete cell.xlsxNormal;}
     else {
-      cell=mode==='all'?cloneData(source):cloneData(old);
+      cell=mode==='all'&&!clip.plainText?cloneData(source):cloneData(old);
       let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw,{error:clip.errors?.[sr]?.[sc]}):source.raw;
+      if(clip.plainText)raw=entryRaw(raw,options.styleAt?.(targetRows[r],targetCols[c])||old.style);
       const dateStyle=source.style?.format==='date'||numberFormatKind(source.style?.numberFormat)==='date';
       if(operation==='none'&&typeof clip.date1904==='boolean'&&clip.date1904!==(options.date1904===true)&&dateStyle&&!raw.startsWith("'")&&raw.trim()!==''&&Number.isFinite(Number(raw)))raw=String(Number(raw)+(clip.date1904?1462:-1462));
       if(mode!=='values'&&!clip.cut&&raw.startsWith('=')){const origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]};raw=transpose?transposeFormula(raw,origin,dest):shiftFormula(raw,dest.r-origin.r,dest.c-origin.c);}

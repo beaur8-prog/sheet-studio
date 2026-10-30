@@ -1,0 +1,29 @@
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import ExcelJS from 'exceljs';
+import platform from '../scripts/platform.cjs';
+import {createWorkbook} from '../src/engine.mjs';
+import {styleDefaultsFixture} from './fixtures/style-defaults.mjs';
+const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','clipboard-types-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
+await app.evaluate(({ipcMain})=>{ipcMain.removeHandler('sheet:write-clipboard');ipcMain.handle('sheet:write-clipboard',(_event,payload)=>{globalThis.testClipboard=payload;});});
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
+const go=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();},value=ref=>page.evaluate(ref=>sheetStudio.evaluateAsync(ref),ref),cell=ref=>page.getByRole('gridcell',{name:ref,exact:true});
+const edit=async(ref,text)=>{await go(ref);await page.keyboard.press('F2');await page.locator('#editor').fill(text);await page.locator('#editor').press('Enter');await settle();};
+const copy=async()=>{await page.locator('[data-action="copy"]').click();await settle();return app.evaluate(()=>globalThis.testClipboard.text);};
+const paste=async text=>{await page.locator('#grid').focus();await page.evaluate(text=>{const data=new DataTransfer();data.setData('text/plain',text);document.querySelector('#grid').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));},text);await settle();};
+try{
+ await page.locator('.cell').first().waitFor();const b=createWorkbook(),s=b.sheets[0];b.name='entry-types';s.cells.A1={raw:'',note:'keep',style:{format:'text',numberFormat:'@',bold:true,background:'#ffff00'}};s.cells.A2={raw:'',style:{format:'text'}};s.cells.A3={raw:'',style:{format:'text'}};s.cells.A4={raw:'',style:{format:'text'}};s.cells.B1={raw:'12'};s.cells.B2={raw:'12',style:{format:'text'}};
+ await page.locator('#file-input').setInputFiles({name:'entry-types.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await settle();
+ await edit('A1','0012');await edit('A2','=SUM(');await edit('A3','TRUE');assert.equal(await value('A1'),'0012');assert.equal(await cell('A1').textContent(),'0012');assert.equal(await value('A2'),'=SUM(');assert.equal(await value('A3'),'TRUE');assert.equal(await value('B2'),12);
+ await go('A1');await paste('0007');assert.equal(await value('A1'),'0007');const record=await page.evaluate(()=>sheetStudio.getCell('A1'));assert.equal(record.note,'keep');assert.equal(record.style.bold,true);assert.equal(record.style.background,'#ffff00');await page.locator('#undo').click();await settle();assert.equal(await value('A1'),'0012');await page.locator('#redo').click();await settle();assert.equal(await value('A1'),'0007');
+ await go('B1');await copy();await go('A4');await page.locator('[data-action="paste-special"]').click();await page.locator('#paste-mode').selectOption('values');await page.getByRole('dialog').getByRole('button',{name:'확인',exact:true}).click();await settle();assert.equal(await value('A4'),12);
+ await page.locator('#file-input').setInputFiles({name:'copy-source.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await styleDefaultsFixture())});await settle();await edit('B3','12');await edit('C5','.25');await go('B3:C5');const text=await copy();
+ const target=createWorkbook();target.name='copy-destination';target.xlsxStyles=[{style:{font:{name:'Consolas',color:{argb:'FF00FF00'}}},baseline:{fontFamily:'Consolas',color:'#00ff00'}}];target.xlsxDefaultStyle=0;
+ await page.locator('#file-input').setInputFiles({name:'destination.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(target))});await settle();await go('A1');await paste(text);assert.equal(await value('A1'),12);assert.equal(await cell('A1').textContent(),'00012');assert.equal(await cell('B3').textContent(),'25.0%');assert.equal(await cell('A1').evaluate(el=>getComputedStyle(el).color),'rgb(255, 0, 0)');
+ const output=path.join(dataDir,'clipboard.xlsx');await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},output);await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');const out=new ExcelJS.Workbook();await out.xlsx.load(await fs.readFile(output));assert.equal(out.worksheets[0].getCell('A1').border.diagonal.up,true);assert.equal(out.worksheets[0].getCell('B3').alignment.textRotation,30);assert.equal(out.worksheets[0].getCell('B1').font.size,14);await page.locator('#file-input').setInputFiles(output);await settle();assert.equal(await cell('A1').textContent(),'00012');assert.equal(await cell('B3').textContent(),'25.0%');assert.deepEqual(errors,[]);
+ console.log('PASS: actual text-formatted entry/incomplete formulas/typed values, plain paste retaining style and note, undo/redo, numeric values-only paste, cross-document portable inherited and advanced styles, XLSX save/reopen');
+}catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/clipboard-types-failure.png')});throw error;}
+finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}
