@@ -9,6 +9,7 @@ import {renderChartSVG} from './chart-render.mjs';
 import {chartRect} from './chart-geometry.mjs';
 import {drawingPreviews} from './xlsx-drawings.mjs';
 import {nativeCachedValue} from './native-plan.mjs';
+import {printOrientation} from './worksheet-extra.mjs';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const printLimit=20000;
@@ -59,8 +60,9 @@ function gridHTML(book,sheet,range,{gridLines=false,evaluate,contentWidth}){
  * data, instead of being silently omitted or clipped at their screen position.
  * This is an immutable document, built with the worker's calculation session.
  */
-export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation='portrait',gridLines=false,includeCharts=true,includeImages=true,evaluate}={}){
+export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation,gridLines=false,includeCharts=true,includeImages=true,evaluate}={}){
   const sheet=book.sheets.find(s=>s.id===sheetId);if(!sheet)throw Error('인쇄할 시트를 찾을 수 없습니다.');
+  orientation??=printOrientation(sheet);
   if(!['sheet','selection','charts'].includes(scope)||!['portrait','landscape'].includes(orientation))throw Error('인쇄 설정이 올바르지 않습니다.');
   if(scope==='selection'&&!selection)throw Error('인쇄할 선택 영역을 지정하세요.');
   const contentWidth=(orientation==='landscape'?273:186)*96/25.4,calculate=evaluate||createEvaluator(book,sheetId),chartOnly=scope==='charts'||sheet.kind==='chart';

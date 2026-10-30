@@ -8,6 +8,7 @@ import {validateTables,filteredRowsForSheet,tableBounds} from './table-schema.mj
 import {readStructuredToken,resolveStructuredReference,rewriteStructuredSelector} from './table-references.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 import {validatePreservedData,validatePreservedXML} from './xlsx-preservation-schema.mjs';
+import {validateExtraSheetFeatures,validateDocumentProperties} from './worksheet-extra.mjs';
 import {MAX_DOCUMENT_CELLS, MAX_DOCUMENT_TEXT_CHARS, MAX_FORMULA_CELLS} from './limits.mjs';
 import {unwrap} from './clone.mjs';
 import {validateBorders} from './borders.mjs';
@@ -1257,6 +1258,7 @@ export function validateWorkbook(data) {
     if(sheet.hiddenSizes!==undefined){if(!object(sheet.hiddenSizes))throw Error('숨김 크기가 올바르지 않습니다.');for(const k of ['rows','cols']){if(!object(sheet.hiddenSizes[k]))throw Error('숨김 크기가 올바르지 않습니다.');for(const [i,v] of Object.entries(sheet.hiddenSizes[k]))if(!/^\d+$/.test(i)||+i>=(k==='rows'?1048576:16384)||!Number.isFinite(v)||v<0||v>10000)throw Error('숨김 크기가 올바르지 않습니다.');}}
     if(sheet.xlsxProtectionDefaults!==undefined){if(!object(sheet.xlsxProtectionDefaults)||!object(sheet.xlsxProtectionDefaults.rows)||!object(sheet.xlsxProtectionDefaults.columns))throw Error('행·열 잠금 설정이 올바르지 않습니다.');validatePreservedData(sheet.xlsxProtectionDefaults,16_000_000);}
     if(sheet.xlsxFeatures!==undefined){if(!object(sheet.xlsxFeatures))throw Error('보존된 시트 정보가 올바르지 않습니다.');for(const key of ['dataValidations','sheetProtection'])if(sheet.xlsxFeatures[key]!==undefined)validatePreservedXML(sheet.xlsxFeatures[key],key);if(sheet.xlsxFeatures.conditionalFormatting!==undefined){const rules=sheet.xlsxFeatures.conditionalFormatting;if(!Array.isArray(rules)||rules.length>10000)throw Error('보존된 조건부 서식이 올바르지 않습니다.');for(const rule of rules)validatePreservedXML(rule,'conditionalFormatting');}}
+    if(sheet.xlsxFeatures)validateExtraSheetFeatures(sheet.xlsxFeatures);
     if(sheet.xlsxStyleDefaults!==undefined){const d=sheet.xlsxStyleDefaults;if(!object(d)||!object(d.rows)||!object(d.columns))throw Error('행·열 기본 서식이 올바르지 않습니다.');for(const [axis,values] of Object.entries(d)){if(!['rows','columns'].includes(axis))throw Error('행·열 기본 서식 종류가 올바르지 않습니다.');for(const [key,id] of Object.entries(values))if(!/^(?:0|[1-9]\d*)$/.test(key)||+key>=(axis==='rows'?1048576:16384)||!Number.isInteger(id)||id<0||!data.xlsxStyles?.[id]?.style)throw Error('행·열 기본 서식 참조가 올바르지 않습니다.');}validatePreservedData(d,32_000_000);}
     if(sheet.tables!==undefined)validateTables(sheet.tables);
     if(sheet.freeze!==undefined)validateFreeze(sheet.freeze);
@@ -1300,6 +1302,7 @@ export function validateWorkbook(data) {
   if(data.xlsxColors!==undefined)validatePreservedXML(data.xlsxColors,'colors');
   if(data.xlsxStyles!==undefined){if(!Array.isArray(data.xlsxStyles)||data.xlsxStyles.length>65536||data.xlsxStyles.some(s=>!object(s)||!object(s.style)||!object(s.baseline)))throw Error('보존된 Excel 서식 목록이 올바르지 않습니다.');validatePreservedData(data.xlsxStyles,32_000_000);}
   if(data.xlsxDefaultStyle!==undefined&&(!Number.isInteger(data.xlsxDefaultStyle)||data.xlsxDefaultStyle<0||!data.xlsxStyles?.[data.xlsxDefaultStyle]))throw Error('통합 문서의 기본 서식이 올바르지 않습니다.');
+  if(data.xlsxProperties!==undefined)validateDocumentProperties(data.xlsxProperties);
   if(data.xlsxDxfs!==undefined){if(!Array.isArray(data.xlsxDxfs)||data.xlsxDxfs.length>65536)throw Error('보존된 Excel 조건부 서식이 올바르지 않습니다.');for(const rule of data.xlsxDxfs)validatePreservedXML(rule,'dxf');}
   if(data.chartTheme!==undefined&&(typeof data.chartTheme!=='string'||data.chartTheme.length>2000000||/<!DOCTYPE|<!ENTITY/i.test(data.chartTheme)))throw new Error('차트 테마가 올바르지 않습니다.');
   if(data.chartNames!==undefined&&(!Array.isArray(data.chartNames)||data.chartNames.length>10000||data.chartNames.some(n=>!object(n)||typeof n.name!=='string'||n.name.length>255||typeof n.formula!=='string'||n.formula.length>8192||n.sheetId!==undefined&&typeof n.sheetId!=='string'||n.hidden!==undefined&&typeof n.hidden!=='boolean')))throw new Error('차트 이름 참조가 올바르지 않습니다.');

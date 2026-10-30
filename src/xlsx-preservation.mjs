@@ -3,6 +3,8 @@ import {validatePreservedXML} from './xlsx-preservation-schema.mjs';
 import JSZip from 'jszip';
 import {xml,stringify,children,child,all,attr,readRelationships,resolvePart,relPath} from './chart-xml.mjs';
 import {splitWorksheetXML} from './worksheet-metadata.mjs';
+import {captureExtraSheetFeatures,writeExtraSheetRelationships,extraSheetNode,EXTRA_SHEET_TAGS} from './worksheet-extra.mjs';
+import {contentTypeWriter} from './xlsx-part-store.mjs';
 
 export const plainCopy=value=>JSON.parse(JSON.stringify(value));
 export async function worksheetParts(zip){
@@ -27,6 +29,7 @@ export async function prepareWorksheetFeatures(zip){
     if(validations||tableParts||drawing)loader.file(part.path,split.restore(stringify(doc)));
     if(protection)feature.sheetProtection=stringify(protection);
     if(conditions.length)feature.conditionalFormatting=conditions.map(stringify);
+    await captureExtraSheetFeatures(zip,part.path,root,feature);
     const tips=children(child(root,'hyperlinks'),'hyperlink').filter(n=>attr(n,'tooltip')).map(n=>[attr(n,'ref'),attr(n,'tooltip')]);if(tips.length)feature.hyperlinkTips=Object.fromEntries(tips);
     features.set(part.name,feature);
   }
@@ -38,10 +41,12 @@ const order=['sheetPr','dimension','sheetViews','sheetFormatPr','cols','sheetDat
 function insert(doc,node){const index=order.indexOf(node.localName),before=children(doc.documentElement).find(n=>order.indexOf(n.localName)>index);doc.documentElement.insertBefore(doc.importNode(node,true),before||null);}
 export async function addPreservedFeatures(bytes,book,names){
   if(!book.sheets.some(s=>s.xlsxFeatures)&&!book.xlsxColors)return bytes;
-  const zip=await JSZip.loadAsync(bytes),dxfMap=book.sheets.some(s=>s.unsupportedConditionalCount&&s.xlsxFeatures?.conditionalFormatting?.length)?await mergePreservedDxfs(zip,book.xlsxDxfs):[];
-  for(const part of await worksheetParts(zip)){
+  const zip=await JSZip.loadAsync(bytes),dxfMap=book.sheets.some(s=>s.unsupportedConditionalCount&&s.xlsxFeatures?.conditionalFormatting?.length)?await mergePreservedDxfs(zip,book.xlsxDxfs):[],types=xml(await zip.file('[Content_Types].xml').async('string')),content=contentTypeWriter(types);
+  for(const [index,part] of (await worksheetParts(zip)).entries()){
     const sheet=book.sheets.find(s=>(names?.get(s.id)||s.name)===part.name),feature=sheet?.xlsxFeatures;if(!feature)continue;
     const split=splitWorksheetXML(await zip.file(part.path).async('string')),doc=xml(split.metadata);
+    const ids=await writeExtraSheetRelationships(zip,part.path,feature,index,content);
+    for(const name of EXTRA_SHEET_TAGS)if(feature[name]){for(const node of children(doc.documentElement,name))doc.documentElement.removeChild(node);const node=extraSheetNode(feature,name,ids);if(name==='sheetPr'){const filters=[sheet.autoFilter,...(sheet.tables||[]).map(t=>t.filter)].filter(Boolean);node.setAttribute('filterMode',filters.some(f=>Object.keys(f.columns||{}).length||f.unsupported?.length)?'1':'0');}insert(doc,node);}
     for(const name of ['sheetProtection','dataValidations'])if(feature[name]){for(const node of children(doc.documentElement,name))doc.documentElement.removeChild(node);insert(doc,validatePreservedXML(feature[name],name).documentElement);}
     if(sheet.unsupportedConditionalCount&&feature.conditionalFormatting?.length){
       for(const node of children(doc.documentElement,'conditionalFormatting'))doc.documentElement.removeChild(node);
@@ -50,5 +55,6 @@ export async function addPreservedFeatures(bytes,book,names){
     zip.file(part.path,split.restore(stringify(doc)));
   }
   if(book.xlsxColors){const styles=xml(await zip.file('xl/styles.xml').async('string')),root=styles.documentElement,old=child(root,'colors');if(old)root.removeChild(old);root.insertBefore(styles.importNode(validatePreservedXML(book.xlsxColors,'colors').documentElement,true),child(root,'extLst')||null);zip.file('xl/styles.xml',stringify(styles));}
+  zip.file('[Content_Types].xml',stringify(types));
   return zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
 }

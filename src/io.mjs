@@ -5,6 +5,7 @@ import {isErrorText} from './cell-values.mjs';
 import {readDefaultStyleModel,applyDefaultStyleProbe,normalDigitWidth} from './xlsx-default-style.mjs';
 import {inheritedStyles,worksheetCellStyle} from './cell-style.mjs';
 import {readRelationships,resolvePart} from './chart-xml.mjs';
+import {documentProperties,DOCUMENT_PROPERTY_FIELDS} from './worksheet-extra.mjs';
 import {numberFormatKind as formatKind,effectiveNumberFormat} from './number-formats.mjs';
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
@@ -221,6 +222,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if(book.properties.date1904)result.date1904=true;
   if(styleModels.length)result.xlsxStyles=styleModels;
   if(normalIndex!==undefined)result.xlsxDefaultStyle=normalIndex;
+  const properties=documentProperties(book);if(Object.keys(properties).length)result.xlsxProperties=properties;
   if(preserved.colors)result.xlsxColors=preserved.colors;
   if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
   await restoreSheetKinds(colorZip,result,newSheet);
@@ -335,8 +337,9 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   book.properties.date1904=workbook.date1904===true;
   const exportResolve=createColorResolver(workbook.chartTheme||'',workbook.xlsxColors?'<styleSheet>'+workbook.xlsxColors+'</styleSheet>':undefined);
   const digitWidth=normalDigitWidth(workbook.xlsxStyles?.[workbook.xlsxDefaultStyle]?.style?.font);
-  book.creator = 'Sheet Studio';
-  book.created = new Date(); book.modified = new Date();
+  for(const key of DOCUMENT_PROPERTY_FIELDS)if(workbook.xlsxProperties?.[key]!==undefined)book[key]=workbook.xlsxProperties[key];
+  book.creator = workbook.xlsxProperties?.creator||'Sheet Studio';book.lastModifiedBy='Sheet Studio';
+  book.created = workbook.xlsxProperties?.created?new Date(workbook.xlsxProperties.created):new Date(); book.modified = new Date();
   book.calcProperties.fullCalcOnLoad = true;
   const visibleSheet=sheet=>!sheet.state||sheet.state==='visible',active=workbook.sheets.find(sheet=>sheet.id===workbook.activeSheetId&&visibleSheet(sheet))||workbook.sheets.find(visibleSheet);
   book.views = [{ activeTab: Math.max(0, workbook.sheets.indexOf(active)), visibility: 'visible' }];

@@ -1,5 +1,6 @@
 import {unwrap} from './clone.mjs';
 import {xml,stringify,children,all,attr} from './chart-xml.mjs';
+import {transformExtraSheetFeatures} from './worksheet-extra.mjs';
 
 /** Keep preserved XML references in step with supported sheet edits. Formula
  * parsers are supplied by the caller to avoid a second, divergent ref parser.
@@ -7,6 +8,7 @@ import {xml,stringify,children,all,attr} from './chart-xml.mjs';
 export function transformPreservedFeatures(sheet,{reference=f=>f,formula=f=>f,rebase=f=>f}={}){
   const feature=sheet.xlsxFeatures;
   if(feature){
+    transformExtraSheetFeatures(feature,reference);
     const transform=(source,kind)=>{
       const doc=xml(source),root=doc.documentElement,groups=kind==='dataValidations'?children(root,'dataValidation'):[root];
       for(const group of groups){

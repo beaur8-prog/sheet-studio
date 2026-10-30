@@ -32,6 +32,7 @@ export async function addSheetKindParts(bytes,book,names){
     const sheet=book.sheets.find(s=>(names?.get(s.id)||s.name)===attr(node,'name'));if(!sheet)continue;if(sheet.state&&sheet.state!=='visible')node.setAttribute('state',sheet.state);else node.removeAttribute('state');if(sheet.kind!=='chart')continue;
     const rel=all(rels,'Relationship').find(r=>attr(r,'Id')===attr(node,'r:id')),old=resolvePart('xl/workbook.xml',attr(rel,'Target')),path=`xl/chartsheets/sheet${++index}.xml`,source=sheet.xlsxChartSheet;
     const target=source?xml(source.xml):xml(`<chartsheet xmlns="${NS}" xmlns:r="${R}"><sheetViews><sheetView workbookViewId="0"/></sheetViews></chartsheet>`),root=target.documentElement;
+    if(sheet.xlsxFeatures?.pageSetup){const old=child(root,'pageSetup');if(old)root.removeChild(old);root.insertBefore(target.importNode(xml(sheet.xlsxFeatures.pageSetup).documentElement,true),children(root).find(n=>['headerFooter','drawing','legacyDrawing','legacyDrawingHF','picture','webPublishItems','extLst'].includes(n.localName))||null);}
     for(const view of all(root,'sheetView'))if(sheet.id===book.activeSheetId)view.setAttribute('tabSelected','1');else view.removeAttribute('tabSelected');
     for(const drawing of children(root,'drawing'))root.removeChild(drawing);
     const drawing=(await readRelationships(zip,old)).find(r=>r.type.endsWith('/drawing')),out=[];
