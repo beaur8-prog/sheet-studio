@@ -421,7 +421,7 @@ async function toggleFilter(){
  return runBusy('필터 범위를 확인하는 중…',async()=>{const range=s.autoFilter?null:await tasks.run('infer-filter',{sheetId:s.id,selection:bounds()});if(range&&(s.tables||[]).some(t=>overlaps(tableBounds(t.range),range)))return toast('표 안의 셀을 선택해 표 필터를 사용하세요.');checkpoint();if(s.autoFilter)delete s.autoFilter;else s.autoFilter={range,columns:{},hiddenRows:[]};changed({rebuild:true});focusGrid();});
 }
 function clearFilters(){const {table,filter}=selectedFilterContext();if(!filterActive({autoFilter:filter}))return;if(table&&book.nativeSource)return toast('XLSM의 표 필터는 Excel에서 변경하세요.');if(!permitOperation('autoFilter'))return;checkpoint();filter.columns={};filter.hiddenRows=[];delete filter.unsupported;changed({rebuild:true});}
-async function sortFiltered(c,desc,tableId){if(commitEdit()===false)return;return runBusy('필터 범위를 정렬하는 중…',async()=>{const result=await tasks.run('sort-filter',{sheetId:sheet().id,column:c,desc,tableId});checkpoint();sheet().cells=history.acceptCells(result.cells,result.description);sheet().autoFilter=result.autoFilter;if(result.tableId)sheet().tables.find(t=>t.id===result.tableId).filter=result.tableFilter;pendingImportToken=result.token;changed({rebuild:true});});}
+async function sortFiltered(c,desc,tableId){if(commitEdit()===false)return;return runBusy('필터 범위를 정렬하는 중…',async()=>{const result=await tasks.run('sort-filter',{sheetId:sheet().id,column:c,desc,tableId});checkpoint();book.xlsxStyles=result.xlsxStyles;sheet().cells=history.acceptCells(result.cells,result.description);sheet().autoFilter=result.autoFilter;if(result.tableId)sheet().tables.find(t=>t.id===result.tableId).filter=result.tableFilter;pendingImportToken=result.token;changed({rebuild:true});});}
 async function applyFilterRule(column,rule,tableId){if(!permitOperation('autoFilter'))return;return runBusy('필터를 적용하는 중…',async()=>{const filter=await tasks.run('filter',{sheetId:sheet().id,column,rule,tableId});checkpoint();if(tableId)sheet().tables.find(t=>t.id===tableId).filter=filter;else sheet().autoFilter=filter;changed({rebuild:true});});}
 async function openColumnFilter(column,anchor,tableId){
  if(commitEdit()===false)return;closeMenu();const s=sheet(),table=tableId===undefined?tableAt(s,selection.r,selection.c):tableId?s.tables?.find(t=>t.id===tableId):null,f=table?table.filter:s.autoFilter;if(!f)return;
@@ -434,7 +434,7 @@ async function openColumnFilter(column,anchor,tableId){
 const boundsLabel=b=>`${address(b.r1,b.c1)}:${address(b.r2,b.c2)}`;
 async function performSort(range,column,desc,headers){
  const data={...range,r1:range.r1+(headers?1:0)};if(data.r2<=data.r1)return toast('정렬할 데이터 행이 두 개 이상 필요합니다.');
- return runBusy('선택 범위를 정렬하는 중…',async()=>{const result=await tasks.run('sort',{sheetId:sheet().id,range:data,column,desc});checkpoint();sheet().cells=history.acceptCells(result.cells,result.description);pendingImportToken=result.token;changed();toast(`${boundsLabel(range)} 범위를 정렬했습니다.`);});
+ return runBusy('선택 범위를 정렬하는 중…',async()=>{const result=await tasks.run('sort',{sheetId:sheet().id,range:data,column,desc});checkpoint();book.xlsxStyles=result.xlsxStyles;sheet().cells=history.acceptCells(result.cells,result.description);pendingImportToken=result.token;changed();toast(`${boundsLabel(range)} 범위를 정렬했습니다.`);});
 }
 async function sortData(desc){
  if(pivotLocked())return;if(commitEdit()===false)return;

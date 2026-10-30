@@ -138,12 +138,12 @@ async function handle(type, data) {
     const table=data.tableId?sheet.tables?.find(t=>t.id===data.tableId):null;
     const range=type==='sort-filter'?{...(table?.filter||sheet.autoFilter).range,r1:(table?.filter||sheet.autoFilter).range.r1+1}:data.range;assertSortAllowed(book,sheet,range);
     const target = structuredClone(sheet);
-    const next = {...book, sheets: book.sheets.map(item => item.id === sheet.id ? target : item)};
+    const next = {...book,xlsxStyles:[...(book.xlsxStyles||[])], sheets: book.sheets.map(item => item.id === sheet.id ? target : item)};
     if(type==='sort-filter'){const filter=table?target.tables.find(t=>t.id===data.tableId).filter:target.autoFilter;sortFilterRange(next,{...target,autoFilter:filter},data.column,data.desc);}
     else sortRange(next, target, data.range, data.column, data.desc);
     validateWorkbook(next);
     const token=crypto.randomUUID();prepared={token,book:next};
-    return {cells: target.cells, autoFilter: target.autoFilter,...(table?{tableId:table.id,tableFilter:target.tables.find(t=>t.id===table.id).filter}:{}), token, description:cellDescription(target.cells)};
+    return {cells: target.cells,xlsxStyles:next.xlsxStyles, autoFilter: target.autoFilter,...(table?{tableId:table.id,tableFilter:target.tables.find(t=>t.id===table.id).filter}:{}), token, description:cellDescription(target.cells)};
   }
   throw Error('알 수 없는 문서 작업입니다.');
 }
