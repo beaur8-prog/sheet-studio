@@ -266,6 +266,7 @@ IF|logical_test, value_if_true, [value_if_false]|TRUE,42,1/0|조건에 따라 �
 IFERROR|value, value_if_error|1/0,"오류"|오류일 때 대체 값
 IFNA|value, value_if_na|NA(),"없음"|N/A 오류일 때 대체 값
 IFS|logical_test1, value_if_true1, …|FALSE,1,TRUE,2|첫 번째 참인 조건의 값
+LET|name1, name_value1, calculation, …|x,5,SUM(x,1)|수식 안에서 이름을 붙인 계산을 재사용
 NOT|logical|FALSE|논리값 반전
 OR|logical1, [logical2], …|FALSE,TRUE|하나 이상의 조건이 참인지 검사
 SWITCH|expression, value1, result1, …|2,1,"a",2,"b","other"|값에 따라 결과 선택 (마지막 기본값 선택 가능)
@@ -380,7 +381,7 @@ const entries = Object.entries(groups).flatMap(([category, data]) => data.trim()
   const parts = parameters ? parameters.split(', ').filter(p => p !== '…') : [];
   return { name, category, parameters, syntax:`${name}(${parameters})`, description,
     example:`=${name}(${exampleArgs})`, min:parts.filter(p => !p.startsWith('[')).length,
-    max:parameters.includes('…') ? 255 : parts.length };
+    max:name==='LET'?253:parameters.includes('…') ? 255 : parts.length };
 }));
 for (const [name, target] of Object.entries(FUNCTION_ALIASES)) {
   const base = entries.find(entry => entry.name === target);
@@ -395,7 +396,7 @@ export const XLSX_FUTURE_FUNCTIONS = new Set(FUNCTION_CATALOG.filter(f=>f.name.i
 ACOT ACOTH BASE BITAND BITLSHIFT BITOR BITRSHIFT BITXOR COMBINA CONCAT COT COTH CSC CSCH
 DAYS DECIMAL FORMULATEXT GAMMA GAUSS IFNA IFS IMCOSH IMCOT IMCSC IMCSCH IMSEC IMSECH
 IMSINH IMTAN ISFORMULA ISOWEEKNUM MAXIFS MINIFS NUMBERVALUE PDURATION PERMUTATIONA PHI
-RRI SEC SECH SHEET SHEETS SWITCH TEXTAFTER TEXTBEFORE TEXTJOIN UNICHAR UNICODE XLOOKUP XMATCH XOR
+LET RRI SEC SECH SHEET SHEETS SWITCH TEXTAFTER TEXTBEFORE TEXTJOIN UNICHAR UNICODE XLOOKUP XMATCH XOR
 `.trim().split(/\s+/)));
 export function normalizeFunctionName(name) {
   return String(name).toUpperCase().replace(/^_XLFN\.(?:_XLWS\.)?/, '').replace(/^_XLWS\./,'');

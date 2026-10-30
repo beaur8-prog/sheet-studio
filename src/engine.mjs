@@ -290,7 +290,10 @@ function resolveSheet(ctx, name) {
   if (!name) return ctx.sheet;
   return ctx.workbook.sheets.find(sheet => sheet.name.toLowerCase() === name.toLowerCase()) || fail('#REF!');
 }
+const localName=name=>String(name).replace(/^_xlpm\./i,'').toLocaleLowerCase();
+function localBinding(node,ctx){if(node.sheet)return null;const key=localName(node.name);for(let scope=ctx.locals;scope;scope=scope.parent)if(scope.name===key)return scope;return null;}
 function withNamedNode(node,ctx,callback){
+  const binding=localBinding(node,ctx);if(binding){const previous=ctx.locals;ctx.locals=binding.parent;try{return callback(binding.node);}finally{ctx.locals=previous;}}
   const scope=resolveSheet(ctx,node.sheet),names=ctx.workbook.chartNames||[],key=node.name.toLocaleLowerCase();
   const named=names.find(n=>n.sheetId===scope.id&&n.name.toLocaleLowerCase()===key)||names.find(n=>!n.sheetId&&n.name.toLocaleLowerCase()===key);
   if(!named){if(ctx.workbook.sheets.some(s=>s.tables?.some(t=>t.name.toLocaleLowerCase()===key)))return callback({type:'structured',tableName:node.name,sheet:node.sheet,selector:'[#Data]'});fail(/^\$?[A-Za-z]+\$?\d+$/.test(node.name)?'#REF!':'#NAME?');}
@@ -303,8 +306,8 @@ function withNamedNode(node,ctx,callback){
     if(tokens.some((t,i)=>t.type==='word'&&parseAddress(t.value)&&!['(','!'].includes(tokens[i+1]?.value)&&!/^\$[A-Za-z]+\$\d+$/.test(t.value))||wholeReferences(tokens).some(r=>!r.first.locked||!r.last.locked))fail('#NAME?');
     definition=new Parser(formula).parse();cache.set(id,definition);
   }
-  active.add(id);const previous=ctx.sheet;if(named.sheetId)ctx.sheet=scope;
-  try{return callback(definition);}finally{ctx.sheet=previous;active.delete(id);}
+  active.add(id);const previous=ctx.sheet,locals=ctx.locals;ctx.locals=null;if(named.sheetId)ctx.sheet=scope;
+  try{return callback(definition);}finally{ctx.sheet=previous;ctx.locals=locals;active.delete(id);}
 }
 function literal(raw) {
   if (raw === undefined || raw === null || raw === '') return BLANK;
@@ -343,9 +346,9 @@ function readCell(ctx, sheet, ref) {
   ctx.active.add(key);
   ctx.depth++;
   let value;
-  const original = ctx.sheet, originalPosition=ctx.position,originalArrayMode=ctx.arrayMode;
+  const original = ctx.sheet, originalPosition=ctx.position,originalArrayMode=ctx.arrayMode,originalLocals=ctx.locals;
   try {
-    ctx.sheet = sheet;ctx.position=pos;ctx.arrayMode=!!array;
+    ctx.sheet = sheet;ctx.position=pos;ctx.arrayMode=!!array;ctx.locals=null;
     const node=external?null:ctx.frame?.key===key?(ctx.frame.ast??=new Parser(raw).parse()):new Parser(raw).parse();
     const supplied=external?.result?.(sheet.id,ref),computed=external?(supplied?supplied.error?new FormulaError(supplied.error):supplied.value:external(sheet.id,ref)):evaluateNode(node,ctx,0);
     if(array){const result=asRange(computed);(ctx.arrayResults??=new Map()).set(key,result);value=checked(result.values[0]);}else value=checked(computed);
@@ -353,7 +356,7 @@ function readCell(ctx, sheet, ref) {
   } catch (error) {
     if(error instanceof PendingCell||error instanceof CalculationLimit)throw error;
     value = error instanceof FormulaError ? error : new FormulaError('#VALUE!');
-  } finally { ctx.sheet = original;ctx.position=originalPosition;ctx.arrayMode=originalArrayMode;ctx.depth--; ctx.active.delete(key); }
+  } finally { ctx.sheet = original;ctx.position=originalPosition;ctx.arrayMode=originalArrayMode;ctx.locals=originalLocals;ctx.depth--; ctx.active.delete(key); }
   ctx.cache.set(key, value);
   return value;
 }
@@ -404,7 +407,7 @@ function evaluateNodeUncached(node, ctx, depth) {
   if (node.type === 'error') fail(node.value);
   if(node.type==='axisEndpoint')fail('#REF!');
   if(node.type==='whole'){const ref=referenceMetadata(node,ctx,evaluate);return getRange(ctx,ref.sheet,ref.top,ref.left,ref.rows,ref.cols);}
-  if(node.type==='name')return withNamedNode(node,ctx,definition=>evaluateNode(definition,ctx,depth+1));
+  if(node.type==='name'){const local=localBinding(node,ctx);return withNamedNode(node,ctx,definition=>evaluateNode(definition,ctx,depth+(local?0:1)));}
   if(node.type==='structured'){const ref=resolveStructuredReference(ctx.workbook,ctx.sheet,ctx.position,node.tableName,node.selector,node.sheet);if(ref.error)fail(ref.error);if(ref.empty)return {...ref,kind:'range',values:[]};if(ref.areas){const values=[];for(const area of ref.areas)for(const value of getRange(ctx,area.sheet,area.top,area.left,area.rows,area.cols).values)values.push(value);return {kind:'range',rows:values.length,cols:1,values};}return getRange(ctx,ref.sheet,ref.top,ref.left,ref.rows,ref.cols);}
   if (node.type === 'ref') {
     const sheet=resolveSheet(ctx,node.sheet);
@@ -456,6 +459,7 @@ function evaluateNodeUncached(node, ctx, depth) {
     }
     return apply(left,right);
   }
+  if(node.type==='call'&&normalizeFunctionName(node.name)==='LET')return evaluateLet(node,ctx,depth);
   if (node.type === 'call') return callFunction(normalizeFunctionName(node.name), node.args, evaluate,ctx);
   return fail('#VALUE!');
 }
@@ -677,6 +681,20 @@ function referenceFunction(ctx,name,nodes,evaluate) {
 const functionHelpers={BLANK,FormulaError,fail,scalar,checked,numeric,textual,logical,finite,isRange,isRef,asRange,flatten,numericItems,criterion,compare,wildcardRegex,dateSerial,serialParts,rounded,colName,parseAddress,address,formatValue};
 const extendedFunction=createFunctionRuntime(functionHelpers);
 
+// Lexical bindings capture the preceding scope, so nested LET may shadow an
+// outer name without leaking variables into referenced cells or workbook names.
+// Expressions remain lazy and use the calculation frame's AST memo: retries for
+// unfinished cell dependencies do not reevaluate RAND or repeated expressions.
+function evaluateLet(node,ctx,depth){
+  const args=node.args;if(args.length<3||args.length>253||args.length%2!==1)fail('#VALUE!');
+  let scope=ctx.locals;const names=new Set();
+  for(let i=0;i<args.length-1;i+=2){
+    const variable=args[i],name=variable.type==='name'&&!variable.sheet?localName(variable.name):'';
+    if(!name||name.length>255||!/^[_\p{L}\\][_\p{L}\p{N}.\\]*$/u.test(name)||/^(?:r|c|r\d+c\d+|true|false)$/i.test(name)||parseAddress(name)||names.has(name))fail('#VALUE!');
+    names.add(name);scope={parent:scope,name,node:args[i+1]};
+  }
+  const previous=ctx.locals;ctx.locals=scope;try{return evaluateNode(args.at(-1),ctx,depth+1);}finally{ctx.locals=previous;}
+}
 function callFunction(name, nodes, evaluate, ctx) {
   const arity = (min, max = min) => { if (nodes.length < min || nodes.length > max) fail('#VALUE!'); };
   if (name === 'IF') {
