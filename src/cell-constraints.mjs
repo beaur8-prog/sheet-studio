@@ -38,9 +38,13 @@ export function assertCellUpdates(book,sheet,updates,{editAnchor=false,formatOnl
   if(book.nativeSource&&updates.some(u=>u.cell?.xlsxFormula?.shareType==='array'))throw Error('XLSM에 배열 수식을 붙여넣는 작업은 Excel에서 진행하세요.');
 }
 export function assertStructureAllowed(sheet,axis,index,count,delta){
+  const limit=axis==='r'?1048576:16384;
+  if(!['r','c'].includes(axis)||!Number.isInteger(index)||!Number.isInteger(count)||count<1||count>10000||index<0||index+count>limit||![-1,1].includes(delta))throw Error('행·열 변경 범위가 올바르지 않습니다.');
   if(!protectionAllows(sheet,(delta>0?'insert':'delete')+(axis==='r'?'Rows':'Columns')))throw Error('보호된 시트에서 이 행·열 변경은 허용되지 않습니다.');
+  if(delta>0)for(const ref in sheet.cells){const p=parseAddress(ref);if(p[axis]>=index&&p[axis]+count>=limit)throw Error('시트 끝의 셀이 밀려나 데이터가 사라질 수 있어 삽입하지 않았습니다. 마지막 행·열의 데이터를 먼저 옮기세요.');}
   for(const a of arrayRegions(sheet)){const lo=axis==='r'?a.r1:a.c1,hi=axis==='r'?a.r2:a.c2;
     if(delta>0?index>lo&&index<=hi:index<=hi&&index+count-1>=lo&&!(index<=lo&&index+count-1>=hi))throw Error('배열 수식의 일부에 행·열을 삽입하거나 삭제할 수 없습니다.');
+    if(delta>0&&index<=lo&&hi+count>=limit)throw Error('배열 수식이 시트의 마지막 행·열을 넘어갑니다.');
   }
 }
 export function assertSortAllowed(book,sheet,b){

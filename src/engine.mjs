@@ -976,22 +976,28 @@ export function formatValue(value, style = {}, options = {}) {
   return formatNumericSection(selected.value,selected.section,{negative:selected.negative,decimals});
 }
 
-/** Rewrite references after one structural row/column insertion or deletion.
+/** Rewrite references after a contiguous row/column insertion or deletion.
  * Absolute locks affect copying, not structural edits. Sheet qualifiers and
  * original formula whitespace are retained. Deleted ranges contract in place.
  */
 export function transformFormulaReferences(formula, { axis, index, delta, targetSheet, ownerSheet }) {
-  if (typeof formula !== 'string' || !['r', 'c'].includes(axis) || !Number.isInteger(index) || index < 0 || ![-1, 1].includes(delta)) return formula;
+  if (typeof formula !== 'string' || !['r', 'c'].includes(axis) || !Number.isInteger(index) || index < 0 || !Number.isInteger(delta)||!delta||Math.abs(delta)>(axis==='r'?MAX_ROWS:MAX_COLS)) return formula;
   const offset = formula.startsWith('=') ? 1 : 0;
   let tokens;
   try { tokens = tokenize(formula.slice(offset)); } catch { return formula; }
   const patches = [];
   const target = String(targetSheet).toLowerCase();
+  const count=Math.abs(delta),end=index+count-1,limit=axis==='r'?MAX_ROWS:MAX_COLS;
+  const moved=n=>n<index?n:delta<0&&n<=end?-1:n+delta;
+  const rangeCoordinates=(n1,n2)=>{
+    const low=Math.min(n1,n2),high=Math.max(n1,n2);let lo,hi;
+    if(delta>0){lo=moved(low);hi=low!==high&&high===limit-1?high:moved(high);if(lo>=limit||hi>=limit)return null;}
+    else {if(low>=index&&high<=end)return null;lo=low<index?low:low>end?low-count:index;hi=high>end?high-count:high<index?high:index-1;}
+    return n1<=n2?[lo,hi]:[hi,lo];
+  };
   for(const range of wholeReferences(tokens))if(range.axis===axis&&String(range.first.sheet||ownerSheet).toLowerCase()===target&&String(range.last.sheet||ownerSheet).toLowerCase()===target){
-    const {first,last,limit}=range,low=Math.min(first.index,last.index),high=Math.max(first.index,last.index),point=(p,n)=>{const replacement=(p.locked?'$':'')+(axis==='c'?colName(n):n+1);if(n<0||n>=limit)return false;if(replacement!==String(p.token.value))patches.push({start:p.token.start,end:p.token.end,replacement});return true;};
-    if(delta<0&&low===index&&high===index)patches.push({start:first.start,end:last.token.end,replacement:'#REF!'});
-    else if(delta>0){const moved=p=>p.index>=index&&!(low!==high&&p.index===limit-1)?p.index+1:p.index;if([first,last].some(p=>moved(p)>=limit))patches.push({start:first.start,end:last.token.end,replacement:'#REF!'});else for(const p of [first,last])point(p,moved(p));}
-    else{const lo=low>index?low-1:low,hi=high>=index?high-1:high;point(first,first.index<=last.index?lo:hi);point(last,first.index<=last.index?hi:lo);}
+    const {first,last,limit}=range,point=(p,n)=>{const replacement=(p.locked?'$':'')+(axis==='c'?colName(n):n+1);if(n<0||n>=limit)return false;if(replacement!==String(p.token.value))patches.push({start:p.token.start,end:p.token.end,replacement});return true;};
+    const next=rangeCoordinates(first.index,last.index);if(!next)patches.push({start:first.start,end:last.token.end,replacement:'#REF!'});else {point(first,next[0]);point(last,next[1]);}
   }
   const readReference = (start, inheritedSheet) => {
     let at = start, token = tokens[at], explicitSheet = null;
@@ -1014,7 +1020,7 @@ export function transformFormulaReferences(formula, { axis, index, delta, target
     if (String(ref.sheet).toLowerCase() !== target) return;
     const n = ref.position[axis];
     if (n < index) return;
-    patchCoordinate(ref, delta === -1 && n === index ? -1 : n + delta);
+    patchCoordinate(ref,moved(n));
   };
   for (let at = 0; at < tokens.length;) {
     const first = readReference(at);
@@ -1022,16 +1028,7 @@ export function transformFormulaReferences(formula, { axis, index, delta, target
     const last = tokens[first.next]?.value === ':' ? readReference(first.next + 1, first.sheet) : null;
     if (last && String(first.sheet).toLowerCase() === target && String(last.sheet).toLowerCase() === target) {
       const n1 = first.position[axis], n2 = last.position[axis];
-      if (delta === 1) { for(const ref of [first,last]){const n=ref.position[axis],limit=axis==='r'?MAX_ROWS:MAX_COLS;if(n1!==n2&&n===limit-1&&n>=index)patchCoordinate(ref,n);else patchSingle(ref);} }
-      else {
-        const lo = Math.min(n1, n2), hi = Math.max(n1, n2);
-        if (lo === index && hi === index) patches.push({ start: first.start, end: last.end, replacement: '#REF!' });
-        else {
-          const nextLo = lo > index ? lo - 1 : lo, nextHi = hi >= index ? hi - 1 : hi;
-          patchCoordinate(first, n1 <= n2 ? nextLo : nextHi);
-          patchCoordinate(last, n1 <= n2 ? nextHi : nextLo);
-        }
-      }
+      const next=rangeCoordinates(n1,n2);if(!next)patches.push({start:first.start,end:last.end,replacement:'#REF!'});else {patchCoordinate(first,next[0]);patchCoordinate(last,next[1]);}
     } else {
       patchSingle(first);
       if (last) patchSingle(last);

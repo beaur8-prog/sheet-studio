@@ -1,4 +1,5 @@
 import {cloneData} from './clone.mjs';
+import {structureIndex,shiftIndexMap} from './structure-coordinates.mjs';
 import {conditionalFormula,shiftWorksheetFeatures} from './conditional.mjs';
 import {nativeFilterPlan} from './filter-native.mjs';
 import {shiftAutoFilter} from './filters.mjs';
@@ -43,16 +44,16 @@ export function attachNativeSource(workbook, data, filename) {
 // row/column operations first, preserving named ranges, controls and charts.
 export function recordNativeStructure(workbook,sheetId,axis,index,delta){
   const source=workbook.nativeSource;if(!source)return;
-  source.operations.push({sheetId,axis,index,delta});
+  const count=Math.abs(delta);if((source.operations?.length||0)+count>10000)throw Error('XLSM의 누적 행·열 변경 한도는 10,000개입니다. Excel에서 저장한 후 다시 여세요.');source.operations||=[];
+  for(let i=0;i<count;i++)source.operations.push({sheetId,axis,index,delta:Math.sign(delta)});
   const target=source.baseline.find(s=>s.id===sheetId);if(!target)return;
   const cells={};for(const [key,cell] of Object.entries(target.cells)){
-    const p=parseAddress(key);if(delta<0&&p[axis]===index)continue;
-    if(p[axis]>=index)p[axis]+=delta;
+    const p=parseAddress(key),nextIndex=structureIndex(p[axis],index,delta);if(nextIndex===null)continue;p[axis]=nextIndex;
     const next=address(p.r,p.c);if(next!=='#REF!')cells[next]=cell;
   }target.cells=cells;
   for(const owner of source.baseline)for(const cell of Object.values(owner.cells))if(cell.raw.startsWith('='))cell.raw=transformFormulaReferences(cell.raw,{axis,index,delta,targetSheet:target.name,ownerSheet:owner.name});
   target.merges=(target.merges||[]).map(value=>transformFormulaReferences(value,{axis,index,delta,targetSheet:target.name,ownerSheet:target.name})).filter(value=>!value.includes('#REF!'));
-  const prop=axis==='r'?'rowHeights':'columnWidths',sizes={};for(const [key,value] of Object.entries(target[prop]||{})){let n=+key;if(delta<0&&n===index)continue;if(n>=index)n+=delta;sizes[n]=value;}target[prop]=sizes;shiftAutoFilter(target,axis,index,delta);shiftWorksheetFeatures(target,axis,index,delta);
+  const prop=axis==='r'?'rowHeights':'columnWidths';target[prop]=shiftIndexMap(target[prop],index,delta,axis==='r'?1048576:16384);shiftAutoFilter(target,axis,index,delta);shiftWorksheetFeatures(target,axis,index,delta);
 }
 
 export function buildNativePlan(workbook){

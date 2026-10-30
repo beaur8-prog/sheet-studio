@@ -1,13 +1,12 @@
 import {openTableUI,openCalculatedColumnUI} from './table-ui.mjs';
 import {prepareTableHeaderEdits,applyTableHeaderEdits,renameTableReferences} from './tables.mjs';
-import {assertTableStructureAllowed,removeTablesForStructure,shiftTables} from './table-structure.mjs';
 import {prepareTableDataEdits} from './table-data-edits.mjs';
 import {tableCellStyle} from './table-style.mjs';
 import {drawingPreviews} from './xlsx-drawings.mjs';
 import {storedArrayIndex,clearReplacedArrayDefinitions,normalizeArrayCopy} from './stored-arrays.mjs';
 import {filteredRowsForSheet,tableAt,tableBounds,overlaps} from './table-schema.mjs';
 import {openNamesUI} from './named-ranges.mjs';
-import {refreshConstraintIndexes,arrayRegions,protectionAllows,sheetIsProtected,cellIsLocked,cellFormulaHidden,cellProtection,cellEditError,assertCellUpdates,assertStructureAllowed,validateCellUpdates,validationRules} from './cell-constraints.mjs';
+import {refreshConstraintIndexes,arrayRegions,protectionAllows,sheetIsProtected,cellIsLocked,cellFormulaHidden,cellProtection,cellEditError,assertCellUpdates,validateCellUpdates,validationRules} from './cell-constraints.mjs';
 import {createHistory} from './history.mjs';
 import {createDocumentLocation} from './document-location.mjs';
 import {installRequestedFileOpener} from './file-open-requests.mjs';
@@ -24,24 +23,21 @@ import {visibleAxis,axisPoint,axisPick,paneRects} from './worksheet-view.mjs';
 import {pastePlan,scalarRaw} from './cell-paste.mjs';
 import {autoFillPlan} from './autofill.mjs';
 import {copyTable,spreadsheetTable} from './table-exchange.mjs';
-import {createConditionalEvaluator,shiftWorksheetFeatures} from './conditional.mjs';
 import {openConditionalUI,openPasteSpecial} from './worksheet-ui.mjs';
 import './filters.css';
-import {filterActive,shiftAutoFilter} from './filters.mjs';
+import {filterActive} from './filters.mjs';
 import {openFilterMenu,closeFilterMenu} from './filter-ui.mjs';
 import {showFunctionLibrary,createFormulaAssistant} from './function-assist.mjs';
-import {createWorkbook,rewriteWorkbookSheetReferences,rewriteSheetReferences,rewriteTableFormula,moveFormulaReferences,colName,colIndex,address,parseAddress,evaluateCell,createEvaluator,transformFormulaReferences,formatValue as formatWorkbookValue,shiftFormula} from './engine.mjs';
-import {recordNativeStructure,nativeCachedValue} from './native-plan.mjs';
+import {createWorkbook,rewriteWorkbookSheetReferences,rewriteSheetReferences,rewriteTableFormula,moveFormulaReferences,colName,colIndex,address,parseAddress,evaluateCell,createEvaluator,formatValue as formatWorkbookValue,shiftFormula} from './engine.mjs';
+import {nativeCachedValue} from './native-plan.mjs';
 import {chartLayout,chartRangeError,chartSeriesBy} from './chart-model.mjs';
 import {chartRect} from './chart-geometry.mjs';
 import {renderChartSVG,layoutChartLegends,layoutChartCategories} from './chart-render.mjs';
 import {chartDialog} from './chart-ui.mjs';
-import {updateChartReferences} from './chart-model.mjs';
 import {installChartInteractions} from './chart-interactions.mjs';
 import {installDimensionInteractions} from './dimension-interactions.mjs';
 import {createVbaUI} from './vba-ui.mjs';
 import {createPivotUI} from './pivot-ui.mjs';
-import {shiftPivotSources} from './pivot.mjs';
 import {autoSumPlan,formulaReferences,referenceSlot,cycleReference,rangeReference,referenceColors,completeFormula} from './formula-tools.mjs';
 
 async function start(){
@@ -415,15 +411,14 @@ async function sortData(desc){
  const el=modal('정렬 범위 확인',`${plan.expandedRange?'<label><input id="sort-expand" type="checkbox" checked> 같은 행의 다른 열도 함께 정렬</label>':''}<p>정렬 범위: <strong id="sort-range"></strong></p><label><input id="sort-headers" type="checkbox"> 첫 행을 머리글로 사용</label>`,[{label:'정렬',primary:true,action:()=>{const selected=range(),headers=el.querySelector('#sort-headers').checked;el.remove();performSort(selected,plan.column,desc,headers);}}]);
  const update=()=>{el.querySelector('#sort-range').textContent=boundsLabel(range());el.querySelector('#sort-headers').checked=(range()===plan.expandedRange?plan.expandedGuess:plan).headers;};el.querySelector('#sort-expand')?.addEventListener('change',update);update();
 }
-function transformRefs(formula,axis,index,delta,targetName,ownerName){return transformFormulaReferences(formula,{axis,index,delta,targetSheet:targetName,ownerSheet:ownerName});}
-function structural(axis,delta){
- if(pivotLocked())return;const b=bounds(),index=axis==='r'?b.r1:b.c1,count=axis==='r'?b.r2-b.r1+1:b.c2-b.c1+1;
+async function structural(axis,delta){
+ if(pivotLocked()||commitEdit()===false)return;const b=bounds(),index=axis==='r'?b.r1:b.c1,count=axis==='r'?b.r2-b.r1+1:b.c2-b.c1+1,sheetId=sheet().id;
  if(count>10000)return toast('한 번에 최대 10,000개 행 또는 열을 변경할 수 있습니다.');
- let removed;try{assertStructureAllowed(sheet(),axis,index,count,delta);removed=assertTableStructureAllowed(book,sheet(),axis,index,count,delta);}catch(error){return toast(error.message);}
- checkpoint();removeTablesForStructure(book,sheet(),removed);for(let i=0;i<count;i++)structuralStep(axis,delta,index);
- selection=axis==='r'?{r:index,c:b.c1,r2:index,c2:b.c2}:{r:b.r1,c:index,r2:b.r2,c2:index};changed({rebuild:true});
+ return runBusy('행·열과 수식 참조를 변경하는 중…',async()=>{
+  const result=await tasks.run('structure',{sheetId,options:{axis,index,count,delta}}),locationId=documentLocation.id();checkpoint();book=history.replace(result.book,result.description);documentLocation.carry(locationId);bindEvaluator();if(clipboard)clipboard.outline=false;pendingImportToken=result.token;
+  selection=axis==='r'?{r:index,c:b.c1,r2:index,c2:b.c2}:{r:b.r1,c:index,r2:b.r2,c2:index};changed({rebuild:true});
+ });
 }
-function structuralStep(axis,delta,index){if(pivotLocked())return;if(clipboard)clipboard.outline=false;recordNativeStructure(book,sheet().id,axis,index,delta);shiftPivotSources(book,sheet().id,axis,index,delta);const s=sheet(),cells={};for(const [key,cell] of Object.entries(s.cells)){let {r,c}=parseAddress(key);let n=axis==='r'?r:c;if(delta<0&&n===index)continue;if(n>=index)n+=delta;if(n<0||n>=(axis==='r'?MAX_ROWS:MAX_COLS))continue;if(axis==='r')r=n;else c=n;cells[address(r,c)]=cell;}s.cells=cells;for(const owner of book.sheets)for(const cell of Object.values(owner.cells))if(cell.raw?.startsWith('='))cell.raw=transformRefs(cell.raw,axis,index,delta,s.name,owner.name);s.merges=(s.merges||[]).map(m=>transformRefs(m,axis,index,delta,s.name,s.name)).filter(m=>!m.includes('#REF!')&&m.split(':')[0]!==m.split(':')[1]);updateChartReferences(book,s.id,axis,index,delta);s.charts=(s.charts||[]).filter(ch=>ch.source||!ch.range.includes('#REF!'));const prop=axis==='r'?'rowHeights':'columnWidths',sizes={};for(const [key,size] of Object.entries(s[prop]||{})){const n=+key;if(delta<0&&n===index)continue;sizes[n>=index?n+delta:n]=size;}s[prop]=sizes;shiftAutoFilter(s,axis,index,delta);shiftTables(book,s.id,axis,index,delta);for(const owner of book.sheets)shiftWorksheetFeatures(owner,axis,index,delta,s.name);}
 async function applyTableOperation(operation,values,tableId){return runBusy('표를 변경하는 중…',async()=>{try{
  const plan=await tasks.run('table-plan',{sheetId:sheet().id,operation,values,tableId});if(operation==='convert'){
   for(const owner of book.sheets)assertCellUpdates(book,owner,plan.updates.filter(u=>u.sheetId===owner.id));checkpoint();

@@ -5,6 +5,7 @@ import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell
 import {currentRegion,inferSortPlan} from './data-region.mjs';
 import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress,formulaReference,setExternalEvaluator} from './engine.mjs';
 import {buildSheetPrintDocument} from './sheet-print.mjs';
+import {structuralWorkbookPlan} from './workbook-structure.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
 import {estimateDataBytes} from './data-size.mjs';
 import {MAX_HISTORY_BYTES} from './limits.mjs';
@@ -108,6 +109,9 @@ async function handle(type, data) {
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
+  if(type==='structure'){
+    const next=structuralWorkbookPlan(book,sheet.id,data.options),token=crypto.randomUUID();prepared={token,book:next};return {book:next,description:describe(next),token};
+  }
   if(type==='table-plan'){const table=sheet.tables?.find(t=>t.id===data.tableId);if(data.operation!=='create'&&!table)throw Error('표를 찾을 수 없습니다.');if(data.operation==='convert')return tableConversionPlan(book,sheet,table);const plan=data.operation==='create'?createTablePlan(book,sheet,data.values):data.operation==='calculate'?calculatedColumnPlan(book,sheet,table,data.values):updateTablePlan(book,sheet,table,data.values);return finalizeTablePlan(book,sheet,plan,data.values);}
   if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);

@@ -1,9 +1,11 @@
 import {tableCellStyle} from './table-style.mjs';
 import {numberFormatStyle} from './number-formats.mjs';
+import {structureIndex,shiftIndexMap} from './structure-coordinates.mjs';
+import {tableBounds} from './table-schema.mjs';
 import {currentRegion} from './data-region.mjs';
 import {cloneData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS} from './limits.mjs';
-import {address,parseAddress,createEvaluator,formatValue,shiftFormula} from './engine.mjs';
+import {address,parseAddress,createEvaluator,formatValue,shiftFormula,transformFormulaReferences} from './engine.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
 import {normalizeColor} from './spreadsheet-colors.mjs';
@@ -147,16 +149,15 @@ export function sortRange(book,sheet,b,column,desc){
   }));
 }
 export function shiftAutoFilter(sheet,axis,index,delta){
-  const f=sheet.autoFilter;if(!f)return;const b=f.range,lo=axis==='r'?'r1':'c1',hi=axis==='r'?'r2':'c2';
-  if(delta<0&&index===b.r1&&axis==='r'){delete sheet.autoFilter;return;}
-  if(index<b[lo]||delta>0&&index===b[lo]){b[lo]+=delta;b[hi]+=delta;}else if(index<=b[hi])b[hi]+=delta;
-  b[hi]=Math.min(b[hi],axis==='r'?1048575:16383);
-  if(b[hi]<b[lo]||b.r1===b.r2){delete sheet.autoFilter;return;}
+  const f=sheet.autoFilter;if(!f)return;const old=f.range;
+  if(delta<0&&axis==='r'&&old.r1>=index&&old.r1<index-delta){delete sheet.autoFilter;return;}
+  const name=sheet.name||'Sheet',reference=transformFormulaReferences(address(old.r1,old.c1)+':'+address(old.r2,old.c2),{axis,index,delta,targetSheet:name,ownerSheet:name}),b=tableBounds(reference);
+  if(!b||b.r1===b.r2){delete sheet.autoFilter;return;}f.range=b;
   if(axis==='c'){
-    f.columns=Object.fromEntries(Object.entries(f.columns).filter(([c])=>!(delta<0&&+c===index)).map(([c,v])=>[+c>=index?+c+delta:+c,v]));
+    f.columns=shiftIndexMap(f.columns,index,delta,16384);
     f.columns=Object.fromEntries(Object.entries(f.columns).filter(([c])=>+c<=b.c2));
-    if(f.unsupported)f.unsupported=f.unsupported.filter(c=>!(delta<0&&c===index)).map(c=>c>=index?c+delta:c).filter(c=>c<=b.c2);
-    if(f.sort){if(delta<0&&f.sort.column===index)delete f.sort;else if(f.sort.column>=index)f.sort.column+=delta;}
+    if(f.unsupported)f.unsupported=f.unsupported.map(c=>structureIndex(c,index,delta)).filter(c=>c!==null&&c<=b.c2);
+    if(f.sort){const next=structureIndex(f.sort.column,index,delta);if(next===null)delete f.sort;else f.sort.column=next;}
     if(f.sort?.column>b.c2)delete f.sort;
-  }else f.hiddenRows=(f.hiddenRows||[]).filter(r=>!(delta<0&&r===index)).map(r=>r>=index?r+delta:r).filter(r=>r<=b.r2);
+  }else f.hiddenRows=(f.hiddenRows||[]).map(r=>structureIndex(r,index,delta)).filter(r=>r!==null&&r<=b.r2);
 }

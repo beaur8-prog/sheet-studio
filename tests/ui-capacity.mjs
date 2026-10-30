@@ -24,6 +24,12 @@ try{
  await page.waitForFunction(()=>sheetStudio.historyStats().cells===1_000_000);
  await page.evaluate(()=>sheetStudio.flushRecovery());
  record({case:'one million CSV cells imported and durably saved',ms:Date.now()-started,...await gaps()});
+ if(process.argv.includes('--structure')){
+  await select('A2:A101');await page.locator('[data-tab="홈"]').click();await heartbeat();const changing=Date.now();await page.locator('[data-action="insert-row"]').click();await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());assert.equal(await raw('A102'),'1');assert.equal(await raw('A2'),undefined);assert.equal(await page.evaluate(()=>sheetStudio.historyStats().cells),1_000_000);
+  const stats=await page.evaluate(()=>sheetStudio.historyStats());record({case:'100 rows inserted in a million-cell document',ms:Date.now()-changing,undoRetained:stats.undo>0,...await gaps()});
+  if(stats.undo>0){await page.locator('#undo').click();await page.evaluate(()=>sheetStudio.whenIdle());assert.equal(await raw('A2'),'1');await page.locator('#redo').click();await page.evaluate(()=>sheetStudio.whenIdle());assert.equal(await raw('A102'),'1');}
+  await select('A2:A101');await page.locator('[data-action="delete-menu"]').click();await page.locator('[data-action="delete-row"]').click();await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());assert.equal(await raw('A2'),'1');assert.equal(await raw(last),'1');
+ }
  await select(last);await page.keyboard.type(sumFormula);await page.keyboard.press('Enter');
  await select(last);await page.waitForFunction(({last,value})=>sheetStudio.evaluate(last)===value,{last,value:initialSum});
  record({case:'background sum over a large range',value:initialSum});
