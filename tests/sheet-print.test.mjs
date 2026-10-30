@@ -28,4 +28,5 @@ test('selected and chart-only printing avoid large data ranges and use a shared 
   assert.throws(()=>buildSheetPrintDocument(book,s.id,{scope:'selection'}),/선택/);
   const evaluate=createEvaluator(book,s.id),result=evaluate.result('A1'),snapshot={...book},shared=(id,ref)=>evaluate(ref);shared.result=(id,ref)=>evaluate.result(ref);shared.isComputed=(id,ref)=>evaluate.isComputed(ref);setExternalEvaluator(snapshot,shared);
   const print=buildSheetPrintDocument(snapshot,s.id,{scope:'selection',selection:{r1:0,r2:0,c1:0,c2:0},evaluate});assert.equal(print.dataCells,1);assert.ok(print.html.includes(String(result.value)));assert.equal(evaluate('A1'),result.value);
+  const hidden=createWorkbook(),hs=hidden.sheets[0];hs.cells.A1={raw:'hidden'};hs.rowHeights={0:0};const empty=buildSheetPrintDocument(hidden,hs.id);assert.equal(empty.dataCells,0);assert.match(empty.html,/인쇄할 표시 셀이 없습니다/);assert.doesNotMatch(empty.html,/>hidden</);
 });
