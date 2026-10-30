@@ -14,6 +14,7 @@ const executablePath=process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.pac
 let app,page;const errors=[],checks=[];
 async function launch(){
  app=await _electron.launch({executablePath,args:packaged?[]:[root],env});page=await app.firstWindow();page.setDefaultTimeout(20000);
+ await app.evaluate(({ipcMain})=>{globalThis.journeyClipboard={text:'',html:''};ipcMain.removeHandler('sheet:write-clipboard');ipcMain.handle('sheet:write-clipboard',(_event,payload)=>{globalThis.journeyClipboard=payload;});});
  page.on('pageerror',e=>errors.push(e.message));await page.locator('.cell').first().waitFor();
 }
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
@@ -25,10 +26,11 @@ const home=()=>page.getByRole('button',{name:'홈',exact:true}).click();
 const menu=action=>app.evaluate(({BrowserWindow},action)=>BrowserWindow.getAllWindows()[0].webContents.send('sheet:menu-action',action),action);
 const record=label=>{checks.push(label);console.log('PASS:',label);};
 async function fresh(){await page.getByRole('button',{name:'파일',exact:true}).click();await page.locator('[data-action=new]').click();await page.getByRole('button',{name:'새로 만들기',exact:true}).click();await home();await settle();}
-async function externalPaste(ref,text){await go(ref);await app.evaluate(({clipboard},text)=>clipboard.writeText(text),text);await page.keyboard.press('ControlOrMeta+v');await settle();}
+async function clipboardPaste(payload){await page.evaluate(payload=>{const data=new DataTransfer();data.setData('text/plain',payload.text);data.setData('text/html',payload.html||'');document.querySelector('#grid').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));},payload);}
+async function externalPaste(ref,text){await go(ref);await app.evaluate(({},text)=>{globalThis.journeyClipboard={text,html:''};},text);await clipboardPaste({text});await settle();}
 async function copy(ref,cut=false){await go(ref);await home();await page.getByRole('button',{name:cut?'잘라내기':'복사',exact:true}).click();await settle();}
-async function paste(ref){await go(ref);await page.keyboard.press('ControlOrMeta+v');await settle();}
-async function reversible(label,operation){const before=await book();await operation();await settle();const after=await book();assert.notDeepEqual(after,before,label+' changes data');await page.locator('#undo').click();await settle();assert.deepEqual(await book(),before,label+' undo');await page.locator('#redo').click();await settle();assert.deepEqual(await book(),after,label+' redo');record(label);}
+async function paste(ref){await go(ref);await clipboardPaste(await app.evaluate(()=>globalThis.journeyClipboard));await settle();}
+async function reversible(label,operation){await settle();const before=await book();await operation();await settle();const after=await book();assert.notDeepEqual(after,before,label+' changes data');await page.locator('#undo').click();await settle();assert.deepEqual(await book(),before,label+' undo');await page.locator('#redo').click();await settle();assert.deepEqual(await book(),after,label+' redo');record(label);}
 async function save(file,format='xlsx'){
  await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},file);
  await page.evaluate(()=>document.querySelector('.toast')?.remove());
@@ -81,7 +83,7 @@ try{
  for(let i=0;i<100&&!await app.evaluate(()=>!!globalThis.releaseJourneySave);i++)await new Promise(r=>setTimeout(r,20));
  assert.ok(await app.evaluate(()=>!!globalThis.releaseJourneySave));
  for(const command of ['undo','redo','new','cut','bold'])await menu(command);
- await app.evaluate(({clipboard,BrowserWindow})=>{clipboard.writeText('must not be pasted');BrowserWindow.getAllWindows()[0].webContents.paste();});
+ await clipboardPaste({text:'must not be pasted'});
  await page.keyboard.press('ControlOrMeta+z');await page.keyboard.type('must not be typed');
  assert.deepEqual(await book(),stable);assert.equal(await page.locator('.backdrop').count(),0);
  const busyFile=path.join(fixture,'save-snapshot.sheet.json');
