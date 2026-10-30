@@ -13,6 +13,7 @@ function chartPlan(sheet,before,workbook){
   const oldCharts=before?.charts||[],charts=[];
   for(const chart of sheet.charts||[]){
     const old=oldCharts.find(c=>c.id===chart.id),patch={name:old?.nativeName||null};
+    if(old&&['valueAxis','xAxis','secondaryValueAxis','placement'].some(key=>!equal(chart[key],old[key])))throw Error('XLSM의 축 범위와 개체 배치는 Excel에서 편집하거나 XLSX 사본으로 저장하세요.');
     const rebuild=!old||chart.rebuilt&&!old.rebuilt||chart.type!==old.type||chart.grouping!==old.grouping||!chart.source&&chart.range!==old.range||!chart.source&&['firstRowAsHeader','firstColumnAsLabels','seriesBy'].some(key=>!equal(chart[key],old[key]));
     if(rebuild){
       if(chart.source&&!old)throw Error('가져온 차트의 시트 복제는 XLSX 저장을 사용하거나 차트 설정에서 새 차트로 변환하세요.');
