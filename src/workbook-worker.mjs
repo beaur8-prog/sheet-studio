@@ -1,3 +1,4 @@
+import {currentRegion,inferSortPlan} from './data-region.mjs';
 import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress} from './engine.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
 import {estimateDataBytes} from './data-size.mjs';
@@ -98,6 +99,8 @@ async function handle(type, data) {
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
+  if (type === 'infer-region') return currentRegion(sheet,data.selection);
+  if (type === 'sort-plan') return inferSortPlan(book,sheet,data.selection,data.column);
   if (type === 'infer-filter') return inferFilterRange(sheet, data.selection);
   if (type === 'filter-options') {
     const options = filterOptions(book, sheet, data.column), rule = sheet.autoFilter.columns[data.column];

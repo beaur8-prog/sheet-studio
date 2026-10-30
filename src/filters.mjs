@@ -1,3 +1,4 @@
+import {currentRegion} from './data-region.mjs';
 import {cloneData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 import {address,parseAddress,createEvaluator,formatValue,shiftFormula} from './engine.mjs';
@@ -15,12 +16,7 @@ export function inferFilterRange(sheet,selection){
   const points=Object.entries(sheet.cells).filter(([,v])=>v.raw!=='').map(([key])=>parseAddress(key));
   let b={...selection};
   if(b.r1===b.r2&&b.c1===b.c2){
-    if(!points.some(p=>p.r===b.r1&&p.c===b.c1))throw Error('필터를 적용할 데이터 안의 셀을 선택하세요.');
-    let changed=true;
-    while(changed){changed=false;for(const p of points){if(p.r>=b.r1-1&&p.r<=b.r2+1&&p.c>=b.c1-1&&p.c<=b.c2+1){
-      const next={r1:Math.min(b.r1,p.r),r2:Math.max(b.r2,p.r),c1:Math.min(b.c1,p.c),c2:Math.max(b.c2,p.c)};
-      if(JSON.stringify(next)!==JSON.stringify(b)){b=next;changed=true;}
-    }}}
+    const region=currentRegion(sheet,b);if(!region)throw Error('필터를 적용할 데이터 안의 셀을 선택하세요.');b=region;
   }else if(b.r1===b.r2){const occupied=new Set(points.filter(p=>p.c>=b.c1&&p.c<=b.c2).map(p=>p.r));while(occupied.has(b.r2+1))b.r2++;}else if(b.r2===1048575){b.r2=points.filter(p=>p.c>=b.c1&&p.c<=b.c2).reduce((max,p)=>Math.max(max,p.r),b.r1);}
   if(!points.some(p=>p.r>=b.r1&&p.r<=b.r2&&p.c>=b.c1&&p.c<=b.c2))throw Error('선택한 범위에 데이터가 없습니다.');
   validateAutoFilter({range:b,columns:{}});return b;
