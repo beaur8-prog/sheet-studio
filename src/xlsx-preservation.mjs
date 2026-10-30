@@ -13,12 +13,13 @@ export async function worksheetParts(zip){
  * millions of JavaScript objects. Keep the original bounds, formulas and flags.
  */
 export async function prepareWorksheetFeatures(zip){
-  const features=new Map(),loader=zip.clone();loader.files={...zip.files};let stripped=false,hasTables=false;
+  const features=new Map(),styleRows=new Map(),normalCells=new Map(),loader=zip.clone();loader.files={...zip.files};let stripped=false,hasTables=false;
   for(const part of await worksheetParts(zip)){
     if(!part.type?.endsWith('/worksheet'))continue;
     const text=await zip.file(part.path).async('string');
-    if(!/<(?:\w+:)?(?:dataValidations|sheetProtection|conditionalFormatting|hyperlinks|tableParts|drawing)\b/.test(text))continue;
-    const split=splitWorksheetXML(text),doc=xml(split.metadata),root=doc.documentElement,feature={};
+    const rows=[],normal=new Set(),columns=new Set();let styledRow=false;
+    const split=splitWorksheetXML(text,{onColumn:col=>{if(Number(col.style)>0)for(let c=Math.max(1,Number(col.min));c<=Math.min(16384,Number(col.max));c++)columns.add(c);},onAnyRow:row=>{styledRow=row.s!==undefined;if(styledRow)rows.push(Number(row.r));},wantCell:cell=>{if(cell.s!==undefined&&cell.s!=='0')return false;const name=/^[A-Z]+/i.exec(cell.r||'')?.[0];let c=0;for(const letter of name||'')c=c*26+letter.toUpperCase().charCodeAt(0)-64;return styledRow||columns.has(c);},onCell:cell=>normal.add(cell.r)}),doc=xml(split.metadata),root=doc.documentElement,feature={};
+    if(rows.length)styleRows.set(part.name,rows);if(normal.size)normalCells.set(part.name,normal);
     const validations=child(root,'dataValidations'),protection=child(root,'sheetProtection'),conditions=children(root,'conditionalFormatting');
     if(validations){feature.dataValidations=stringify(validations);root.removeChild(validations);stripped=true;}
     const tableParts=child(root,'tableParts');if(tableParts){root.removeChild(tableParts);stripped=true;hasTables=true;}
@@ -31,7 +32,7 @@ export async function prepareWorksheetFeatures(zip){
   }
   if(hasTables)for(const path of Object.keys(loader.files))if(/(?:^|\/)tables\/[^/]+\.xml$/.test(path))loader.remove(path);
   const styles=zip.file('xl/styles.xml')?xml(await zip.file('xl/styles.xml').async('string')):null;
-  return {features,dxfs:children(child(styles?.documentElement,'dxfs'),'dxf').map(stringify),...(child(styles?.documentElement,'colors')?{colors:stringify(child(styles.documentElement,'colors'))}:{}),data:stripped?await loader.generateAsync({type:'uint8array',compression:'DEFLATE'}):null};
+  return {features,styleRows,normalCells,dxfs:children(child(styles?.documentElement,'dxfs'),'dxf').map(stringify),...(child(styles?.documentElement,'colors')?{colors:stringify(child(styles.documentElement,'colors'))}:{}),data:stripped?await loader.generateAsync({type:'uint8array',compression:'DEFLATE'}):null};
 }
 const order=['sheetPr','dimension','sheetViews','sheetFormatPr','cols','sheetData','sheetCalcPr','sheetProtection','protectedRanges','scenarios','autoFilter','sortState','dataConsolidate','customSheetViews','mergeCells','phoneticPr','conditionalFormatting','dataValidations','hyperlinks','printOptions','pageMargins','pageSetup','headerFooter','rowBreaks','colBreaks','customProperties','cellWatches','ignoredErrors','smartTags','drawing','legacyDrawing','legacyDrawingHF','picture','oleObjects','controls','webPublishItems','tableParts','extLst'];
 function insert(doc,node){const index=order.indexOf(node.localName),before=children(doc.documentElement).find(n=>order.indexOf(n.localName)>index);doc.documentElement.insertBefore(doc.importNode(node,true),before||null);}

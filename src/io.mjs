@@ -2,6 +2,9 @@ import {tableBounds} from './table-schema.mjs';
 import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
 import {isErrorText} from './cell-values.mjs';
+import {readDefaultStyleModel,applyDefaultStyleProbe,normalDigitWidth} from './xlsx-default-style.mjs';
+import {inheritedStyles,worksheetCellStyle} from './cell-style.mjs';
+import {readRelationships,resolvePart} from './chart-xml.mjs';
 import {numberFormatKind as formatKind,effectiveNumberFormat} from './number-formats.mjs';
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
@@ -148,7 +151,9 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   const book = new ExcelJS.Workbook();
   try { await book.xlsx.load(preserved.data||data); }
   catch (error) { throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.', { cause: error }); }
-  const resolveColor=createColorResolver(await colorZip.file('xl/theme/theme1.xml')?.async('string'),await colorZip.file('xl/styles.xml')?.async('string'));
+  const themeRel=(await readRelationships(colorZip,'xl/workbook.xml')).find(r=>r.type.endsWith('/theme')&&r.mode!=='External'),themeXML=await colorZip.file(themeRel?resolvePart('xl/workbook.xml',themeRel.target):'xl/theme/theme1.xml')?.async('string'),stylesXML=await colorZip.file('xl/styles.xml')?.async('string'),resolveColor=createColorResolver(themeXML,stylesXML);
+  const normalStyle=await readDefaultStyleModel(ExcelJS.Workbook,stylesXML,themeXML),normalVisible={verticalAlign:'bottom',...readStyle(normalStyle,resolveColor)},normalIndex=rememberStyle({style:normalStyle},normalVisible);
+  const digitWidth=normalDigitWidth(normalStyle.font);
   const dateOffset=book.properties.date1904?1462:0;
   let cellCount = 0;
   const sheets = book.worksheets.map(source => {
@@ -170,6 +175,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       else if (value?.text !== undefined) raw = stringRaw(value.text);
       else if (value?.error) raw = value.error;
       const entry = { raw, style };
+      if(preserved.normalCells.get(source.name)?.has(cell.address))entry.xlsxNormal=true;
       const originalStyle=rememberStyle(cell,style);if(originalStyle!==undefined)entry.xlsxStyle=originalStyle;
       if(value?.richText||value?.hyperlink)entry.xlsxValue={raw,value:plainCopy(value)};
       if(cell.formula&&(value?.shareType==='array'||/_xlfn\.|_xlws\./i.test(cell.formula)))entry.xlsxFormula={raw,formula:cell.formula,...(value?.shareType==='array'?{shareType:'array',ref:value.ref}:{})};
@@ -189,14 +195,19 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
     for (const row of sparseRows) for (const model of row.cells || []) {
       if (!sheet.cells[model.address] && Object.keys(model.style || {}).length) importCell(source.getCell(model.address));
     }
+    for(const ref of preserved.normalCells.get(source.name)||[])if(!sheet.cells[ref])importCell(source.getCell(ref));
     // Rows with only a custom height can be omitted by eachRow(includeEmpty:false).
     for (const row of sparseRows) {
       const r=row.number-1;
       if(row.height)sheet.rowHeights[r]=row.height*4/3;
       if(row.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.rows[r]=sheet.rowHeights[r]||sheet.defaultRowHeight||25;sheet.rowHeights[r]=0;}
     }
-    const protectionDefaults={rows:{},columns:{}};for(const row of sparseRows)if(row.style?.protection)protectionDefaults.rows[row.number-1]=plainCopy(row.style.protection);for(const col of source.columns||[])if(col.style?.protection)protectionDefaults.columns[col.number-1]=plainCopy(col.style.protection);if(Object.keys(protectionDefaults.rows).length||Object.keys(protectionDefaults.columns).length)sheet.xlsxProtectionDefaults=protectionDefaults;
-    for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
+    const defaults={rows:{},columns:{}},protectionDefaults={rows:{},columns:{}};
+    for(const number of preserved.styleRows.get(source.name)||[]){const row=source.getRow(number),model=row.style||{},id=Object.keys(model).length?rememberStyle({style:model},readStyle(model,resolveColor)):normalIndex;if(id!==undefined)defaults.rows[number-1]=id;if(model.protection)protectionDefaults.rows[number-1]=plainCopy(model.protection);}
+    for(const column of source.columns||[])if(Object.keys(column.style||{}).length){const model=column.style,id=rememberStyle({style:model},readStyle(model,resolveColor));defaults.columns[column.number-1]=id;if(model.protection)protectionDefaults.columns[column.number-1]=plainCopy(model.protection);}
+    if(Object.keys(defaults.rows).length||Object.keys(defaults.columns).length)sheet.xlsxStyleDefaults=defaults;
+    if(Object.keys(protectionDefaults.rows).length||Object.keys(protectionDefaults.columns).length)sheet.xlsxProtectionDefaults=protectionDefaults;
+    for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * digitWidth + 5);
     for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
     const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
     importConditional(source,sheet,resolveColor);
@@ -209,6 +220,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
   if(book.properties.date1904)result.date1904=true;
   if(styleModels.length)result.xlsxStyles=styleModels;
+  if(normalIndex!==undefined)result.xlsxDefaultStyle=normalIndex;
   if(preserved.colors)result.xlsxColors=preserved.colors;
   if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
   await restoreSheetKinds(colorZip,result,newSheet);
@@ -285,7 +297,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if (!workbook?.sheets?.length) throw new Error('통합 문서에 시트가 없습니다.');
   if (workbook.nativeSource && !options.allowMacroLoss) throw new Error('VBA 보존을 위해 XLSM 저장을 사용하세요. 일반 형식 변환에는 매크로 제외 확인이 필요합니다.');
   if (!['xlsx', 'csv', 'tsv'].includes(kind)) throw new Error('지원되지 않는 저장 형식입니다.');
-  const evaluate = typeof options.evaluate === 'function' ? options.evaluate : await evaluator(),styleCache=new Map();
+  const evaluate = typeof options.evaluate === 'function' ? options.evaluate : await evaluator(),styleCache=new Map(),inheritanceCache=new Map();
   const detailed=typeof options.evaluateDetailed==='function'?options.evaluateDetailed:evaluate.result;
   if (kind === 'csv' || kind === 'tsv') {
     const sheet = workbook.sheets.find(item => item.id === workbook.activeSheetId) || workbook.sheets[0];
@@ -321,6 +333,8 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if(workbook.sheets.some(s=>s.pivot)){workbook=cloneData(workbook);for(const s of workbook.sheets)if(s.pivot){try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
   const book = new ExcelJS.Workbook();
   book.properties.date1904=workbook.date1904===true;
+  const exportResolve=createColorResolver(workbook.chartTheme||'',workbook.xlsxColors?'<styleSheet>'+workbook.xlsxColors+'</styleSheet>':undefined);
+  const digitWidth=normalDigitWidth(workbook.xlsxStyles?.[workbook.xlsxDefaultStyle]?.style?.font);
   book.creator = 'Sheet Studio';
   book.created = new Date(); book.modified = new Date();
   book.calcProperties.fullCalcOnLoad = true;
@@ -330,13 +344,15 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   let exportedCount=workbook.sheets.reduce((n,s)=>n+Object.keys(s.cells).length,0);
   for (const sheet of workbook.sheets) {
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
-    target.properties.defaultColWidth=((sheet.defaultColumnWidth||90)-5)/7;
+    target.properties.defaultColWidth=((sheet.defaultColumnWidth||90)-5)/digitWidth;
     target.properties.defaultRowHeight=(sheet.defaultRowHeight||25)*3/4;
     if(sheet.freeze?.rows||sheet.freeze?.cols)target.views=[{state:'frozen',xSplit:sheet.freeze.cols,ySplit:sheet.freeze.rows,topLeftCell:address(sheet.freeze.cols,sheet.freeze.rows),activeCell:'A1'}];
     exportNames.set(sheet.id,target.name);
     for(const [r,protection] of Object.entries(sheet.xlsxProtectionDefaults?.rows||{}))target.getRow(+r+1).protection=plainCopy(protection);
     for(const [c,protection] of Object.entries(sheet.xlsxProtectionDefaults?.columns||{}))target.getColumn(+c+1).protection=plainCopy(protection);
     const pageFilters=sheet.pivot?.filters.filter(f=>!sheet.pivot.rows.includes(f.field)&&!sheet.pivot.columns.includes(f.field))||[];
+    for(const [c,id] of Object.entries(sheet.xlsxStyleDefaults?.columns||{}))target.getColumn(+c+1).style=plainCopy(workbook.xlsxStyles[id].style);
+    for(const [r,id] of Object.entries(sheet.xlsxStyleDefaults?.rows||{})){const row=target.getRow(+r+1+(pageFilters.length?pageFilters.length+1:0));row.style=plainCopy(workbook.xlsxStyles[id].style);row.height=(sheet.rowHeights?.[r]||sheet.defaultRowHeight||25)*3/4;}
     const conditionalSheet=pageFilters.length?cloneData(sheet):sheet;if(pageFilters.length)for(let i=0;i<pageFilters.length+1;i++)shiftWorksheetFeatures(conditionalSheet,'r',0,1);exportConditional(target,conditionalSheet);
     pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
     const tableRanges=(sheet.tables||[]).map(table=>tableBounds(table.range));
@@ -354,11 +370,20 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
         const original=cell.xlsxValue;targetCell.value=original?.raw===cell.raw?plainCopy(original.value):toScalar(cell.raw);
         if(original?.value?.hyperlink&&typeof targetCell.value==='string'&&targetCell.value)targetCell.value={...plainCopy(original.value),text:targetCell.value};
       }
-      const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!cell.style?.format||cell.style.format==='general');
       const tableStyled=tableRanges.some(b=>pos.row>=b.r1&&pos.row<=b.r2&&pos.col>=b.c1&&pos.col<=b.c2);
-      const key=(tableStyled?'T:':'N:')+String(cell.xlsxStyle??'')+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
+      const defaults=sheet.xlsxStyleDefaults,inheritKey=cell.xlsxStyle!==undefined||cell.xlsxNormal?'':String(defaults?.columns?.[pos.col]??'')+'/'+String(defaults?.rows?.[pos.row]??''),visible=worksheetCellStyle(workbook,sheet,pos.row,pos.col,{table:false});
+      const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!visible.format||visible.format==='general');
+      const key=(tableStyled?'T:':'N:')+String(cell.xlsxStyle??'')+':'+inheritKey+':'+!!cell.xlsxNormal+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
       if(cachedStyle)targetCell.style=cachedStyle;
-      else{applyStyle(targetCell,cell.style,tableStyled);restoreCellStyle(targetCell,cell,workbook.xlsxStyles?.[cell.xlsxStyle]);if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);}
+      else{
+        let original=workbook.xlsxStyles?.[cell.xlsxStyle],exportStyle=cell.style||{},templates=original||cell.xlsxNormal?[]:inheritedStyles(workbook,sheet,pos.row,pos.col);
+        if(templates.length){const cacheKey=sheet.id+':'+inheritKey;if(!inheritanceCache.has(cacheKey)){const style=Object.assign({},...templates.map(t=>t.style));inheritanceCache.set(cacheKey,{style,baseline:readStyle(style,exportResolve)});}original=inheritanceCache.get(cacheKey);exportStyle=visible;}
+        else if(!original&&(!tableStyled||cell.xlsxNormal)){original=workbook.xlsxStyles?.[workbook.xlsxDefaultStyle];exportStyle=visible;}
+        const implicit=!!workbook.xlsxStyles?.[workbook.xlsxDefaultStyle]&&cell.xlsxStyle===undefined&&!cell.xlsxNormal&&!templates.length&&!Object.keys(cell.style||{}).length;
+        if(implicit)targetCell.style={};else {applyStyle(targetCell,exportStyle,tableStyled);restoreCellStyle(targetCell,{...cell,style:exportStyle},original);}
+        if(cell.xlsxNormal)targetCell.style={...targetCell.style,alignment:{...targetCell.alignment,vertical:targetCell.alignment?.vertical||'bottom'}};
+        if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);
+      }
       if(cell.xlsxProtection)targetCell.style={...targetCell.style,protection:plainCopy(cell.xlsxProtection)};
       if(cell.xlsxValue?.value?.richText&&cell.xlsxValue.raw===cell.raw){const original=workbook.xlsxStyles?.[cell.xlsxStyle],delta=fontChanges(cell.style||{},original?.baseline||{},targetCell.font);if(Object.keys(delta).length)targetCell.value={richText:targetCell.value.richText.map(run=>({...run,font:{...run.font,...delta}}))};}
       if (typeof cell.note === 'string') targetCell.note = cell.note;
@@ -372,7 +397,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       }
     }
     for (const [index, width] of Object.entries(sheet.columnWidths || {})) {
-      if (/^\d+$/.test(index) && Number(index) < 16384 && Number.isFinite(Number(width))) target.getColumn(Number(index) + 1).width = Math.max(1, ((width===0?sheet.hiddenSizes?.cols?.[index]||90:Number(width)) - 5) / 7);
+      if (/^\d+$/.test(index) && Number(index) < 16384 && Number.isFinite(Number(width))) target.getColumn(Number(index) + 1).width = Math.max(1, ((width===0?sheet.hiddenSizes?.cols?.[index]||90:Number(width)) - 5) / digitWidth);
     }
     for (const [index, height] of Object.entries(sheet.rowHeights || {})) {
       if (/^\d+$/.test(index) && Number(index) < 1048576 && Number.isFinite(Number(height))) target.getRow(Number(index) + 1+(pageFilters.length?pageFilters.length+1:0)).height = Math.max(1, (height===0?sheet.hiddenSizes?.rows?.[index]||sheet.defaultRowHeight||25:Number(height)) * 3 / 4);
@@ -385,7 +410,9 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       let shifted=merge;for(let i=0;i<(pageFilters.length?pageFilters.length+1:0);i++)shifted=transformFormulaReferences(shifted,{axis:'r',index:0,delta:1,targetSheet:sheet.name,ownerSheet:sheet.name});target.mergeCells(shifted);
     }
   }
-  const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
+  let normalProbe;
+  if(workbook.xlsxDefaultStyle!==undefined){normalProbe='_SheetStudio_Normal';for(let n=2;book.getWorksheet(normalProbe);n++)normalProbe='_SheetStudio_Normal_'+n;const probe=book.addWorksheet(normalProbe);probe.getCell('A1').value=0;probe.getCell('A1').style=plainCopy(workbook.xlsxStyles[workbook.xlsxDefaultStyle].style);}
+  const baseBytes=await applyDefaultStyleProbe(new Uint8Array(await book.xlsx.writeBuffer()),normalProbe),pivotBytes = await addPivotParts(baseBytes,workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
   return { data:await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames), mime: XLSX_MIME, extension: 'xlsx' };
 }

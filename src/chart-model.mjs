@@ -1,4 +1,4 @@
-import {tableCellStyle} from './table-style.mjs';
+import {worksheetCellStyle} from './cell-style.mjs';
 import {filteredRowsForSheet} from './table-schema.mjs';
 import {address,parseAddress,createEvaluator,transformFormulaReferences,formatValue,numberFormatKind,formulaReference} from './engine.mjs';
 
@@ -53,7 +53,7 @@ function refPositions(ref,workbook,limit=1000){
 }
 function refFormat(ref,workbook){
   for(const {sheet,r,c} of refPositions(ref,workbook,16)){
-    const style={...tableCellStyle(workbook,sheet,r,c),...sheet.cells[address(r,c)]?.style};
+    const style=worksheetCellStyle(workbook,sheet,r,c);
     if(style?.numberFormat||style?.format&&style.format!=='general')return style;
   }
   return ref?.formatCode?{numberFormat:ref.formatCode}:{};

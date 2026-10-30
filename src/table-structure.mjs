@@ -25,7 +25,7 @@ export function removeTablesForStructure(book,sheet,ids){
 }
 function newColumns(table,position,count){const used=new Set(table.columns.map(c=>c.name.toLocaleLowerCase()));let id=table.columns.reduce((n,c)=>Math.max(n,c.id||0),0);return Array.from({length:count},(_,i)=>{const base='열'+(position+i+1);let name=base,n=2;while(used.has(name.toLocaleLowerCase()))name=base+n++;used.add(name.toLocaleLowerCase());return {id:++id,name,filterButton:true};});}
 function styleCell(sheet,r,c,neighbor){
-  const source=sheet.cells[address(neighbor.r,neighbor.c)]||{},cell={raw:'',style:cloneData(source.style||{})};for(const key of ['xlsxStyle','xlsxProtection'])if(source[key]!==undefined)cell[key]=cloneData(source[key]);
+  const source=sheet.cells[address(neighbor.r,neighbor.c)]||{},cell={raw:'',style:cloneData(source.style||{})};for(const key of ['xlsxStyle','xlsxProtection','xlsxNormal'])if(source[key]!==undefined)cell[key]=cloneData(source[key]);
   return cell;
 }
 function updateSource(table,b,old,axis,index,delta){

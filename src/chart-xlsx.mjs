@@ -1,3 +1,4 @@
+import {normalDigitWidth} from './xlsx-default-style.mjs';
 import {worksheetMetadataXML,splitWorksheetXML} from './worksheet-metadata.mjs';
 import JSZip from 'jszip';
 import {chartSeries,chartData,parseChartFormula,refFormula,refValues,referenceSize,chartColors,chartNumberFormat} from './chart-model.mjs';
@@ -42,8 +43,8 @@ export async function restoreChartParts(bytes,workbook){
   const typesXML=xml(await zip.file('[Content_Types].xml').async('string')),types={overrides:{},defaults:{}};
   all(typesXML,'Override').forEach(n=>types.overrides[attr(n,'PartName').replace(/^\//,'')]=attr(n,'ContentType'));all(typesXML,'Default').forEach(n=>types.defaults[attr(n,'Extension')]=attr(n,'ContentType'));
   const palette={};const themeRel=bookRels.find(r=>r.type.endsWith('/theme'));
-  const styles=zip.file('xl/styles.xml')?xml(await zip.file('xl/styles.xml').async('string')):null,defaultFont=first(styles,'font'),fontName=val(defaultFont,'name'),fontSize=Number(val(defaultFont,'sz'))||11;
-  const digitWidth=Math.max(5,Math.round((/맑은 고딕|Malgun|Arial|Aptos/i.test(fontName)?8:7)*fontSize/11));
+  const styles=zip.file('xl/styles.xml')?xml(await zip.file('xl/styles.xml').async('string')):null,defaultXF=children(child(styles?.documentElement,'cellXfs'),'xf')[0],defaultFont=children(child(styles?.documentElement,'fonts'),'font')[Number(attr(defaultXF,'fontId','0'))]||first(styles,'font'),fontName=val(defaultFont,'name'),fontSize=Number(val(defaultFont,'sz'))||11;
+  const digitWidth=normalDigitWidth({name:fontName,size:fontSize});
   if(themeRel){const theme=zip.file(resolvePart('xl/workbook.xml',themeRel.target));if(theme){const str=await theme.async('string');const colors=first(xml(str),'clrScheme');children(colors).forEach(n=>palette[n.localName]='#'+attr(child(n,'srgbClr')||child(n,'sysClr'),child(n,'srgbClr')?'val':'lastClr'));workbook.chartTheme=str;}}
   let number=0;
   for(const entry of all(bookXML,'sheet')){

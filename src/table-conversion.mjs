@@ -2,7 +2,7 @@ import {address,parseAddress,rewriteTableFormula} from './engine.mjs';
 import {cloneData,unwrap} from './clone.mjs';
 import {editableTableDefinition} from './tables.mjs';
 import {tableBounds} from './table-schema.mjs';
-import {tableCellStyle} from './table-style.mjs';
+import {worksheetCellStyle} from './cell-style.mjs';
 import {resolveStructuredReference} from './table-references.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 const inside=(b,p)=>p.r>=b.r1&&p.r<=b.r2&&p.c>=b.c1&&p.c<=b.c2;
@@ -19,7 +19,7 @@ export function tableConversionPlan(book,owner,table){
   }
   const target=snapshot.sheets.find(s=>s.id===owner.id),targetChanges=updates.get(owner.id);
   for(let r=b.r1;r<=b.r2;r++)for(let c=b.c1;c<=b.c2;c++){
-    const key=address(r,c),cell=target.cells[key]||{raw:'',style:{}},style=tableCellStyle(book,owner,r,c);
+    const key=address(r,c),cell=target.cells[key]||{raw:'',style:{}},style=worksheetCellStyle(book,owner,r,c);
     if(Object.keys(style).length)targetChanges.set(key,{...cell,style:{...style,...cell.style}});
   }
   const rewrite=(formula,sheet,position={r:0,c:0},implicit=false)=>{

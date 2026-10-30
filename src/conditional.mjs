@@ -63,6 +63,7 @@ export function shiftWorksheetFeatures(sheet,axis,index,delta,targetSheet=sheet.
   const limit=axis==='r'?1048576:16384,rebaseAmount=n=>local&&delta<0&&n>=index&&n<index-delta?index-delta-n:0;
   if(local&&sheet.hiddenSizes){const key=axis==='r'?'rows':'cols';sheet.hiddenSizes[key]=shiftIndexMap(sheet.hiddenSizes[key],index,delta,limit);}
   if(local&&sheet.xlsxProtectionDefaults){const key=axis==='r'?'rows':'columns';sheet.xlsxProtectionDefaults[key]=shiftIndexMap(sheet.xlsxProtectionDefaults[key],index,delta,limit);}
+  if(local&&sheet.xlsxStyleDefaults){const key=axis==='r'?'rows':'columns';sheet.xlsxStyleDefaults[key]=shiftIndexMap(sheet.xlsxStyleDefaults[key],index,delta,limit);}
   if(local&&sheet.freeze){const key=axis==='r'?'rows':'cols';if(index<sheet.freeze[key])sheet.freeze[key]=delta>0?Math.min(limit,sheet.freeze[key]+delta):Math.max(index,sheet.freeze[key]+delta);}
   const transform=f=>transformFormulaReferences(f,{axis,index,delta,targetSheet,ownerSheet:sheet.name});
   transformPreservedFeatures(sheet,{reference:local?transform:f=>f,formula:transform,rebase:(formula,range)=>{const anchor=parseAddress(range?.split(':')[0]),amount=anchor?rebaseAmount(anchor[axis]):0;return amount?shiftFormula('='+formula.replace(/^=/,''),axis==='r'?amount:0,axis==='c'?amount:0).replace(/^=/,formula.startsWith('=')?'=':''):formula;}});

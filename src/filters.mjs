@@ -1,4 +1,4 @@
-import {tableCellStyle} from './table-style.mjs';
+import {worksheetFilterStyle} from './cell-style.mjs';
 import {numberFormatStyle} from './number-formats.mjs';
 import {structureIndex,shiftIndexMap} from './structure-coordinates.mjs';
 import {tableBounds} from './table-schema.mjs';
@@ -77,7 +77,7 @@ export function filterPredicates(book,sheet,evaluate,omitColumn=-1){
   const f=sheet.autoFilter;if(!f)return [];
   const conditional=Object.values(f.columns).some(r=>r.type==='color')?createConditionalEvaluator(book,sheet,evaluate):null;
   return Object.entries(f.columns).filter(([c])=>+c!==omitColumn).map(([c,rule])=>{
-    if(rule.type==='color')return {column:+c,test:(_value,r)=>normalizeColor({...numberFormatStyle(evaluate(address(r,+c)),{...tableCellStyle(book,sheet,r,+c),...sheet.cells[address(r,+c)]?.style}),...conditional(r,+c,evaluate(address(r,+c)))}[rule.target])===normalizeColor(rule.color)};
+    if(rule.type==='color')return {column:+c,test:(_value,r)=>normalizeColor({...numberFormatStyle(evaluate(address(r,+c)),worksheetFilterStyle(book,sheet,r,+c)),...conditional(r,+c,evaluate(address(r,+c)))}[rule.target])===normalizeColor(rule.color)};
     const values=[];if(rule.type==='top'||rule.type==='average')for(let r=f.range.r1+1;r<=f.range.r2;r++)values.push(filterValue(sheet,evaluate,r,+c));
     return {column:+c,test:predicate(rule,values,book)};
   });
@@ -94,7 +94,7 @@ export function filterOptions(book,sheet,column){
   for(let r=b.r1+1;r<=b.r2;r++){
     if(!rules.every(({column,test})=>test(filterValue(sheet,evaluate,r,column),r)))continue;
     const value=filterValue(sheet,evaluate,r,column),key=valueKey(value),style=sheet.cells[address(r,column)]?.style;
-    const displayed={...numberFormatStyle(value,{...tableCellStyle(book,sheet,r,column),...style}),...conditional(r,column,evaluate(address(r,column)))};for(const target of ['background','color']){const color=normalizeColor(displayed[target]);colors[target].set(color,(colors[target].get(color)||0)+1);}
+    const displayed={...numberFormatStyle(value,worksheetFilterStyle(book,sheet,r,column)),...conditional(r,column,evaluate(address(r,column)))};for(const target of ['background','color']){const color=normalizeColor(displayed[target]);colors[target].set(color,(colors[target].get(color)||0)+1);}
     if(!values.has(key))values.set(key,{key,value,label:value===''?'(빈 셀)':formatValue(value,displayed,book)});
     if(value!==''){if(typeof value==='number'){if(displayed.format==='date')dates++;else numbers++;}else texts++;}
   }

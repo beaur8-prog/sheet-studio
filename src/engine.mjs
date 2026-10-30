@@ -1209,6 +1209,7 @@ export function toCSV(rows) {
 }
 
 export function validateCell(ref, cell) {
+  if(cell?.xlsxNormal!==undefined&&typeof cell.xlsxNormal!=='boolean')throw Error('기본 셀 서식 상태가 올바르지 않습니다.');
   const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
   if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
   if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
@@ -1256,6 +1257,7 @@ export function validateWorkbook(data) {
     if(sheet.hiddenSizes!==undefined){if(!object(sheet.hiddenSizes))throw Error('숨김 크기가 올바르지 않습니다.');for(const k of ['rows','cols']){if(!object(sheet.hiddenSizes[k]))throw Error('숨김 크기가 올바르지 않습니다.');for(const [i,v] of Object.entries(sheet.hiddenSizes[k]))if(!/^\d+$/.test(i)||+i>=(k==='rows'?1048576:16384)||!Number.isFinite(v)||v<0||v>10000)throw Error('숨김 크기가 올바르지 않습니다.');}}
     if(sheet.xlsxProtectionDefaults!==undefined){if(!object(sheet.xlsxProtectionDefaults)||!object(sheet.xlsxProtectionDefaults.rows)||!object(sheet.xlsxProtectionDefaults.columns))throw Error('행·열 잠금 설정이 올바르지 않습니다.');validatePreservedData(sheet.xlsxProtectionDefaults,16_000_000);}
     if(sheet.xlsxFeatures!==undefined){if(!object(sheet.xlsxFeatures))throw Error('보존된 시트 정보가 올바르지 않습니다.');for(const key of ['dataValidations','sheetProtection'])if(sheet.xlsxFeatures[key]!==undefined)validatePreservedXML(sheet.xlsxFeatures[key],key);if(sheet.xlsxFeatures.conditionalFormatting!==undefined){const rules=sheet.xlsxFeatures.conditionalFormatting;if(!Array.isArray(rules)||rules.length>10000)throw Error('보존된 조건부 서식이 올바르지 않습니다.');for(const rule of rules)validatePreservedXML(rule,'conditionalFormatting');}}
+    if(sheet.xlsxStyleDefaults!==undefined){const d=sheet.xlsxStyleDefaults;if(!object(d)||!object(d.rows)||!object(d.columns))throw Error('행·열 기본 서식이 올바르지 않습니다.');for(const [axis,values] of Object.entries(d)){if(!['rows','columns'].includes(axis))throw Error('행·열 기본 서식 종류가 올바르지 않습니다.');for(const [key,id] of Object.entries(values))if(!/^(?:0|[1-9]\d*)$/.test(key)||+key>=(axis==='rows'?1048576:16384)||!Number.isInteger(id)||id<0||!data.xlsxStyles?.[id]?.style)throw Error('행·열 기본 서식 참조가 올바르지 않습니다.');}validatePreservedData(d,32_000_000);}
     if(sheet.tables!==undefined)validateTables(sheet.tables);
     if(sheet.freeze!==undefined)validateFreeze(sheet.freeze);
     if(sheet.conditionalRules!==undefined)validateConditionalRules(sheet.conditionalRules);
@@ -1297,6 +1299,7 @@ export function validateWorkbook(data) {
   if(data.xlsxTableStyles!==undefined){if(!Array.isArray(data.xlsxTableStyles)||data.xlsxTableStyles.length>10000)throw Error('원래 표 스타일이 올바르지 않습니다.');for(const style of data.xlsxTableStyles)validatePreservedXML(style,'tableStyle');}
   if(data.xlsxColors!==undefined)validatePreservedXML(data.xlsxColors,'colors');
   if(data.xlsxStyles!==undefined){if(!Array.isArray(data.xlsxStyles)||data.xlsxStyles.length>65536||data.xlsxStyles.some(s=>!object(s)||!object(s.style)||!object(s.baseline)))throw Error('보존된 Excel 서식 목록이 올바르지 않습니다.');validatePreservedData(data.xlsxStyles,32_000_000);}
+  if(data.xlsxDefaultStyle!==undefined&&(!Number.isInteger(data.xlsxDefaultStyle)||data.xlsxDefaultStyle<0||!data.xlsxStyles?.[data.xlsxDefaultStyle]))throw Error('통합 문서의 기본 서식이 올바르지 않습니다.');
   if(data.xlsxDxfs!==undefined){if(!Array.isArray(data.xlsxDxfs)||data.xlsxDxfs.length>65536)throw Error('보존된 Excel 조건부 서식이 올바르지 않습니다.');for(const rule of data.xlsxDxfs)validatePreservedXML(rule,'dxf');}
   if(data.chartTheme!==undefined&&(typeof data.chartTheme!=='string'||data.chartTheme.length>2000000||/<!DOCTYPE|<!ENTITY/i.test(data.chartTheme)))throw new Error('차트 테마가 올바르지 않습니다.');
   if(data.chartNames!==undefined&&(!Array.isArray(data.chartNames)||data.chartNames.length>10000||data.chartNames.some(n=>!object(n)||typeof n.name!=='string'||n.name.length>255||typeof n.formula!=='string'||n.formula.length>8192||n.sheetId!==undefined&&typeof n.sheetId!=='string'||n.hidden!==undefined&&typeof n.hidden!=='boolean')))throw new Error('차트 이름 참조가 올바르지 않습니다.');

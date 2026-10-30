@@ -3,7 +3,7 @@ const escape = value => String(value).replace(/[&<>"\r\n\t]/g, char => ({'&':'&a
 
 // Supplemental importers only need worksheet metadata and hidden row tags.
 // Do not construct another million-cell DOM alongside ExcelJS's cell model.
-export function worksheetMetadataXML(text, {wantCell = () => false, onCell = () => {}, onRow = () => {}, keepHiddenRows = false, onDataRange = () => {}} = {}) {
+export function worksheetMetadataXML(text, {wantCell = () => false, onCell = () => {}, onRow = () => {}, onAnyRow=()=>{},onColumn=()=>{},keepHiddenRows = false, onDataRange = () => {}} = {}) {
   const parser = new SaxesParser({xmlns: true}), output = [];
   let inData = false, cell = null, field = '', depth = 0, dataStart;
   const attrs = node => Object.fromEntries(Object.values(node.attributes).map(attr => [attr.name, attr.value]));
@@ -12,12 +12,14 @@ export function worksheetMetadataXML(text, {wantCell = () => false, onCell = () 
   parser.on('opentag', node => {
     depth++;
     if (!inData) {
+      if(node.local==='col')onColumn(attrs(node));
       output.push(tag(node));
       if (depth === 2 && node.local === 'sheetData') { inData = true; dataStart = text.lastIndexOf('<', parser.position - 1); }
       return;
     }
     if (node.local === 'row') {
       const row = attrs(node);
+      onAnyRow(row);
       if (['1','true'].includes(row.hidden)) { onRow(row); if (keepHiddenRows) output.push(tag(node) + `</${node.name}>`); }
     }
     if (node.local === 'c') { const attributes = attrs(node); if (wantCell(attributes)) cell = {...attributes, value: '', formula: false}; }
@@ -36,9 +38,9 @@ export function worksheetMetadataXML(text, {wantCell = () => false, onCell = () 
 }
 
 // Edit the small metadata DOM while keeping every original cell byte intact.
-export function splitWorksheetXML(text) {
+export function splitWorksheetXML(text,options={}) {
   let data;
-  const metadata = worksheetMetadataXML(text, {onDataRange: range => { data = range; }});
+  const metadata = worksheetMetadataXML(text, {...options,onDataRange: range => { data = range; }});
   return {metadata, restore(serialized) {
     if (!data) return serialized;
     let destination;

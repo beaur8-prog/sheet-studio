@@ -10,7 +10,10 @@ export const sheetIsProtected=sheet=>['1','true'].includes(protection(sheet)?.sh
 export function protectionAllows(sheet,operation){if(sheet.kind==='chart')return operation==='objects'&&!parsed(sheet.xlsxChartSheet?.xml,doc=>all(doc,'sheetProtection').length);if(!sheetIsProtected(sheet))return true;const p=protection(sheet);return ['0','false'].includes(p[operation]);}
 export function cellProtection(book,sheet,ref){
   const cell=sheet.cells[ref],p=parseAddress(ref),style=book.xlsxStyles?.[cell?.xlsxStyle]?.style;
-  return cell?.xlsxProtection||style?.protection||sheet.xlsxProtectionDefaults?.rows?.[p?.r]||sheet.xlsxProtectionDefaults?.columns?.[p?.c]||{};
+  const normal=book.xlsxStyles?.[book.xlsxDefaultStyle]?.style?.protection||{};
+  if(cell?.xlsxProtection)return cell.xlsxProtection;if(cell?.xlsxStyle!==undefined)return style?.protection||{};if(cell?.xlsxNormal)return normal;
+  for(const [axis,index] of [['rows',p?.r],['columns',p?.c]]){const id=sheet.xlsxStyleDefaults?.[axis]?.[index];if(id!==undefined)return book.xlsxStyles?.[id]?.style?.protection||{};const preserved=sheet.xlsxProtectionDefaults?.[axis]?.[index];if(preserved)return preserved;}
+  return normal;
 }
 export const cellIsLocked=(book,sheet,ref)=>sheet.kind==='chart'||sheetIsProtected(sheet)&&cellProtection(book,sheet,ref).locked!==false;
 export const cellFormulaHidden=(book,sheet,ref)=>sheetIsProtected(sheet)&&cellProtection(book,sheet,ref).hidden===true;

@@ -1,7 +1,7 @@
 import {address,parseAddress,createEvaluator,formatValue} from './engine.mjs';
 import {tableBounds,filteredRowsForSheet} from './table-schema.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
-import {tableCellStyle} from './table-style.mjs';
+import {worksheetCellStyle} from './cell-style.mjs';
 import {numberFormatStyle} from './number-formats.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
 import {bordersCss} from './borders.mjs';
@@ -45,7 +45,7 @@ function gridHTML(book,sheet,range,{gridLines=false,evaluate,contentWidth}){
     const td=cols.map(c=>{
       const merge=merges.get(address(r,c));if(merge&&(r!==merge.firstR||c!==merge.firstC))return '';
       const row=merge?.r1??r,col=merge?.c1??c,ref=address(row,col),cell=sheet.cells[ref]||{};let result=evaluate.result(ref);const cached=result.error?nativeCachedValue(book,sheet.id,ref,result.value):undefined;if(cached!==undefined){result={value:cached,error:cell.cachedError?cached:null};cachedCount++;}const value=result.value;
-      const style={...numberFormatStyle(value,{...tableCellStyle(book,sheet,row,col),...cell.style}),...conditional(row,col,value)};
+      const style={...numberFormatStyle(value,worksheetCellStyle(book,sheet,row,col)),...conditional(row,col,value)};
       const css=['background:'+(style.background||'white'),'color:'+(style.color||'#222'),'font-family:'+(style.fontFamily||'Arial'),'font-size:'+(style.fontSize||11)+'pt','font-weight:'+(style.bold?'bold':'normal'),'font-style:'+(style.italic?'italic':'normal'),'text-decoration:'+(style.underline?'underline':'none'),'text-align:'+(style.align|| (typeof value==='number'?'right':'left')),'vertical-align:'+(style.verticalAlign||'middle'),'white-space:'+(style.wrap?'pre-wrap':'pre'),bordersCss(style)].join(';');
       return '<td data-ref="'+ref+'"'+(merge?' rowspan="'+merge.rowspan+'" colspan="'+merge.colspan+'"':'')+' style="'+esc(css)+'">'+esc(formatValue(value,style,{...book,error:result.error}))+'</td>';
     }).join('');
