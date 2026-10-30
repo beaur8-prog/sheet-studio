@@ -104,6 +104,7 @@ try{
  const htmlFile=path.join(profile,'dashboard.html');await fs.writeFile(htmlFile,html);
  const pdf=await app.evaluate(async({BrowserWindow},file)=>{const win=new BrowserWindow({show:false,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true}});try{await win.loadFile(file);await win.webContents.executeJavaScript('document.fonts.ready');return (await win.webContents.printToPDF({printBackground:true,preferCSSPageSize:true})).toString('base64');}finally{win.destroy();}},htmlFile);
  const bytes=Buffer.from(pdf,'base64');assert.equal((bytes.toString('latin1').match(/\/Type \/Page\b/g)||[]).length,1);await fs.writeFile(path.join(root,'test-results/dashboard-journey.pdf'),bytes);
+ await save(file);await fs.copyFile(file,path.join(root,'test-results/dashboard-journey.xlsx'));
  record('final dashboard table, total and chart print together on one physical PDF page without changing the document');
  assert.deepEqual(errors,[]);await page.screenshot({path:path.join(root,'test-results/dashboard-journey.png')});await fs.writeFile(path.join(root,'test-results/dashboard-journey.json'),JSON.stringify({at:new Date().toISOString(),platform:process.platform,checks},null,2));
 }catch(error){await page.screenshot({path:path.join(root,'test-results/dashboard-journey-failure.png')});console.error(JSON.stringify({dialogs:await page.getByRole('dialog').allTextContents(),errors}));throw error;}

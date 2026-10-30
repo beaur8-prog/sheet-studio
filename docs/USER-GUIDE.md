@@ -5,11 +5,11 @@
 
 > **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
 
-0.7.31 개발 기능 안내 · 2026년 10월 31일 · 현재 공개 버전 0.7.28
+0.7.31 개발 기능 안내 · 2026년 10월 31일 · 현재 공개 버전 0.7.29
 
-**개발·배포 구분:** 아래 편집 안내는 0.7.31 개발 기능을 포함합니다. 이번 개선은 아직 공개하지 않았으며 [상세 내역](releases/v0.7.31.md)을 먼저 확인하세요. 현재 공개 0.7.28은 Windows x64 설치 파일과 Mac Apple Silicon ZIP을 제공합니다. 최신 공개본에는 Linux DEB가 없습니다.
+**개발·배포 구분:** 아래 편집 안내는 0.7.31 개발 기능을 포함합니다. 이번 개선은 아직 공개하지 않았으며 [상세 내역](releases/v0.7.31.md)을 먼저 확인하세요. 현재 공개 0.7.29은 Windows x64 설치 파일과 Mac Apple Silicon ZIP을 제공합니다. 최신 공개본에는 Linux DEB가 없습니다.
 
-[현재 공개본 다운로드](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.28) · [버전별 변경 내역](CHANGELOG.md) · [대용량 한도](CAPACITY.md)
+[현재 공개본 다운로드](https://github.com/beaur8-prog/sheet-studio/releases/latest) · [버전별 변경 내역](CHANGELOG.md) · [대용량 한도](CAPACITY.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -26,7 +26,7 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.28)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/latest)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
@@ -60,7 +60,7 @@ Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이�
 
 ### Linux (Ubuntu·Debian 계열 x64)
 
-현재 공개 0.7.28에는 Linux DEB가 없습니다. Linux에서 소스의 `npm run package:linux`로 빌드한 DEB를 사용하거나 다음 Linux 배포 파일을 받으세요. 아래 `VERSION`은 실제 파일의 버전으로 바꿉니다.
+현재 공개 0.7.29에는 Linux DEB가 없습니다. Linux에서 소스의 `npm run package:linux`로 빌드한 DEB를 사용하거나 다음 Linux 배포 파일을 받으세요. 아래 `VERSION`은 실제 파일의 버전으로 바꿉니다.
 
 ```sh
 sudo apt install ./Sheet-Studio-VERSION-Linux-amd64.deb

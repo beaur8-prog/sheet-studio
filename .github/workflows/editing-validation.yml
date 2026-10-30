@@ -78,6 +78,7 @@ jobs:
           path: |
             test-results/*.png
             test-results/*.pdf
+            test-results/dashboard-journey.xlsx
             test-results/capacity-*.json
             test-results/large-spills*.json
             test-results/array-views.json
