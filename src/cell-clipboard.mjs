@@ -1,9 +1,11 @@
+import {createColorResolver} from './spreadsheet-colors.mjs';
 import {cloneData} from './clone.mjs';
 import {address} from './engine.mjs';
 import {worksheetCellStyle,inheritedStyles} from './cell-style.mjs';
 // A clipboard outlives its workbook. Its style indices must be private, portable
 // definitions rather than indices into a workbook that may since be closed.
 export function captureClipboardStyles(book,sheet,data,rows,columns){
+  const resolve=createColorResolver(book.chartTheme,book.xlsxColors?'<styleSheet>'+book.xlsxColors+'</styleSheet>':undefined),portableColors=value=>{if(!value||typeof value!=='object')return value;if(['argb','rgb','theme','indexed','auto'].some(key=>Object.hasOwn(value,key))){const color=resolve(value);if(color)return {argb:'FF'+color.slice(1).toUpperCase()};}for(const key of Object.keys(value))value[key]=portableColors(value[key]);return value;};
   const styles=[],known=new Map(),normal=book.xlsxStyles?.[book.xlsxDefaultStyle],defaults={fontFamily:'맑은 고딕',fontSize:11,bold:false,italic:false,underline:false,color:'#222222',background:'#ffffff',verticalAlign:'middle',wrap:false,format:'general',numberFormat:'General'},baseStyle={font:{name:'맑은 고딕',size:11,color:{argb:'FF222222'}},numFmt:'General',alignment:{vertical:'middle'},fill:{type:'pattern',pattern:'none'},border:{}};
   for(let r=0;r<rows.length;r++)for(let c=0;c<columns.length;c++){
     const row=rows[r],col=columns[c],ref=address(row,col),record=sheet.cells[ref]||{raw:''},copied=data[r][c];
@@ -11,8 +13,9 @@ export function captureClipboardStyles(book,sheet,data,rows,columns){
     const full=Object.assign({},baseStyle,normal?.style,...(original?[original.style]:templates.map(t=>t.style)));
     if(record.xlsxProtection)full.protection={...full.protection,...record.xlsxProtection};
     const bare={...sheet,cells:{[ref]:{...record,style:{}}}},baseline={...defaults,...worksheetCellStyle(book,bare,row,col,{table:false})};
-    const entry=JSON.parse(JSON.stringify({style:full,baseline})),key=JSON.stringify(entry);
+    const entry=JSON.parse(JSON.stringify({style:full,baseline}));entry.style=portableColors(entry.style);const key=JSON.stringify(entry);
     if(!known.has(key)){known.set(key,styles.length);styles.push(entry);}
+    if(copied.xlsxValue)copied.xlsxValue=portableColors(copied.xlsxValue);
     copied.style=cloneData({...defaults,...worksheetCellStyle(book,sheet,row,col)});copied.xlsxStyle=known.get(key);delete copied.xlsxNormal;
   }
   return styles;

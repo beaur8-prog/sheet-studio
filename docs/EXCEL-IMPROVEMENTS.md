@@ -239,3 +239,9 @@
 - 가져온 실제 오류 셀과 지원하지 않는 수식의 오류 캐시가 저장 때 일반 문자열로 바뀌지 않는다. 명시적인 텍스트는 계속 텍스트로 저장하며, 값 붙여넣기와 CSV의 문자열 구분에도 같은 정의를 적용한다. 스필·연결·Python 계산 기능 자체를 추가한 것은 아니다.
 - 검증: 전체 검사 316개 중 315개 통과, Windows 전용 1개 건너뜀. 16종 각각의 실제 오류·문자열·오류/문자열 캐시와 IFERROR 상수를 세 번 XLSX 왕복했다. 실제 Mac Electron에서 CALC/SPILL과 같은 글자의 텍스트를 계산하고 저장/재열기하여 구분을 확인했다.
 - 참고: [Microsoft SPILL](https://support.microsoft.com/en-us/excel/how-to-correct-a-spill-error), [CALC](https://support.microsoft.com/en-us/excel/how-to-correct-a-calc-error), [Python 관련 오류](https://support.microsoft.com/en-us/excel/python/troubleshoot-python-in-excel-errors).
+
+### 28차: 문서 간 테마·팔레트 색 복사
+
+- 다른 테마의 문서에 붙이면 화면에서는 맞지만 XLSX 저장 후 색이 바뀔 수 있는 경로를 발견해 재현했다. 이전 테마/인덱스 번호를 대상 문서에서도 그대로 해석한 것이 원인이었다.
+- 복사 스냅샷의 글꼴·테두리·그라데이션 등 상세 색과 문자별 글자색을 원본 테마·팔레트·명암 기준의 RGB로 고정한다. 원본 문서의 정의는 바꾸지 않는다. 같은 문서에서 원래대로 둔 셀의 테마 관계는 유지한다.
+- 검증: 전체 검사 317개 중 316개 통과, Windows 전용 1개 건너뜀. 실제 Mac Electron에서 서로 다른 문서로 복사→화면 색→저장→재열기를 확인하고, 명암 글자색·사용자 인덱스 대각선·그라데이션·문자별 색의 XLSX 모델을 검사했다. 상세 서식 복사/취소·숨김 범위 보호 UI도 다시 통과했다.
