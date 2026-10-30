@@ -155,3 +155,11 @@ PDF 재현 과정에서 여백에 배치한 바닥글이 추가 페이지를 만
 별도 고정 시드의 수식 240개(숫자/빈칸 120개, 텍스트·불리언·오류 혼합 120개)는 자체 XLSX 왕복에서 결과 값 4,338개가 모두 유지됐다. LibreOffice 26.8.0.3의 독립 재계산과는 각각 112/120·26/120개 식이 일치했다. 모든 출력 캐시를 -999로 바꿨고 재계산 후 그 값이 남은 사례는 없었다. 숫자 집합의 차이는 UNIQUE 뒤의 빈칸 정렬과 빈 결과의 오류 표현이며, 혼합 집합에는 논리값·빈 문자열·오류의 전파/저장 표현 차이도 있다. 이 수치는 Excel 정답률이 아니며, LibreOffice의 동작을 무조건 Excel의 규칙으로 적용하지 않았다.
 
 재현 명령: LibreOffice를 별도 설치한 환경에서 `SHEET_STUDIO_SOFFICE=/path/to/soffice node tests/libreoffice-array-comparison.mjs`. 성공 종료는 비교 완료를 뜻하므로 `.verification/array-comparison/report.json`의 `differences`도 확인해야 한다. 기본 배열 17개가 독립 재계산과 일치한 검사와 이 경계 진단 집합을 구분한다.
+
+### 11차 보강: 자료형·오류·검색 조건의 배열 처리
+
+Sheet Studio의 저장 경로를 거치지 않은 XlsxWriter 원본에서도 LibreOffice의 배열 논리값/빈 텍스트/오류 표현 차이를 확인했다. 같은 확인 중 앱의 `ISLOGICAL(FILTER(...))`가 첫 값 하나만 반환하는 결함을 재현했다. 정보 함수가 여러 셀 배열을 하나의 값으로 읽다가 잘못된 판정으로 바꾸는 경로였으며, `FILTER(...,ISNUMBER(SEARCH(...)))` 같은 실용적인 검색 조합도 실패했다.
+
+ISNUMBER·ISTEXT·ISNONTEXT·ISLOGICAL·ISBLANK·ISERROR·ISERR·ISNA, ERROR.TYPE·N·T·NOT을 셀별 배열 처리에 연결했다. 숫자/텍스트/논리/오류/실제 빈칸을 구분하고, TYPE의 배열 형식(64)과 ISREF의 참조 확인은 유지한다. 검색 포함 여부·숫자인 행 선택·오류 제외 필터, 결과 확장/축소·읽기 전용 결과·실행 취소/다시 실행·실제 XLSX 재열기를 검사했다. 독립 XlsxWriter의 -999 캐시는 사용하지 않고 원본 수식에서 계산하며 논리값·빈 문자열·개별 오류를 3회 왕복한다.
+
+독립 입력은 `tests/fixtures/xlsxwriter-array-controls.py`로 다시 만들 수 있다. 이는 실제 Excel 실행 자료가 아니며 모든 Excel 함수의 배열 조합을 완성한 것도 아니다. 기준: [Microsoft IS 함수의 자료형 규칙](https://support.microsoft.com/en-us/excel/functions/is-functions), [FILTER의 Boolean 배열 조건](https://support.microsoft.com/en-us/excel/functions/filter-function).

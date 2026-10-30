@@ -12,6 +12,17 @@ import {structuralWorkbookPlan} from '../src/workbook-structure.mjs';
 const fixture=()=>fs.readFile(new URL('./fixtures/xlsxwriter-dynamic.xlsx',import.meta.url));
 async function cellXML(bytes,ref){const zip=await JSZip.loadAsync(bytes),doc=xml(await zip.file('xl/worksheets/sheet1.xml').async('string'));return all(doc,'c').find(c=>attr(c,'r')===ref);}
 
+test('independent XlsxWriter mixed-type arrays ignore poisoned caches and retain boolean, empty text and element errors',async()=>{
+ let b=await readSpreadsheet(await fs.readFile(new URL('./fixtures/xlsxwriter-array-controls.xlsx',import.meta.url)),'typed-arrays.xlsx');
+ for(let i=0;i<3;i++){
+  const s=b.sheets[0],e=createEvaluator(b,s.id);assert.equal(s.cells.A5.raw,"'");assert.equal(s.cells.A6?.raw||'','');
+  assert.deepEqual(Array.from({length:6},(_,r)=>e('F'+(r+1))),[true,false,'#N/A',2,'',0]);
+  assert.deepEqual(Array.from({length:6},(_,r)=>e('L'+(r+1))),[true,true,false,false,false,false]);
+  assert.equal(e.result('F1').error,null);assert.equal(e.result('F3').error,'#N/A');assert.equal(e('N1'),3);
+  b=await readSpreadsheet((await writeSpreadsheet(b)).data,'typed-arrays.xlsx');
+ }
+});
+
 test('independently generated XlsxWriter arrays retain dynamic metadata and recalculate stale followers separately from legacy CSE',async()=>{
   let b=await readSpreadsheet(await fixture(),'independent.xlsx');
   for(let i=0;i<3;i++){

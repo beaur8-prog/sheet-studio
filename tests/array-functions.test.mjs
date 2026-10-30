@@ -63,3 +63,24 @@ test('INDEX omitted axes return complete rows or columns while one-dimensional s
  assert.deepEqual(array('=INDEX({1,2;3,4},2)'),expected(1,2,[3,4]));assert.deepEqual(array('=INDEX({1,2;3,4},,2)'),expected(2,1,[2,4]));assert.deepEqual(array('=INDEX({1,2;3,4},2,)'),expected(1,2,[3,4]));assert.deepEqual(array('=INDEX({1,2,3},2)'),expected(1,1,[2]));assert.deepEqual(array('=INDEX({1;2;3},2)'),expected(1,1,[2]));
  const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'1'},B1:{raw:'2'},A2:{raw:'3'},B2:{raw:'4'},D1:{raw:'=INDEX(A1:B2,2)'},G1:{raw:'=INDEX(A1:B2,,2)'}};assert.deepEqual(array('=INDEX(A1:B2,2)',b),expected(1,2,[3,4]));
 });
+
+test('information predicates and NOT operate elementwise so FILTER can use typed and text-search masks',()=>{
+ assert.deepEqual(array('=ISNUMBER({1,"2";TRUE,#N/A})'),expected(2,2,[true,false,false,false]));
+ assert.deepEqual(array('=ISLOGICAL({TRUE;FALSE;1;#N/A})'),expected(4,1,[true,true,false,false]));
+ assert.deepEqual(array('=ISERROR({1;#N/A;#DIV/0!})'),expected(3,1,[false,true,true]));
+ assert.deepEqual(array('=ISERR({1;#N/A;#DIV/0!})'),expected(3,1,[false,false,true]));
+ assert.deepEqual(array('=ISNA({1;#N/A;#DIV/0!})'),expected(3,1,[false,true,false]));
+ assert.deepEqual(array('=ISTEXT({1;"1";"";TRUE;#N/A})'),expected(5,1,[false,true,true,false,false]));
+ assert.deepEqual(array('=ISNONTEXT({1;"1";"";TRUE;#N/A})'),expected(5,1,[true,false,false,true,true]));
+ assert.deepEqual(array('=ERROR.TYPE({#N/A,#DIV/0!;1,"x"})'),expected(2,2,[7,2,'#N/A','#N/A']));
+ assert.deepEqual(array('=NOT({0,1;TRUE,FALSE})'),expected(2,2,[true,false,false,true]));
+ assert.deepEqual(array('=N({TRUE,FALSE;"2",#N/A})'),expected(2,2,[1,0,0,'#N/A']));
+ assert.deepEqual(array('=T({TRUE,2;"2",#N/A})'),expected(2,2,['','','2','#N/A']));
+ assert.deepEqual(array('=FILTER({1;"1";TRUE;#N/A},ISNUMBER({1;"1";TRUE;#N/A}))'),expected(1,1,[1]));
+ assert.deepEqual(array('=FILTER({"apple",1;"pear",2;"APPLE",3},ISNUMBER(SEARCH("apple",{"apple";"pear";"APPLE"})))'),expected(2,2,['apple',1,'APPLE',3]));
+ assert.deepEqual(array('=FILTER({1;#N/A;3},NOT(ISERROR({1;#N/A;3})))'),expected(2,1,[1,3]));
+ const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:"'"},A2:{raw:''},A3:{raw:'0'}};
+ assert.deepEqual(array('=ISBLANK(A1:A3)',b),expected(3,1,[false,true,false]));
+ // Reference and whole-array inspection are deliberately not scalar lifts.
+ assert.equal(evaluateFormula(b,s.id,'=TYPE({1;2})'),64);assert.equal(evaluateFormula(b,s.id,'=ISREF(A1:A3)'),true);
+});
