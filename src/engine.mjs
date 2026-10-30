@@ -825,9 +825,10 @@ export function rewriteTableFormula(formula,{tableName,newTableName=tableName,co
   for(let i=0;i<tokens.length;i++){
     const token=tokens[i],named=token.type==='word'&&token.value.toLocaleLowerCase()===tableName?.toLocaleLowerCase()&&!['(','!'].includes(tokens[i+1]?.value),following=named&&tokens[i+1]?.type==='structured'?tokens[i+1]:null,local=token.type==='structured'&&implicit&&tokens[i-1]?.type!=='word';
     if(!following&&!local&&!(named&&allowBare))continue;const selector=following?.value||(local?token.value:'[#Data]'),changed=rewriteStructuredSelector(selector,columns);let value;
-    if(changed===null||newTableName===null&&!materialize)value='#REF!';else if(materialize)value=materialize({selector,tableName:named?tableName:null})||'#REF!';
+    const qualified=named&&tokens[i-1]?.value==='!'&&['word','sheet'].includes(tokens[i-2]?.type);
+    if(changed===null||newTableName===null&&!materialize)value='#REF!';else if(materialize)value=materialize({selector,tableName:named?tableName:null,sheetName:qualified?tokens[i-2].value:undefined})||'#REF!';
     else value=(named?newTableName:'')+(following||local?changed:'');
-    patches.push({start:token.start+offset,end:(following||token).end+offset,value});if(following)i++;
+    patches.push({start:(materialize&&qualified?tokens[i-2]:token).start+offset,end:(following||token).end+offset,value});if(following)i++;
   }
   for(const p of patches.reverse())formula=formula.slice(0,p.start)+p.value+formula.slice(p.end);return formula;
 }

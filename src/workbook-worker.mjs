@@ -1,4 +1,5 @@
 import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} from './tables.mjs';
+import {tableConversionPlan} from './table-conversion.mjs';
 import {tableAt,tableBounds} from './table-schema.mjs';
 import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
@@ -102,7 +103,7 @@ async function handle(type, data) {
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
-  if(type==='table-plan'){const table=sheet.tables?.find(t=>t.id===data.tableId);if(data.operation!=='create'&&!table)throw Error('표를 찾을 수 없습니다.');const plan=data.operation==='create'?createTablePlan(book,sheet,data.values):data.operation==='calculate'?calculatedColumnPlan(book,sheet,table,data.values):updateTablePlan(book,sheet,table,data.values);return finalizeTablePlan(book,sheet,plan,data.values);}
+  if(type==='table-plan'){const table=sheet.tables?.find(t=>t.id===data.tableId);if(data.operation!=='create'&&!table)throw Error('표를 찾을 수 없습니다.');if(data.operation==='convert')return tableConversionPlan(book,sheet,table);const plan=data.operation==='create'?createTablePlan(book,sheet,data.values):data.operation==='calculate'?calculatedColumnPlan(book,sheet,table,data.values):updateTablePlan(book,sheet,table,data.values);return finalizeTablePlan(book,sheet,plan,data.values);}
   if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);
   if (type === 'infer-region'){const table=tableAt(sheet,data.selection.r1,data.selection.c1);if(table){const b=tableBounds(table.range);return {...b,r2:b.r2-(table.totalsRow?1:0)};}return currentRegion(sheet,data.selection);}
