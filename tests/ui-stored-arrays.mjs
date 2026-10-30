@@ -1,0 +1,26 @@
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import ExcelJS from 'exceljs';
+import platform from '../scripts/platform.cjs';
+const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','stored-arrays-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
+await app.evaluate(({ipcMain})=>{ipcMain.removeHandler('sheet:write-clipboard');ipcMain.handle('sheet:write-clipboard',(_event,payload)=>{globalThis.testArrayClipboard=payload;});});
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
+const go=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();},value=ref=>page.evaluate(ref=>sheetStudio.evaluateAsync(ref),ref);
+const edit=async(ref,raw)=>{await go(ref);await page.keyboard.press('F2');await page.locator('#editor').fill(raw);await page.locator('#editor').press('Enter');await settle();};
+const paste=async text=>{await page.locator('#grid').focus();await page.evaluate(text=>{const data=new DataTransfer();data.setData('text/plain',text);document.querySelector('#grid').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));},text);await settle();};
+const copy=async()=>{await page.locator('[data-action="copy"]').click();await settle();return app.evaluate(()=>globalThis.testArrayClipboard.text);};
+try{
+  await page.locator('.cell').first().waitFor();const source=new ExcelJS.Workbook(),s=source.addWorksheet('Arrays');[1,2,3].forEach((v,i)=>s.getCell(i+1,1).value=v);s.getCell('B1').value={formula:'A1:A3*2',shareType:'array',ref:'B1:B3',result:2};s.getCell('B2').value=999;s.getCell('B3').value=999;await page.locator('#file-input').setInputFiles({name:'arrays.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await source.xlsx.writeBuffer())});await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='arrays');await settle();assert.equal(await value('B2'),4);assert.equal(await value('B3'),6);
+  await edit('A2','4');assert.equal(await value('B2'),8);await page.locator('#undo').click();await settle();assert.equal(await value('B2'),4);await page.locator('#redo').click();await settle();assert.equal(await value('B2'),8);
+  await edit('B1','=IF($A$1:$A$3>1,$A$1:$A$3*3,0)');assert.equal(await value('B1'),0);assert.equal(await value('B2'),12);assert.equal(await value('B3'),9);assert.equal(await page.getByRole('gridcell',{name:'B1',exact:true}).textContent(),'0');
+  await edit('B1','plain');assert.equal(await value('B2'),12);assert.match(await page.locator('.toast').textContent(),/배열/);await page.keyboard.press('Escape');await settle();
+  await go('B2');const partial=await copy();await go('D1');await paste(partial);assert.equal(await value('D1'),12);assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.D1.xlsxFormula),undefined);
+  await go('B1:B3');const full=await copy();await go('E1');await paste(full);assert.equal(await value('E2'),12);assert.equal(await value('E3'),9);assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.E1.xlsxFormula.ref),'E1:E3');
+  await go('B1:B3');await page.keyboard.press('Delete');await settle();assert.equal(await page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells.B1.xlsxFormula),undefined);await edit('B1','=SUM(A1:A3)');assert.equal(await value('B2'),'');await page.locator('#undo').click();await settle();await page.locator('#undo').click();await settle();assert.equal(await value('B2'),12);
+  const output=path.join(dataDir,'arrays-saved.xlsx');await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},output);await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');const out=new ExcelJS.Workbook();await out.xlsx.load(await fs.readFile(output));assert.equal(out.worksheets[0].getCell('B2').value,12);assert.equal(out.worksheets[0].getCell('E3').value,9);await page.locator('#file-input').setInputFiles(output);await settle();assert.equal(await value('B2'),12);assert.equal(await value('E3'),9);assert.equal(await value('D1'),12);assert.deepEqual(errors,[]);
+  console.log('PASS: actual stale array-cache correction, dependent recalculation/undo/redo, anchor IF edit and zero display, partial edit guard, isolated clipboard partial/full array copy, complete deletion without resurrection and fresh XLSX follower caches');
+}catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/stored-arrays-failure.png')});throw error;}
+finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

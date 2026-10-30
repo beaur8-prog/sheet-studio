@@ -36,7 +36,7 @@ try{
   await page.locator('#editor').fill('8');await page.locator('#editor').press('Enter');await settle();assert.equal(await value('B2'),8);
   await typeDraft('C2','7');assert.equal(await value('C2'),6);await page.locator('#editor').fill('9');await page.locator('#editor').press('Enter');await settle();assert.equal(await value('C2'),9);
   await typeDraft('E2','abcd');await page.getByRole('dialog',{name:'조건 확인'}).waitFor();assert.equal(await value('E2'),'abc');await page.getByRole('dialog').getByRole('button',{name:'계속 입력'}).click();await settle();assert.equal(await value('E2'),'abcd');
-  await go('G2');await page.keyboard.press('F2');assert.equal(await page.locator('#editor').evaluate(el=>el.classList.contains('entry-ready')),true);await pasteText('999');assert.equal(await value('G2'),11);assert.match(await page.locator('.toast').innerText(),/배열/);
+  await go('G2');await page.keyboard.press('F2');assert.equal(await page.locator('#editor').evaluate(el=>el.classList.contains('entry-ready')),true);await pasteText('999');assert.equal(await value('G2'),17);assert.match(await page.locator('.toast').innerText(),/배열/);
   await page.locator('[data-tab="홈"]').click();await act('insert-row');assert.equal(await value('B2'),8);assert.match(await page.locator('.toast').innerText(),/배열/);
   await go('A1');await act('insert-row');assert.equal(await value('B3'),8);await typeDraft('B3','99');assert.equal(await value('B3'),8);await page.keyboard.press('Escape');await settle();
   await page.screenshot({path:path.join(root,'test-results/cell-constraints.png')});

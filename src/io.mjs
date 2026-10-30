@@ -1,5 +1,6 @@
 import {tableBounds} from './table-schema.mjs';
 import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
+import {storedArrayIndex} from './stored-arrays.mjs';
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
 import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
@@ -306,6 +307,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     const sheet = workbook.sheets.find(item => item.id === workbook.activeSheetId) || workbook.sheets[0];
     if(sheet.kind==='chart')throw Error('차트 전용 시트는 XLSX로 저장하세요.');
     let maxRow = -1, maxCol = -1;
+    const arrays=storedArrayIndex(sheet);for(const array of arrays.regions){maxRow=Math.max(maxRow,array.r2);maxCol=Math.max(maxCol,array.c2);}
     for (const [addr, cell] of Object.entries(sheet.cells)) {
       if (cell.raw === '' || cell.raw === undefined) continue;
       const coordinate = coordinates(addr);
@@ -319,7 +321,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       const row = [];
       for (let c = 0; c <= maxCol; c++) {
         const addr = address(c, r), cell = sheet.cells[addr];
-        let value = cell?.raw?.startsWith?.('=') ? cachedResult(evaluate, workbook, sheet, addr, cell) : toScalar(cell?.raw);
+        let value = cell?.raw?.startsWith?.('=') ? cachedResult(evaluate, workbook, sheet, addr, cell) : arrays.at({r,c})?evaluate(workbook,sheet.id,addr):toScalar(cell?.raw);
         if (value && typeof value === 'object') value = value.error || '';
         let text = value === undefined || value === null ? '' : String(value);
         // Prevent plain text beginning with a formula marker from becoming a formula when opened elsewhere.
@@ -341,6 +343,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   const visibleSheet=sheet=>!sheet.state||sheet.state==='visible',active=workbook.sheets.find(sheet=>sheet.id===workbook.activeSheetId&&visibleSheet(sheet))||workbook.sheets.find(visibleSheet);
   book.views = [{ activeTab: Math.max(0, workbook.sheets.indexOf(active)), visibility: 'visible' }];
   const names = new Set(), exportNames = new Map();
+  let exportedCount=workbook.sheets.reduce((n,s)=>n+Object.keys(s.cells).length,0);
   for (const sheet of workbook.sheets) {
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
     target.properties.defaultColWidth=((sheet.defaultColumnWidth||90)-5)/7;
@@ -375,6 +378,14 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if(cell.xlsxProtection)targetCell.style={...targetCell.style,protection:plainCopy(cell.xlsxProtection)};
       if(cell.xlsxValue?.value?.richText&&cell.xlsxValue.raw===cell.raw){const original=workbook.xlsxStyles?.[cell.xlsxStyle],delta=fontChanges(cell.style||{},original?.baseline||{},targetCell.font);if(Object.keys(delta).length)targetCell.value={richText:targetCell.value.richText.map(run=>({...run,font:{...run.font,...delta}}))};}
       if (typeof cell.note === 'string') targetCell.note = cell.note;
+    }
+    for(const array of storedArrayIndex(sheet).regions){const anchor=sheet.cells[array.ref];
+      if((array.r2-array.r1+1)*(array.c2-array.c1+1)>MAX_CELLS)throw Error('배열 수식 결과가 1,000,000셀 계산 한도를 초과합니다.');
+      for(let r=array.r1;r<=array.r2;r++)for(let c=array.c1;c<=array.c2;c++){
+        const key=address(c,r);if(key===array.ref)continue;if(!sheet.cells[key]&&++exportedCount>MAX_CELLS)throw Error('배열 결과를 포함한 XLSX의 셀 수가 1,000,000개를 초과합니다.');
+        const value=evaluate(workbook,sheet.id,key);if(value==='#NAME?'&&anchor.xlsxFormula.raw===anchor.raw&&workbook.referenceCachesValid!==false)continue;
+        const offset=pageFilters.length?pageFilters.length+1:0,cell=target.getCell(offset?address(c,r+offset):key);cell.value=errors.has(value)?{error:value}:value===undefined||value===null?'':value;
+      }
     }
     for (const [index, width] of Object.entries(sheet.columnWidths || {})) {
       if (/^\d+$/.test(index) && Number(index) < 16384 && Number.isFinite(Number(width))) target.getColumn(Number(index) + 1).width = Math.max(1, ((width===0?sheet.hiddenSizes?.cols?.[index]||90:Number(width)) - 5) / 7);

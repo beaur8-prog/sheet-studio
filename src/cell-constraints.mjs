@@ -22,16 +22,20 @@ export function arrayRegions(sheet){const cells=unwrap(sheet.cells);let index=ar
 export function cellEditError(book,sheet,ref){
   if(sheet.kind==='chart')return '차트 전용 시트에서는 셀을 편집할 수 없습니다.';
   if(cellIsLocked(book,sheet,ref))return '보호된 셀입니다. 입력이 허용된 셀을 선택하거나 Excel에서 시트 보호를 해제하세요.';
-  const p=parseAddress(ref);if(arrayRegions(sheet).some(a=>a.ref!==ref&&inside(a,p)))return '배열 수식 결과의 일부를 변경할 수 없습니다. 배열의 첫 셀에서 수식을 편집하세요.';
+  const p=parseAddress(ref),array=arrayRegions(sheet).find(a=>inside(a,p));if(array&&book.nativeSource)return 'XLSM의 배열 수식은 Excel에서 편집하거나 XLSX 사본을 사용하세요.';if(array&&array.ref!==ref)return '배열 수식 결과의 일부를 변경할 수 없습니다. 배열의 첫 셀에서 수식을 편집하세요.';
   return null;
 }
-export function assertCellUpdates(book,sheet,updates,{editAnchor=false}={}){
+export function assertCellUpdates(book,sheet,updates,{editAnchor=false,formatOnly=false}={}){
+  if(formatOnly){if(!protectionAllows(sheet,'formatCells'))throw Error('이 시트에서는 셀 서식을 변경할 수 없습니다.');return;}
   const keys=new Set(updates.map(u=>u.key));
   for(const key of keys)if(cellIsLocked(book,sheet,key))throw Error('선택 범위에 보호된 셀이 있습니다. 변경을 적용하지 않았습니다.');
   for(const a of arrayRegions(sheet)){
     let count=0;for(const key of keys)if(inside(a,parseAddress(key)))count++;
-    if(count&&count!==(a.r2-a.r1+1)*(a.c2-a.c1+1)&&!(editAnchor&&count===1&&keys.has(a.ref)))throw Error('배열 수식 결과의 일부를 변경할 수 없습니다. 배열 전체를 선택하세요.');
+    const anchor=updates.find(u=>u.key===a.ref),formula=anchor?.cell?.raw;
+    if(count&&book.nativeSource)throw Error('XLSM의 배열 수식은 Excel에서 편집하거나 XLSX 사본을 사용하세요.');
+    if(count&&count!==(a.r2-a.r1+1)*(a.c2-a.c1+1)&&!(editAnchor&&count===1&&keys.has(a.ref)&&(formula===undefined||formula.startsWith('='))))throw Error('배열 수식 결과의 일부를 변경할 수 없습니다. 배열 전체를 선택하세요.');
   }
+  if(book.nativeSource&&updates.some(u=>u.cell?.xlsxFormula?.shareType==='array'))throw Error('XLSM에 배열 수식을 붙여넣는 작업은 Excel에서 진행하세요.');
 }
 export function assertStructureAllowed(sheet,axis,index,count,delta){
   if(!protectionAllows(sheet,(delta>0?'insert':'delete')+(axis==='r'?'Rows':'Columns')))throw Error('보호된 시트에서 이 행·열 변경은 허용되지 않습니다.');
