@@ -2,6 +2,7 @@ import {openTableUI,openCalculatedColumnUI} from './table-ui.mjs';
 import {prepareTableHeaderEdits,applyTableHeaderEdits,renameTableReferences} from './tables.mjs';
 import {prepareTableDataEdits} from './table-data-edits.mjs';
 import {worksheetCellStyle} from './cell-style.mjs';
+import {selectionStep} from './cell-navigation.mjs';
 import {entryRaw,textEntryStyle} from './cell-values.mjs';
 import {captureClipboardStyles,adoptClipboardStyles} from './cell-clipboard.mjs';
 import {printOrientation,setPrintOrientation} from './worksheet-extra.mjs';
@@ -67,14 +68,15 @@ bindEvaluator();
 async function runBusy(label,operation){if(busy)return;busy=true;const overlay=document.createElement('div');overlay.className='workbook-busy';overlay.setAttribute('role','status');overlay.innerHTML='<span class="workbook-spinner"></span><span></span>';overlay.lastChild.textContent=label;document.body.append(overlay);try{return await operation();}catch(error){history.rollback();book=history.book;bindEvaluator();if(initialized){makeLayout();syncToolbar();render();renderSheets();updateTitle();}toast(error.message);}finally{busy=false;overlay.remove();}}
 
 let selection={r:0,c:0,r2:0,c2:0},tab='홈',editing=false,dragging=false,fillStart=null,clipboard=null,dirty=false,zoom=100,showGrid=true,showFormulas=false,searchText='',filteredRows=null,filterEnabled=false,layout,frame=0,menu=null,menuScrollOffsets=new WeakMap(),toastTimer;
-let editSession=null,editInput=null,referenceDrag=null,keyboardReference=null,pointMode=false;
+let editSession=null,editInput=null,referenceDrag=null,keyboardReference=null,pointMode=false,entryRange=null;
+const selectionKey=()=>[sheet().id,selection.r,selection.c,selection.r2,selection.c2].join(':');
 const MAX_ROWS=1048576,MAX_COLS=16384,HEADER_H=25;let HEADER_W=40;
 const visibleSheets=()=>book.sheets.filter(s=>!s.state||s.state==='visible');
 const sheet=()=>book.sheets.find(s=>s.id===book.activeSheetId)||book.sheets[0];
 const rawAt=(r,c)=>sheet().cells[address(r,c)]?.raw||'';
 function formulaDisplay(r,c){const ref=address(r,c),array=computedArrayAt(sheet().id,ref),anchor=array?.ref||ref,hidden=cellFormulaHidden(book,sheet(),ref)||cellFormulaHidden(book,sheet(),anchor);return {raw:hidden?'':sheet().cells[anchor]?.raw||'',readOnly:!!sheet().pivot||cellIsLocked(book,sheet(),ref)||!!array&&(array.ref!==ref||!!book.nativeSource),array,hidden};}
 const valueAt=(r,c)=>evaluateCell(book,sheet().id,address(r,c));
-const bounds=()=>({r1:Math.min(selection.r,selection.r2),r2:Math.max(selection.r,selection.r2),c1:Math.min(selection.c,selection.c2),c2:Math.max(selection.c,selection.c2)});
+const bounds=()=>entryRange?.key===selectionKey()?{...entryRange.range}:(entryRange=null,{r1:Math.min(selection.r,selection.r2),r2:Math.max(selection.r,selection.r2),c1:Math.min(selection.c,selection.c2),c2:Math.max(selection.c,selection.c2)});
 const hiddenRow=r=>filteredRows?.has(r)||sheet().rowHeights?.[r]===0;
 const hiddenCol=c=>sheet().columnWidths?.[c]===0;
 function editableCell(r,c){return !hiddenRow(r)&&!hiddenCol(c)&&!mergeRanges().some(m=>r>=m.r1&&r<=m.r2&&c>=m.c1&&c<=m.c2&&(r!==m.r1||c!==m.c1));}
@@ -174,15 +176,23 @@ async function openValidationList(){
 }
 function chooseValidation(index){if(validationMenu?.sheetId!==sheet().id)return;const value=validationMenu.values[index],p=parseAddress(validationMenu.ref);if(value===undefined||!p)return;select(p.r,p.c);if(!beginEditing())return;$('#editor').value=scalarRaw(value);editInput=$('#editor');if(commitEdit()===false)return;validationMenu=null;}
 function updateStats(){const vals=[];const b=bounds();if((b.r2-b.r1+1)*(b.c2-b.c1+1)<10000){for(let r=b.r1;r<=b.r2;r++)for(let c=b.c1;c<=b.c2;c++){if(!filteredRows?.has(r)&&sheet().rowHeights?.[r]!==0&&rawAt(r,c)!=='')vals.push(valueAt(r,c));}}const nums=vals.filter(v=>typeof v==='number'&&Number.isFinite(v));$('#stats').innerHTML=vals.length>1?`<span>개수: ${vals.length}</span>${nums.length?`<span>평균: ${formatValue(nums.reduce((a,b)=>a+b,0)/nums.length,{format:'general'})}</span><span>합계: ${formatValue(nums.reduce((a,b)=>a+b,0),{format:'general'})}</span>`:''}`:'';$('#status').textContent=editing?(pointMode&&$('#editor').value.startsWith('=')?'범위 지정 · Enter 확인 / Esc 취소'+(editSession.pending.length?' · '+(editSession.pending.length+1)+'개 합계 대기':''):'편집 · F2 범위 지정'):sheet().kind==='chart'?'차트 전용 시트':filterEnabled?'필터 모드':sheet().pivot?'피벗테이블 · 원본 수정 후 새로 고침':book.nativeSource?'XLSM · VBA와 사용자 함수는 Excel에서 계산':sheetIsProtected(sheet())?'보호된 시트 · 입력 허용 셀만 편집':'준비';}
-function select(r,c,extend=false,scroll=false){closeMenu();r=Math.max(0,Math.min(MAX_ROWS-1,r));c=Math.max(0,Math.min(MAX_COLS-1,c));selection=extend?{...selection,r2:r,c2:c}:{r,c,r2:r,c2:c};if(scroll)ensureVisible(r,c);if(!editing&&document.activeElement!==$('#name-box'))$('#name-box').value=rangeLabel();syncToolbar();render();}
+function select(r,c,extend=false,scroll=false){closeMenu();entryRange=null;r=Math.max(0,Math.min(MAX_ROWS-1,r));c=Math.max(0,Math.min(MAX_COLS-1,c));selection=extend?{...selection,r2:r,c2:c}:{r,c,r2:r,c2:c};if(scroll)ensureVisible(r,c);if(!editing&&document.activeElement!==$('#name-box'))$('#name-box').value=rangeLabel();syncToolbar();render();}
 function ensureVisible(r,c){
  const g=$('#grid'),f=freeze(),x=layout.cols[c],y=layout.rows[r],fw=layout.cols[f.cols],fh=layout.rows[f.rows],top=verticalScroll.top();
  if(c>=f.cols){if(x<g.scrollLeft+fw)g.scrollLeft=Math.max(0,x-fw);else if(layout.cols[c+1]>g.scrollLeft+g.clientWidth-HEADER_W)g.scrollLeft=layout.cols[c+1]-g.clientWidth+HEADER_W;}
  if(r>=f.rows){if(y<top+fh)verticalScroll.setTop(Math.max(0,y-fh));else if(layout.rows[r+1]>top+g.clientHeight-HEADER_H)verticalScroll.setTop(layout.rows[r+1]-g.clientHeight+HEADER_H);}
 }
+function advanceSelection(axis,direction){
+ const range=bounds(),multi=range.r1!==range.r2||range.c1!==range.c2;
+ if(multi){const next=selectionStep(range,selection,{axis,direction,hiddenRow,hiddenCol,merges:mergeRanges()});select(next.r,next.c,false,true);entryRange={key:selectionKey(),range};render();return;}
+ const merge=mergeRanges().find(m=>selection.r>=m.r1&&selection.r<=m.r2&&selection.c>=m.c1&&selection.c<=m.c2),origin=merge||{r1:selection.r,r2:selection.r,c1:selection.c,c2:selection.c};select(axis==='r'?visibleRow((direction>0?origin.r2:origin.r1)+direction,direction):selection.r,axis==='c'?visibleCol((direction>0?origin.c2:origin.c1)+direction,direction):selection.c,false,true);
+}
+async function navigateDataEdge(axis,direction,extend){
+ const id=sheet().id,point=extend?{r:selection.r2,c:selection.c2}:{r:selection.r,c:selection.c},next=await runBusy('데이터 구간의 끝으로 이동하는 중…',()=>tasks.run('data-edge',{sheetId:id,point,axis,direction}));if(next&&sheet().id===id)select(next.r,next.c,extend,true);
+}
 function beginEditing(){
  if(busy)return false;if(editing)return true;if(pivotLocked())return false;const error=cellEditError(book,sheet(),address(selection.r,selection.c));if(error){toast(error);return false;}
- editSession={sheetId:sheet().id,textFormat:textEntryStyle(effectiveCellStyle(selection.r,selection.c)),r:selection.r,c:selection.c,selection:{...selection},scrollLeft:$('#grid').scrollLeft,scrollTop:verticalScroll.top(),filteredRows,filterEnabled,inline:false,pending:[]};editing=true;keyboardReference=null;return true;
+ editSession={sheetId:sheet().id,entryRange:entryRange?cloneData(entryRange):null,textFormat:textEntryStyle(effectiveCellStyle(selection.r,selection.c)),r:selection.r,c:selection.c,selection:{...selection},scrollLeft:$('#grid').scrollLeft,scrollTop:verticalScroll.top(),filteredRows,filterEnabled,inline:false,pending:[]};editing=true;keyboardReference=null;return true;
 }
 function gridInputFocused(){return document.activeElement===$('#grid')||!editing&&document.activeElement===$('#editor');}
 function textControlFocused(){return !gridInputFocused()&&['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);}
@@ -220,7 +230,7 @@ function beginNativeEntry(){if(editing)return true;if(!beginEditing())return fal
 function syncFormulaInput(input){if(input===$('#editor')&&!editing&&!beginNativeEntry()){input.value='';return;}editInput=input;const other=input===$('#editor')?$('#formula'):$('#editor');other.value=input.value;keyboardReference=null;renderFormulaReferences();updateStats();functionAssistant.update(input);}
 function startEdit(text,selectText=false){if(!beginEditing())return;editSession.inline=true;const el=$('#editor');el.value=text??rawAt(selection.r,selection.c);$('#formula').value=el.value;editInput=el;pointMode=text!==undefined;positionEditor();el.focus();if(selectText)el.select();else el.setSelectionRange(el.value.length,el.value.length);renderFormulaReferences();updateStats();functionAssistant.update(el);}
 function restoreEditView(){
- if(!editSession)return;const cross=sheet().id!==editSession.sheetId;book.activeSheetId=editSession.sheetId;selection={...editSession.selection};
+ if(!editSession)return;const cross=sheet().id!==editSession.sheetId;book.activeSheetId=editSession.sheetId;selection={...editSession.selection};entryRange=editSession.entryRange;
  if(cross||editSession.viewChanged){filteredRows=editSession.filteredRows;filterEnabled=editSession.filterEnabled;makeLayout();$('#grid').scrollLeft=editSession.scrollLeft;verticalScroll.setTop(editSession.scrollTop);renderSheets();renderPivotBar();}
 }
 function finishEditing(){functionAssistant.hide();editing=false;editSession=null;referenceDrag=null;keyboardReference=null;$('#editor').value='';renderFormulaReferences();focusGrid();render();}
@@ -231,7 +241,7 @@ function commitEdit(move,fillSelection=false,allowInvalid=false){
  if(updates.length){const headerPlan=prepareHeaders(updates.map(e=>({key:address(e.r,e.c),cell:{...sheet().cells[address(e.r,e.c)],raw:e.raw}})),{auto:true});if(!headerPlan)return false;const candidates=headerPlan.updates;if(!permitUpdates(candidates,{editAnchor:true}))return false;
   const invalid=!allowInvalid&&validateCellUpdates(book,sheet(),candidates);if(invalid){if(['warning','information'].includes(invalid.severity))modal(esc(invalid.title),`<p>${esc(invalid.ref)}: ${esc(invalid.message)}</p>`,[{label:'계속 입력',primary:true,action:el=>{el.remove();commitEdit(move,fillSelection,true);}}]);else{toast(`${invalid.ref}: ${invalid.message}`);editInput?.focus();}return false;}
   checkpoint();applyTableHeaderEdits(book,sheet(),headerPlan);for(const {key,cell} of candidates)sheet().cells[key]=cell;}
- finishEditing();if(updates.length)changed();if(move){
+ finishEditing();if(updates.length)changed();if(move?.startsWith('step:')){const [,axis,direction]=move.split(':');advanceSelection(axis,+direction);return true;}if(move){
   const merged=mergeRanges().find(m=>selection.r>=m.r1&&selection.r<=m.r2&&selection.c>=m.c1&&selection.c<=m.c2),origin=merged||{r1:selection.r,r2:selection.r,c1:selection.c,c2:selection.c};
   const dr=move==='down'?1:move==='up'?-1:0,dc=move==='right'?1:move==='left'?-1:0;
   select(dr?visibleRow((dr>0?origin.r2:origin.r1)+dr,dr):selection.r,dc?visibleCol((dc>0?origin.c2:origin.c1)+dc,dc):selection.c,false,true);
@@ -262,7 +272,7 @@ function formulaKeydown(e){
  if(e.isComposing||e.keyCode===229||!editing||editSession.composing)return;
  if(functionAssistant.keydown(e))return;
  if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();commitEdit(null,true);return;}
- if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();commitEdit(e.key==='Enter'?(e.shiftKey?'up':'down'):(e.shiftKey?'left':'right'));return;}
+ if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();commitEdit('step:'+(e.key==='Enter'?'r':'c')+':'+(e.shiftKey?-1:1));return;}
  if(e.key==='Escape'){e.preventDefault();cancelEdit();return;}
  if(e.key==='F2'){e.preventDefault();pointMode=!pointMode;updateStats();return;}
  if(e.key==='F4'||e.metaKey&&e.key.toLowerCase()==='t'){
@@ -557,7 +567,7 @@ window.desktop?.onMenuAction?.(name=>{
  action(name);
 });
 document.addEventListener('keydown',e=>{if(busy){e.preventDefault();return;}if(e.key==='Escape'&&fillStart){e.preventDefault();cancelFill();focusGrid();return;}if(busy||e.defaultPrevented||e.isComposing||e.keyCode===229||editSession?.composing||$('.backdrop')||$('.vba-overlay'))return;const input=textControlFocused();const ctrl=e.ctrlKey||e.metaKey;if(e.key==='Escape'&&menu){e.preventDefault();closeMenu();focusGrid();return;}if(ctrl&&e.key==='1'&&(!input||editing)){e.preventDefault();openCellFormat();return;}if(ctrl&&['s','o'].includes(e.key.toLowerCase())){e.preventDefault();action(e.key.toLowerCase()==='s'?'save':'open');return;}if(!input&&((e.altKey&&e.key==='=')||(e.metaKey&&e.shiftKey&&e.key.toLowerCase()==='t'))){e.preventDefault();action('autosum');return;}if(e.key==='F9'&&!input){e.preventDefault();action('recalculate');return;}if(input)return;if(e.key==='Escape'&&clipboard){clipboard=null;renderCopyOutline();return;}if(ctrl&&e.altKey&&e.key.toLowerCase()==='v'){e.preventDefault();pasteSpecial();return;}if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='v'){e.preventDefault();pasteSpecial();return;}if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='l'){e.preventDefault();action('filter');return;}if(e.altKey&&e.key==='ArrowDown'&&$('#validation-list-button')&&!$('#validation-list-button').hidden){e.preventDefault();openValidationList();return;}if(e.altKey&&e.key==='ArrowDown'&&selectedFilterContext().filter){const b=selectedFilterContext().filter.range;if(selection.c>=b.c1&&selection.c<=b.c2){e.preventDefault();openColumnFilter(selection.c);return;}}if(ctrl&&e.key.toLowerCase()==='t'){e.preventDefault();tableStyle();return;}if(ctrl){const key=e.key.toLowerCase(),map={z:e.shiftKey?'redo':'undo',y:'redo',c:'copy',x:'cut',b:'bold',i:'italic',u:'underline',f:'find',d:'fill-down',r:'fill-right',a:'select-all',n:'new'};if(map[key]){e.preventDefault();action(map[key]);return;}}
- if(!gridInputFocused())return;const moves={ArrowDown:[1,0],ArrowUp:[-1,0],ArrowLeft:[0,-1],ArrowRight:[0,1],Enter:[e.shiftKey?-1:1,0],Tab:[0,e.shiftKey?-1:1],PageDown:[Math.floor($('#grid').clientHeight/(25*zoom/100))-1,0],PageUp:[-Math.floor($('#grid').clientHeight/(25*zoom/100))+1,0]};if(moves[e.key]){e.preventDefault();const [dr,dc]=moves[e.key],r=e.shiftKey&&e.key.startsWith('Arrow')?selection.r2:selection.r,c=e.shiftKey&&e.key.startsWith('Arrow')?selection.c2:selection.c;if(ctrl&&e.key.startsWith('Arrow')){const u=usedBounds();select(dr>0?u.r:dr<0?0:r,dc>0?u.c:dc<0?0:c,e.shiftKey,true);}else select(dr?visibleRow(r+dr,Math.sign(dr)):r,dc?visibleCol(c+dc,Math.sign(dc)):c,e.shiftKey&&e.key.startsWith('Arrow'),true);}else if(e.key==='Home'){e.preventDefault();select(ctrl?0:selection.r,0,e.shiftKey,true);}else if(e.key==='End'){e.preventDefault();const u=usedBounds();select(u.r,u.c,e.shiftKey,true);}else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();setRaw('');}else if(e.key==='F2'){e.preventDefault();startEdit();}});
+ if(!gridInputFocused())return;if(e.key==='Tab'||e.key==='Enter'){e.preventDefault();advanceSelection(e.key==='Tab'?'c':'r',e.shiftKey?-1:1);return;}const moves={ArrowDown:[1,0],ArrowUp:[-1,0],ArrowLeft:[0,-1],ArrowRight:[0,1],Enter:[e.shiftKey?-1:1,0],Tab:[0,e.shiftKey?-1:1],PageDown:[Math.floor($('#grid').clientHeight/(25*zoom/100))-1,0],PageUp:[-Math.floor($('#grid').clientHeight/(25*zoom/100))+1,0]};if(moves[e.key]){e.preventDefault();const [dr,dc]=moves[e.key],r=e.shiftKey&&e.key.startsWith('Arrow')?selection.r2:selection.r,c=e.shiftKey&&e.key.startsWith('Arrow')?selection.c2:selection.c;if(ctrl&&e.key.startsWith('Arrow')){navigateDataEdge(dr?'r':'c',dr||dc,e.shiftKey);}else select(dr?visibleRow(r+dr,Math.sign(dr)):r,dc?visibleCol(c+dc,Math.sign(dc)):c,e.shiftKey&&e.key.startsWith('Arrow'),true);}else if(e.key==='Home'){e.preventDefault();select(ctrl?0:selection.r,0,e.shiftKey,true);}else if(e.key==='End'){e.preventDefault();const u=usedBounds();select(u.r,u.c,e.shiftKey,true);}else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();setRaw('');}else if(e.key==='F2'){e.preventDefault();startEdit();}});
 $('#grid').addEventListener('focus',()=>{if(!editing)focusGrid();});
 $('#editor').addEventListener('beforeinput',e=>{if(!editing&&e.inputType.startsWith('insert')&&!beginNativeEntry())e.preventDefault();});
 function confirmMacroExport(format){modal('매크로를 제외한 사본', '<p>이 형식에는 VBA 프로젝트와 Excel 전용 개체가 포함되지 않습니다. 매크로를 유지하려면 XLSM 저장을 사용하세요.</p>',[{label:'사본 내보내기',primary:true,action:el=>{el.remove();save(format,true);}}]);}
@@ -567,7 +577,7 @@ function renderPivotBar(){const bar=$('#pivot-bar');if(!bar)return;bar.hidden=!s
 const pivotUI=createPivotUI({getWorkbook:()=>book,getSheet:sheet,getRange:()=>{const b=bounds();if(b.r1!==b.r2||b.c1!==b.c2)return rangeLabel();const u=usedBounds();return 'A1:'+address(u.r,u.c);},checkpoint,changed,switchSheet,modal,toast});
 const vbaUI=createVbaUI({getWorkbook:()=>book,getDocumentId:documentLocation.id,commitEdit,toast,replaceWorkbook:loaded=>{const id=documentLocation.id();checkpoint();book=history.replace(loaded);documentLocation.carry(id);bindEvaluator();switchSheet(book.activeSheetId);}});
 initialized=true;renderPivotBar();renderRibbon();makeLayout();renderSheets();updateTitle();render();focusGrid();
-globalThis.sheetStudio={evaluateAsync:async addr=>{const result=await tasks.run('calculate',{refs:[[sheet().id,addr]]});return result.values[0][2];},whenIdle:async()=>{await tasks.run('calculate',{refs:[]});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));await tasks.run('calculate',{refs:[]});},flushRecovery:()=>tasks.flush(),historyStats:()=>history.stats,getCell:addr=>cloneData(sheet().cells[addr]),getWorkbook:()=>cloneData(history.raw),select:(r,c,r2=r,c2=c)=>{selection={r,c,r2,c2};ensureVisible(r,c);render();},evaluate:(addr)=>evaluateCell(book,sheet().id,addr)};
+globalThis.sheetStudio={getSelection:()=>({...selection,range:bounds()}),evaluateAsync:async addr=>{const result=await tasks.run('calculate',{refs:[[sheet().id,addr]]});return result.values[0][2];},whenIdle:async()=>{await tasks.run('calculate',{refs:[]});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));await tasks.run('calculate',{refs:[]});},flushRecovery:()=>tasks.flush(),historyStats:()=>history.stats,getCell:addr=>cloneData(sheet().cells[addr]),getWorkbook:()=>cloneData(history.raw),select:(r,c,r2=r,c2=c)=>{selection={r,c,r2,c2};ensureVisible(r,c);render();},evaluate:(addr)=>evaluateCell(book,sheet().id,addr)};
 
 window.desktop?.onBeforeClose?.(async()=>{if(commitEdit()===false)return;await tasks.flush();});
 window.addEventListener('beforeunload',event=>{if(tasks.saving){event.preventDefault();event.returnValue='';}});
