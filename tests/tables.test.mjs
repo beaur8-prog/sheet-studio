@@ -24,8 +24,8 @@ test('structured selectors accept spaces and escaped brackets, hash, apostrophe 
 test('table identity, columns, formulas, totals and changed data survive repeated XLSX roundtrips',async()=>{
   let bytes=await tableFixture();
   for(let round=0;round<3;round++){
-    const book=validateWorkbook(await readSpreadsheet(bytes,'tables.xlsx')),s=book.sheets[0],t=s.tables[0];assert.equal(t.name,'Sales');assert.equal(t.range,'A1:C4');assert.equal(t.columns[2].formula,'[@Qty]*[@Price]');assert.equal(t.columns[2].totalsFunction,'sum');assert.equal(t.style.showRowStripes,true);assert.equal(t.filter.unsupported,undefined);
-    s.cells.A3.raw='6';bytes=(await writeSpreadsheet(book)).data;const excel=new ExcelJS.Workbook();await excel.xlsx.load(bytes);const out=excel.worksheets[0];assert.equal(out.getTable('Sales').table.tableRef,'A1:C4');assert.equal(out.getCell('C3').result,30);assert.equal(out.getCell('C4').result,36);assert.equal(out.getCell('E1').result,36);assert.equal(out.getCell('C2').formula,'[@Qty]*[@Price]');
+    const book=validateWorkbook(await readSpreadsheet(bytes,'tables.xlsx')),s=book.sheets[0],t=s.tables[0];assert.equal(t.name,'Sales');assert.equal(t.range,'A1:C4');assert.equal(t.columns[2].formula,round?'Sales[[#This Row],[Qty]]*Sales[[#This Row],[Price]]':'[@Qty]*[@Price]');assert.equal(t.columns[2].totalsFunction,'sum');assert.equal(t.style.showRowStripes,true);assert.equal(t.filter.unsupported,undefined);
+    s.cells.A3.raw='6';bytes=(await writeSpreadsheet(book)).data;const excel=new ExcelJS.Workbook();await excel.xlsx.load(bytes);const out=excel.worksheets[0];assert.equal(out.getTable('Sales').table.tableRef,'A1:C4');assert.equal(out.getCell('C3').result,30);assert.equal(out.getCell('C4').result,36);assert.equal(out.getCell('E1').result,36);assert.equal(out.getCell('C2').formula,'Sales[[#This Row],[Qty]]*Sales[[#This Row],[Price]]');
   }
 });
 test('filtered tables reopen without the ExcelJS table-filter parser and retain manual row hiding',async()=>{

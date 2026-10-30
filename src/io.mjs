@@ -358,22 +358,23 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     for(const [r,id] of Object.entries(sheet.xlsxStyleDefaults?.rows||{})){const row=target.getRow(+r+1+(pageFilters.length?pageFilters.length+1:0));row.style=plainCopy(workbook.xlsxStyles[id].style);row.height=(sheet.rowHeights?.[r]||sheet.defaultRowHeight||25)*3/4;}
     const conditionalSheet=pageFilters.length?cloneData(sheet):sheet;if(pageFilters.length)for(let i=0;i<pageFilters.length+1;i++)shiftWorksheetFeatures(conditionalSheet,'r',0,1);exportConditional(target,conditionalSheet);
     pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
-    const tableRanges=(sheet.tables||[]).map(table=>tableBounds(table.range));
+    const tableRanges=(sheet.tables||[]).map(table=>({...tableBounds(table.range),table}));
     for (const [addr, cell] of Object.entries(sheet.cells || {})) {
       if (!coordinates(addr)) continue;
       const pos=coordinates(addr), offset=pageFilters.length?pageFilters.length+1:0;
       const targetCell = target.getCell(offset?address(pos.col,pos.row+offset):addr);
+      const contextTable=tableRanges.find(b=>pos.row>=b.r1&&pos.row<=b.r2&&pos.col>=b.c1&&pos.col<=b.c2)?.table;
       if (typeof cell.raw === 'string' && cell.raw.startsWith('=')) {
         const result = cachedResult(evaluate, workbook, sheet, addr, cell,detailed);
         let formula=cell.raw;
         for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
         const original=cell.xlsxFormula,keepOriginal=original?.raw===formula;
-        targetCell.value = { formula: keepOriginal?original.formula:formulaForXlsx(formula,original?.formula).slice(1),...(original?.shareType==='array'?{shareType:'array',ref:original.ref}:{}), ...(result === undefined ? {} : { result }) };
+        targetCell.value = { formula: formulaForXlsx(keepOriginal?'='+original.formula:formula,original?.formula,contextTable).slice(1),...(original?.shareType==='array'?{shareType:'array',ref:original.ref}:{}), ...(result === undefined ? {} : { result }) };
       } else {
         const original=cell.xlsxValue;targetCell.value=original?.raw===cell.raw?plainCopy(original.value):toScalar(cell.raw);
         if(original?.value?.hyperlink&&typeof targetCell.value==='string'&&targetCell.value)targetCell.value={...plainCopy(original.value),text:targetCell.value};
       }
-      const tableStyled=tableRanges.some(b=>pos.row>=b.r1&&pos.row<=b.r2&&pos.col>=b.c1&&pos.col<=b.c2);
+      const tableStyled=!!contextTable;
       const defaults=sheet.xlsxStyleDefaults,inheritKey=cell.xlsxStyle!==undefined||cell.xlsxNormal?'':String(defaults?.columns?.[pos.col]??'')+'/'+String(defaults?.rows?.[pos.row]??''),visible=worksheetCellStyle(workbook,sheet,pos.row,pos.col,{table:false});
       const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!visible.format||visible.format==='general');
       const key=(tableStyled?'T:':'N:')+String(cell.xlsxStyle??'')+':'+inheritKey+':'+!!cell.xlsxNormal+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);

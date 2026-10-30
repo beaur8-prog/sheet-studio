@@ -6,7 +6,7 @@ import {wholeNodeEndpoint,wholeReferences} from './whole-references.mjs';
 import {sparseFunction} from './sparse-functions.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
 import {validateTables,filteredRowsForSheet,tableBounds} from './table-schema.mjs';
-import {readStructuredToken,resolveStructuredReference,rewriteStructuredSelector} from './table-references.mjs';
+import {readStructuredToken,resolveStructuredReference,rewriteStructuredSelector,structuredParts,escapeColumn} from './table-references.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 import {validatePreservedData,validatePreservedXML} from './xlsx-preservation-schema.mjs';
 import {validateExtraSheetFeatures,validateDocumentProperties} from './worksheet-extra.mjs';
@@ -923,12 +923,21 @@ export function createEvaluator(workbook, sheetId) {
   const detailed=ref=>detailedGuard(()=>{ctx.steps=0;return runCalculation(ctx,()=>readCell(ctx,ctx.sheet,ref));}),evaluate=ref=>detailed(ref).value;evaluate.result=detailed;evaluate.isComputed=ref=>{const p=parseAddress(ref);if(!p)return false;const external=externalEvaluators.get(unwrap(ctx.workbook));return external?.isComputed?external.isComputed(ctx.sheet.id,ref):!!arraysFor(ctx,ctx.sheet).at(p);};return evaluate;
 }
 
-export function formulaForXlsx(formula,originalFormula) {
+export function formulaForXlsx(formula,originalFormula,contextTable) {
   const offset=formula.startsWith('=')?1:0;
   let tokens;try{tokens=tokenize(formula.slice(offset));}catch{return formula;}
   const prefixes=new Map();if(originalFormula){try{const original=tokenize(originalFormula.replace(/^=/,''));original.forEach((token,i)=>{if(token.type==='word'&&original[i+1]?.value==='('&&/_(?:xlfn|xlws)\./i.test(token.value))prefixes.set(normalizeFunctionName(token.value),token.value);});}catch{}}
   const patches=[];
   tokens.forEach((token,i)=>{
+    if(token.type==='structured'){
+      const parts=structuredParts(token.value),previous=tokens[i-1],qualified=previous?.type==='word'&&previous.end===token.start,external=['word','sheet'].includes(tokens[i+1]?.type)&&tokens[i+2]?.value==='!';
+      if(!parts||external)return;
+      const local=!qualified&&contextTable&&parts.columns.every(column=>contextTable.columns.some(c=>c.name.toLocaleLowerCase()===column.name.toLocaleLowerCase()));
+      let selector=token.value;
+      if(parts.flags.size===1&&parts.flags.has('#thisrow')){const names=parts.columns.map(column=>'['+escapeColumn(column.name)+']');selector=names.length?'[[#This Row],'+names.join(parts.span?':':',')+']':'[#This Row]';}
+      const value=(local?contextTable.name:'')+selector;
+      if(value!==token.value)patches.push({at:token.start+offset,end:token.end+offset,value});return;
+    }
     if(token.type!=='word'||tokens[i+1]?.value!=='(')return;
     const original=prefixes.get(normalizeFunctionName(token.value));
     if(original&&!/_(?:xlfn|xlws)\./i.test(token.value))patches.push({at:token.start+offset,end:token.end+offset,value:original});
