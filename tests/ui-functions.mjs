@@ -5,6 +5,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import platform from '../scripts/platform.cjs';
 import {createWorkbook} from '../src/engine.mjs';
+import {FUNCTION_CATALOG} from '../src/function-catalog.mjs';
 const root=path.resolve(import.meta.dirname,'..'),packaged=process.argv.includes('--packaged'),version=createRequire(import.meta.url)('../package.json').version;
 const env={...process.env,SHEET_STUDIO_DATA:path.join(root,'.package/functions-'+Date.now())};delete env.ELECTRON_RUN_AS_NODE;
 const app=await _electron.launch({executablePath:process.env.SHEET_STUDIO_EXECUTABLE||(packaged?platform.packagedExecutable(root,version):path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix())),args:packaged?[]:[root],env});
@@ -20,7 +21,8 @@ try {
   await page.getByRole('button',{name:'수식',exact:true}).click();await go('C1');
   await page.getByRole('button',{name:'함수 삽입',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'함수 라이브러리'});await dialog.waitFor();
-  assert.equal(await page.locator('#function-count').innerText(),'379개 함수');
+  assert.equal(await page.locator('#function-count').innerText(),FUNCTION_CATALOG.length+'개 함수');
+  await page.locator('#function-search').fill('LET');assert.equal(await page.locator('#function-list [role=option]').count(),1);assert.match(await page.locator('#function-detail').innerText(),/name1/);await page.locator('#function-search').fill('');
   await page.locator('#function-category').selectOption('재무');await page.locator('#function-search').fill('PMT');
   assert.equal(await page.locator('#function-list [role=option]').count(),5);
   await page.locator('#function-search').fill('no_such_function');assert.equal(await page.getByRole('button',{name:'수식에 삽입'}).isDisabled(),true);
@@ -47,4 +49,4 @@ try {
   await draft('C8','=SU');await page.locator('#editor').dispatchEvent('compositionstart');assert.equal(await page.locator('#function-assist').isVisible(),false);await page.locator('#editor').dispatchEvent('keydown',{key:'Tab',isComposing:true});assert.equal(await raw('C8'),'');await page.locator('#editor').dispatchEvent('compositionend');await page.locator('#editor').press('Escape');await page.locator('#editor').press('Escape');
   await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('.cell').first().waitFor();assert.equal(await value('C1'),12);assert.equal(await value('C3'),0.5);assert.deepEqual(errors,[]);
   console.log('Function UI passed: library/category/search/empty results, syntax/examples, draft insert/undo, keyboard and pointer completion, argument help, formula bar, nested insertion, Escape, IME, recalculation and persistence.');
-} catch(error){await page.screenshot({path:path.join(root,'test-results/function-failure.png')});throw error;} finally {await app.close();}
+} catch(error){await page.screenshot({path:path.join(root,'test-results/function-failure.png')});throw error;} finally {await app.close();await fs.rm(env.SHEET_STUDIO_DATA,{recursive:true,force:true});}
