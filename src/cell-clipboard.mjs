@@ -9,6 +9,7 @@ export function captureClipboardStyles(book,sheet,data,rows,columns){
     const row=rows[r],col=columns[c],ref=address(row,col),record=sheet.cells[ref]||{raw:''},copied=data[r][c];
     const original=book.xlsxStyles?.[record.xlsxStyle],templates=original||record.xlsxNormal?[]:inheritedStyles(book,sheet,row,col);
     const full=Object.assign({},baseStyle,normal?.style,...(original?[original.style]:templates.map(t=>t.style)));
+    if(record.xlsxProtection)full.protection={...full.protection,...record.xlsxProtection};
     const bare={...sheet,cells:{[ref]:{...record,style:{}}}},baseline={...defaults,...worksheetCellStyle(book,bare,row,col,{table:false})};
     const entry=JSON.parse(JSON.stringify({style:full,baseline})),key=JSON.stringify(entry);
     if(!known.has(key)){known.set(key,styles.length);styles.push(entry);}

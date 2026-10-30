@@ -1,3 +1,4 @@
+import {stripRichTextFormat} from './cell-format-reset.mjs';
 import {cloneData} from './clone.mjs';
 import {address,parseAddress,shiftFormula,transposeFormula,numberFormatKind,formulaForXlsx} from './engine.mjs';
 import {tableBounds,overlaps} from './table-schema.mjs';
@@ -9,6 +10,11 @@ export function scalarRaw(value,{error=false}={}) {
   const text=String(value);
   // Preserve text identity (identifiers, formula-looking text and apostrophes).
   return text && (/^[=']/.test(text)||!Number.isNaN(Number(text))||/^(TRUE|FALSE)$/i.test(text)||!error&&isErrorText(text))?"'"+text:text;
+}
+export function formatCellRecord(old,source){
+ const cell={...cloneData(old),style:cloneData(source.style||{})};
+ for(const key of ['xlsxStyle','xlsxNormal','xlsxProtection']){if(source[key]!==undefined)cell[key]=cloneData(source[key]);else delete cell[key];}
+ return stripRichTextFormat(cell);
 }
 export function pastePlan(sheet, clip, start, options={}) {
   const {mode='all',transpose=false,skipBlanks=false,operation='none',selection}=options;
@@ -32,7 +38,7 @@ export function pastePlan(sheet, clip, start, options={}) {
     const sr=transpose?c%w:r%h,sc=transpose?r%h:c%w,source=clip.data[sr]?.[sc]||{raw:''};
     if(skipBlanks&&source.raw==='')continue;
     const key=address(targetRows[r],targetCols[c]),old=sheet.cells[key]||{raw:''};let cell;
-    if(mode==='formats'){cell={...cloneData(old),style:cloneData(source.style||{})};if(source.xlsxStyle!==undefined)cell.xlsxStyle=source.xlsxStyle;else delete cell.xlsxStyle;if(source.xlsxNormal)cell.xlsxNormal=true;else delete cell.xlsxNormal;}
+    if(mode==='formats')cell=formatCellRecord(old,source);
     else {
       cell=mode==='all'&&!clip.plainText?cloneData(source):cloneData(old);
       let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw,{error:clip.errors?.[sr]?.[sc]}):source.raw;
