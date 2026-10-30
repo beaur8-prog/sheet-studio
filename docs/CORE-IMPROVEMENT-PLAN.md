@@ -33,7 +33,7 @@
 - [x] 우선순위·완료 기준 작성
 - [x] 1차 재현과 수정 — 보존된 Excel 인쇄 설정을 실제 출력에 연결
 - [x] 관련 단위·UI·파일 왕복 검증 — 로컬 347개 통과/1개 제외, 인쇄 UI 3개 묶음 및 4페이지 PDF 확인
-- [ ] Git 반영 및 결과 기록
+- [x] Git main 반영 및 결과 기록 — Windows·Mac·Ubuntu CI 통과, Mac 개발 앱 실행, 공개 배포 없음
 
 
 ## 1차 수정 — 0.7.30 개발
@@ -47,3 +47,5 @@
 다음 차수는 1단계의 계산·파일 왕복 경계 사례를 계속 보강하고, 2단계의 동적 배열을 엔진·편집·파일 저장까지 함께 연결한다. 머리글/바닥글, 차트의 원래 시트 위치와 페이지 설정 편집 UI는 3단계에 남아 있다. 이번 변경으로 세 우선순위 전체가 완료된 것은 아니다.
 
 근거: [인쇄 영역](https://support.microsoft.com/en-us/excel/set-or-clear-a-print-area-on-a-worksheet), [반복 제목](https://support.microsoft.com/en-us/excel/repeat-specific-rows-or-columns-on-every-printed-page), [페이지 맞춤과 수동 나눔](https://support.microsoft.com/en-au/excel/scale-a-worksheet), [페이지 순서](https://support.microsoft.com/en-au/excel/page-setup).
+
+검증 결과: [최종 CI](https://github.com/beaur8-prog/sheet-studio/actions/runs/41071955387), [상세 기록](../VALIDATION.md). 최종 앱 소스는 `8a900e9`이며 뒤의 문서 정리 커밋은 앱 코드를 바꾸지 않는다.
