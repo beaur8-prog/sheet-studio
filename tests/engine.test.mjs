@@ -162,7 +162,8 @@ test('formula errors and hostile inputs are bounded without running JavaScript',
   assert.equal(calc('=XFE1'), '#REF!');
   assert.equal(calc('=Missing(1)'), '#NAME?');
   assert.equal(calc('=foo'), '#NAME?');
-  assert.equal(calc('=SUM(A1:XFD1048576)'), '#NUM!');
+  assert.equal(calc('=SUM(A1:XFD1048576)'), 0);
+  assert.equal(calc('=SUMPRODUCT(A1:XFD1048576)'), '#NUM!');
   assert.equal(calc('=1+'), '#VALUE!');
   assert.equal(calc('=globalThis.process.exit()'), '#NAME?');
   assert.equal(calc('=' + '('.repeat(200) + '1' + ')'.repeat(200)), '#VALUE!');

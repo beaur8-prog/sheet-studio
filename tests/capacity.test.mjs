@@ -18,11 +18,12 @@ test('one million recorded cells survive JSON and the document limit is shared a
   restored=null;
 });
 
-test('million-cell aggregates calculate completely and a larger range still fails explicitly', () => {
+test('million-cell aggregates and larger sparse references avoid materializing trailing blanks', () => {
   const book=createWorkbook();
   for(let i=1;i<=1_000_000;i++)book.sheets[0].cells['A'+i]={raw:'1'};
   assert.equal(evaluateFormula(book,book.sheets[0].id,'=SUM(A1:A1000000)'),1_000_000);
-  assert.equal(evaluateFormula(book,book.sheets[0].id,'=SUM(A1:A1000001)'),'#NUM!');
+  assert.equal(evaluateFormula(book,book.sheets[0].id,'=SUM(A1:A1000001)'),1_000_000);
+  assert.equal(evaluateFormula(book,book.sheets[0].id,'=SUMPRODUCT(A1:A1000001)'),'#NUM!');
 });
 
 test('background sort logic preserves sparse cells, stable ties and relative formula references',()=>{

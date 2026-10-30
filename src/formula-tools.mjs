@@ -1,4 +1,6 @@
 import {address,parseAddress} from './engine.mjs';
+import {wholeReferences} from './whole-references.mjs';
+import {readStructuredToken} from './table-references.mjs';
 
 const LIMIT_ROWS=1048576,LIMIT_COLS=16384;
 export const referenceColors=['#2463d3','#c23b33','#8b47ad','#168153','#b16b08','#168494'];
@@ -8,7 +10,7 @@ export const referenceColors=['#2463d3','#c23b33','#8b47ad','#168153','#b16b08',
 export function formulaReferences(formula){
   if(!formula.startsWith('='))return [];
   const tokens=[],pattern=/"(?:[^"]|"")*(?:"|$)|'(?:[^']|'')*(?:'|$)|[\p{L}\p{N}_.$\\]+(?=!)|[\p{L}_$\\][\p{L}\p{N}_.$\\]*|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|\S/gu;
-  for(const m of formula.matchAll(pattern))tokens.push({text:m[0],start:m.index,end:m.index+m[0].length});
+  let skip=0;for(const m of formula.matchAll(pattern)){if(m.index<skip)continue;let text=m[0];if(text==='['){const structured=readStructuredToken(formula,m.index);skip=structured?.end||formula.length;text=formula.slice(m.index,skip);tokens.push({text,type:'structured',value:text,start:m.index,end:skip});continue;}const type=text.startsWith('"')?'string':text.startsWith("'")?'sheet':/^\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(text)?'number':/^[\p{L}_$\\]/u.test(text)?'word':'op',value=type==='sheet'?text.slice(1,-1).replaceAll("''","'"):type==='number'?Number(text):text;tokens.push({text,type,value,start:m.index,end:m.index+text.length});}
   const result=[];
   const read=(i,inherited)=>{
     let t=tokens[i],sheet=inherited,start=t?.start;
@@ -24,7 +26,8 @@ export function formulaReferences(formula){
     if(b&&String(b.sheet||'').toLowerCase()!==String(a.sheet||'').toLowerCase()){i=b.next;continue;}
     result.push({start:a.start,end:b?.end??a.end,sheet:a.sheet,r1:Math.min(a.pos.r,b?.pos.r??a.pos.r),r2:Math.max(a.pos.r,b?.pos.r??a.pos.r),c1:Math.min(a.pos.c,b?.pos.c??a.pos.c),c2:Math.max(a.pos.c,b?.pos.c??a.pos.c),text:formula.slice(a.start,b?.end??a.end)});i=b?.next??a.next;
   }
-  return result;
+  for(const range of wholeReferences(tokens)){const {first,last,axis,limit}=range;if(first.index>=limit||last.index>=limit||String(first.sheet||'').toLocaleLowerCase()!==String(last.sheet||'').toLocaleLowerCase())continue;const low=Math.min(first.index,last.index),high=Math.max(first.index,last.index);result.push({start:first.start,end:last.token.end,sheet:first.sheet,r1:axis==='c'?0:low,r2:axis==='c'?LIMIT_ROWS-1:high,c1:axis==='c'?low:0,c2:axis==='c'?high:LIMIT_COLS-1,text:formula.slice(first.start,last.token.end),axis});}
+  return result.sort((a,b)=>a.start-b.start).slice(0,128);
 }
 
 export function referenceSlot(formula,start,end=start){
@@ -39,6 +42,7 @@ export function referenceSlot(formula,start,end=start){
 
 export function cycleReference(formula,start,end=start){
   const slot=referenceSlot(formula,start,end);if(!slot||slot.start===slot.end)return null;
+  const whole=formulaReferences(formula).find(r=>r.axis&&r.start===slot.start&&r.end===slot.end);if(whole){const text=whole.text,coordinates=text.replace(/'(?:[^']|'')*'!|[\p{L}\p{N}_.$\\]+!/gu,''),locked=coordinates.trim().startsWith('$'),replacement=text.replace(/'(?:[^']|'')*'(?=!)|[\p{L}\p{N}_.$\\]+(?=!)|\$?([A-Z]{1,3}|[1-9]\d*)/giu,(m,coordinate)=>coordinate?(locked?'':'$')+coordinate.toUpperCase():m);return {formula:formula.slice(0,slot.start)+replacement+formula.slice(slot.end),start:slot.start,end:slot.start+replacement.length};}
   const text=formula.slice(slot.start,slot.end),addresses=text.replace(/'(?:[^']|'')*'!|[\p{L}_][\p{L}\p{N}_.]*!/gu,''),first=/^(\$?)([A-Z]{1,3})(\$?)([1-9]\d*)/i.exec(addresses);
   if(!first)return null;
   const state=(first[1]?2:0)+(first[3]?1:0),next={0:3,3:1,1:2,2:0}[state];

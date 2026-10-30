@@ -1,6 +1,8 @@
 import {validateStoredParts} from './xlsx-part-store.mjs';
 import {validateSheetKind} from './sheet-kinds.mjs';
 import {validateDrawings} from './xlsx-drawings.mjs';
+import {wholeNodeEndpoint,wholeReferences} from './whole-references.mjs';
+import {sparseFunction} from './sparse-functions.mjs';
 import {validateTables,filteredRowsForSheet} from './table-schema.mjs';
 import {readStructuredToken,resolveStructuredReference,rewriteStructuredSelector} from './table-references.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
@@ -207,7 +209,7 @@ class Parser {
   }
   referenceRange(){
     let node=this.primary();
-    while(this.accept(':')){const right=this.primary();if(node.sheet&&right.type==='ref'&&!right.sheet)right.sheet=node.sheet;node={type:'referenceOp',op:':',left:node,right};}
+    while(this.accept(':')){const right=this.primary(),a=wholeNodeEndpoint(node),b=wholeNodeEndpoint(right);if(a?.axis&&a.axis===b?.axis){if(a.index>=a.limit||b.index>=b.limit)fail('#REF!');if(a.sheet&&b.sheet&&a.sheet.toLocaleLowerCase()!==b.sheet.toLocaleLowerCase())fail('#REF!');node={type:'whole',axis:a.axis,start:a.index,end:b.index,sheet:a.sheet||b.sheet};}else{if(node.sheet&&right.type==='ref'&&!right.sheet)right.sheet=node.sheet;node={type:'referenceOp',op:':',left:node,right};}}
     return node;
   }
   referenceExpression() {
@@ -253,6 +255,7 @@ class Parser {
       sheet = reference;
       const ref = this.tokens[this.at++];
       if (ref.type === 'error') return { type: 'error', value: ref.value };
+      if(ref.type==='number')return {type:'axisEndpoint',value:ref.value,sheet};
       if (ref.type !== 'word') fail('#REF!');
       reference = ref.value;
     } else if (token.type === 'sheet') fail('#NAME?');
@@ -293,7 +296,7 @@ function withNamedNode(node,ctx,callback){
     const formula=String(named.formula).replace(/^=/,''),tokens=tokenize(formula);
     // Imported relative names have no trustworthy definition origin in our
     // model. Preserve them, but do not silently calculate from the wrong cell.
-    if(tokens.some((t,i)=>t.type==='word'&&parseAddress(t.value)&&!['(','!'].includes(tokens[i+1]?.value)&&!/^\$[A-Za-z]+\$\d+$/.test(t.value)))fail('#NAME?');
+    if(tokens.some((t,i)=>t.type==='word'&&parseAddress(t.value)&&!['(','!'].includes(tokens[i+1]?.value)&&!/^\$[A-Za-z]+\$\d+$/.test(t.value))||wholeReferences(tokens).some(r=>!r.first.locked||!r.last.locked))fail('#NAME?');
     definition=new Parser(formula).parse();cache.set(id,definition);
   }
   active.add(id);const previous=ctx.sheet;if(named.sheetId)ctx.sheet=scope;
@@ -388,6 +391,8 @@ function evaluateNodeUncached(node, ctx, depth) {
   const evaluate = child => evaluateNode(child, ctx, depth + 1);
   if (node.type === 'literal') return node.value;
   if (node.type === 'error') fail(node.value);
+  if(node.type==='axisEndpoint')fail('#REF!');
+  if(node.type==='whole'){const ref=referenceMetadata(node,ctx,evaluate);return getRange(ctx,ref.sheet,ref.top,ref.left,ref.rows,ref.cols);}
   if(node.type==='name')return withNamedNode(node,ctx,definition=>evaluateNode(definition,ctx,depth+1));
   if(node.type==='structured'){const ref=resolveStructuredReference(ctx.workbook,ctx.sheet,ctx.position,node.tableName,node.selector,node.sheet);if(ref.error)fail(ref.error);if(ref.empty)return {...ref,kind:'range',values:[]};if(ref.areas){const values=[];for(const area of ref.areas)for(const value of getRange(ctx,area.sheet,area.top,area.left,area.rows,area.cols).values)values.push(value);return {kind:'range',rows:values.length,cols:1,values};}return getRange(ctx,ref.sheet,ref.top,ref.left,ref.rows,ref.cols);}
   if (node.type === 'ref') {
@@ -562,12 +567,46 @@ function getRange(ctx,sheet,top,left,rows,cols) {
   for(let i=result.values.length;i<rows*cols;i++)result.values.push(readCell(ctx,sheet,address(top+Math.floor(i/cols),left+i%cols)));
   return result;
 }
+function getSparseRange(ctx,ref,{subtotalCode}={}){
+  const {sheet,top,left,rows,cols}=ref;if(!sheet||!validPosition(top,left)||rows<1||cols<1||!validPosition(top+rows-1,left+cols-1))fail('#REF!');
+  const indexes=ctx.sparseIndexes??=new Map();let cells=indexes.get(sheet.id);if(!cells){cells=[];const source=unwrap(sheet.cells);for(const key in source)if(source[key].raw){const p=parseAddress(key);cells.push({key,...p});}cells.sort((a,b)=>a.r-b.r||a.c-b.c);indexes.set(sheet.id,cells);}
+  const key=['sparse',sheet.id,top,left,rows,cols,subtotalCode??''].join(':'),complete=ctx.sparseRanges??=new Map();if(complete.has(key))return complete.get(key);
+  const cache=ctx.frame?.ranges;let result=cache?.get(key);if(!result){result={...ref,kind:'range',values:[],indices:[],next:0};cache?.set(key,result);}
+  const hidden=subtotalCode===undefined?null:(result.hidden??=filteredRowsForSheet(sheet));
+  for(;result.next<cells.length;result.next++){const cell=cells[result.next];if(cell.r<top||cell.r>=top+rows||cell.c<left||cell.c>=left+cols)continue;if(hidden&&(hidden.has(cell.r)||subtotalCode>100&&sheet.rowHeights?.[cell.r]===0||/^\s*=\s*(?:_xlfn\.)?(?:SUBTOTAL|AGGREGATE)\s*\(/i.test(sheet.cells[cell.key].raw)))continue;const value=readCell(ctx,sheet,cell.key);result.indices.push((cell.r-top)*cols+cell.c-left);result.values.push(value);}
+  if(result.values.some(v=>v instanceof FormulaError&&v.code==='#CYCLE!'))return result;
+  while(complete.size&&((ctx.sparseCount||0)+result.values.length>MAX_FORMULA_CELLS||complete.size>=50)){const oldest=complete.keys().next().value;ctx.sparseCount-=complete.get(oldest).values.length;complete.delete(oldest);}ctx.sparseCount=(ctx.sparseCount||0)+result.values.length;complete.set(key,result);return result;
+}
+function indirectNode(ctx,nodes,evaluate){
+  if(nodes.length<1||nodes.length>2)fail('#VALUE!');let text=textual(evaluate(nodes[0]));const a1=nodes.length<2||logical(evaluate(nodes[1]));
+  if(!a1){const convert=ref=>{const m=/^R(\[-?\d+\]|\d*)C(\[-?\d+\]|\d*)$/i.exec(ref);if(!m)fail('#REF!');const pos=(p,base)=>p.startsWith('[')?base+Number(p.slice(1,-1)):p?Number(p)-1:base;return address(pos(m[1],ctx.position.r),pos(m[2],ctx.position.c));};const split=text.lastIndexOf('!');text=text.slice(0,split+1)+text.slice(split+1).split(':').map(convert).join(':');}
+  let node;try{node=new Parser(text).parse();}catch{fail('#REF!');}if(!['ref','range','whole','referenceOp','name','structured'].includes(node.type))fail('#REF!');return node;
+}
+function referenceCallMetadata(node,ctx,evaluate){
+  const name=normalizeFunctionName(node.name),nodes=node.args,metadata=child=>referenceMetadata(child,ctx,evaluate),integer=child=>Math.trunc(numeric(evaluate(child)));
+  if(name==='INDIRECT'){try{return metadata(indirectNode(ctx,nodes,evaluate));}catch(error){if(error instanceof FormulaError&&['#NAME?','#VALUE!'].includes(error.code))fail('#REF!');throw error;}}
+  if(name==='OFFSET'){
+    if(nodes.length<3||nodes.length>5)fail('#VALUE!');const ref=metadata(nodes[0]);if(!ref.sheet)fail('#VALUE!');const args=nodes.slice(1).map((node,i)=>i>=2&&node.omitted?undefined:integer(node)),next={...ref,top:ref.top+args[0],left:ref.left+args[1],rows:args[2]??ref.rows,cols:args[3]??ref.cols};if(!validPosition(next.top,next.left)||next.rows<1||next.cols<1||!validPosition(next.top+next.rows-1,next.left+next.cols-1))fail('#REF!');return next;
+  }
+  if(name==='INDEX'){
+    if(nodes.length<2||nodes.length>4)fail('#VALUE!');const areas=[],collect=node=>{if(node.type==='referenceOp'&&node.op===','){collect(node.left);collect(node.right);}else areas.push(metadata(node));};collect(nodes[0]);const area=nodes.length>3?integer(nodes[3]):1;if(area<1||area>areas.length)fail('#REF!');const ref=areas[area-1];if(!ref.sheet||areas.some(a=>a.sheet?.id!==ref.sheet.id))fail('#VALUE!');let row=integer(nodes[1]),col=nodes.length>2?integer(nodes[2]):1;if(nodes.length===2&&ref.rows===1){col=row;row=1;}if(row<0||col<0||row>ref.rows||col>ref.cols)fail('#REF!');return {...ref,top:ref.top+(row?row-1:0),left:ref.left+(col?col-1:0),rows:row?1:ref.rows,cols:col?1:ref.cols};
+  }
+  return null;
+}
+function tryReferenceMetadata(node,ctx,evaluate){
+  if(node.type==='name')return withNamedNode(node,ctx,definition=>tryReferenceMetadata(definition,ctx,evaluate));
+  if(['ref','range','whole','structured'].includes(node.type))return referenceMetadata(node,ctx,evaluate);
+  if(node.type==='referenceOp'){if(node.op===','||!tryReferenceMetadata(node.left,ctx,evaluate)||!tryReferenceMetadata(node.right,ctx,evaluate))return null;return referenceMetadata(node,ctx,evaluate);}
+  if(node.type==='call'&&['INDEX','OFFSET','INDIRECT'].includes(normalizeFunctionName(node.name))){if(normalizeFunctionName(node.name)==='INDEX'&&!(node.args[0]?.type==='referenceOp'&&node.args[0].op===',')&&!tryReferenceMetadata(node.args[0],ctx,evaluate)?.sheet)return null;return referenceCallMetadata(node,ctx,evaluate);}return null;
+}
 // Metadata functions must not read cells: ROW(A1) in A1 is not a cycle.
 function referenceMetadata(node,ctx,evaluate){
+    if(node.type==='call'&&['INDEX','OFFSET','INDIRECT'].includes(normalizeFunctionName(node.name))){const ref=tryReferenceMetadata(node,ctx,evaluate);if(ref)return ref;}
+    if(node.type==='whole'){const column=node.axis==='c',low=Math.min(node.start,node.end),high=Math.max(node.start,node.end);return {sheet:resolveSheet(ctx,node.sheet),top:column?0:low,left:column?low:0,rows:column?MAX_ROWS:high-low+1,cols:column?high-low+1:MAX_COLS,entire:true};}
     if(node.type==='name')return withNamedNode(node,ctx,definition=>referenceMetadata(definition,ctx,evaluate));
     if(node.type==='structured'){const ref=resolveStructuredReference(ctx.workbook,ctx.sheet,ctx.position,node.tableName,node.selector,node.sheet);if(ref.error)fail(ref.error);if(ref.areas)fail('#VALUE!');return ref;}
     if(node.type==='ref')return {sheet:resolveSheet(ctx,node.sheet),top:node.pos.r,left:node.pos.c,rows:1,cols:1};
-    if(node.type==='referenceOp'&&node.op!==','){const a=referenceMetadata(node.left,ctx,evaluate),b=referenceMetadata(node.right,ctx,evaluate);if(!a.sheet||a.sheet.id!==b.sheet?.id)fail('#REF!');const intersection=node.op===' ',top=(intersection?Math.max:Math.min)(a.top,b.top),left=(intersection?Math.max:Math.min)(a.left,b.left),bottom=(intersection?Math.min:Math.max)(a.top+a.rows-1,b.top+b.rows-1),right=(intersection?Math.min:Math.max)(a.left+a.cols-1,b.left+b.cols-1);if(bottom<top||right<left)fail('#NULL!');return {sheet:a.sheet,top,left,rows:bottom-top+1,cols:right-left+1};}
+    if(node.type==='referenceOp'&&node.op!==','){const a=referenceMetadata(node.left,ctx,evaluate),b=referenceMetadata(node.right,ctx,evaluate);if(!a.sheet||a.sheet.id!==b.sheet?.id)fail('#REF!');const intersection=node.op===' ',top=(intersection?Math.max:Math.min)(a.top,b.top),left=(intersection?Math.max:Math.min)(a.left,b.left),bottom=(intersection?Math.min:Math.max)(a.top+a.rows-1,b.top+b.rows-1),right=(intersection?Math.min:Math.max)(a.left+a.cols-1,b.left+b.cols-1);if(bottom<top||right<left)fail('#NULL!');return {sheet:a.sheet,top,left,rows:bottom-top+1,cols:right-left+1,...(a.entire||b.entire?{entire:true}:{})};}
     if(node.type==='range')return {sheet:resolveSheet(ctx,node.sheet),top:Math.min(node.start.r,node.end.r),left:Math.min(node.start.c,node.end.c),rows:Math.abs(node.start.r-node.end.r)+1,cols:Math.abs(node.start.c-node.end.c)+1};
     const value=evaluate(node);if(isRef(value)||isRange(value))return value;return fail('#VALUE!');
 }
@@ -583,7 +622,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
   }
   if(name==='SHEET'){
     let sheet=ctx.sheet;
-    if(nodes.length){const v=evaluate(nodes[0]);sheet=v?.sheet||ctx.workbook.sheets.find(s=>s.name.toLowerCase()===textual(v).toLowerCase());if(!sheet)fail('#N/A');}
+    if(nodes.length){const ref=tryReferenceMetadata(nodes[0],ctx,evaluate);if(ref?.sheet)sheet=ref.sheet;else{const v=evaluate(nodes[0]);sheet=v?.sheet||ctx.workbook.sheets.find(s=>s.name.toLowerCase()===textual(v).toLowerCase());if(!sheet)fail('#N/A');}}
     return ctx.workbook.sheets.indexOf(sheet)+1;
   }
   if(name==='SHEETS'){if(!nodes.length)return ctx.workbook.sheets.length;const ref=metadata(nodes[0]);return ref.sheet?1:fail('#REF!');}
@@ -595,20 +634,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
     if(args.length>4){const sheet=textual(args[4]);result=(/^[\p{L}_][\p{L}\p{N}_]*$/u.test(sheet)&&!parseAddress(sheet)?sheet:`'${sheet.replace(/'/g,"''")}'`)+ '!'+result;}
     return result;
   }
-  if(name==='INDIRECT'){
-    let text=textual(evaluate(nodes[0]));const a1=nodes.length<2||logical(evaluate(nodes[1]));
-    if(!a1){
-      const convert=ref=>{const m=/^R(\[-?\d+\]|\d*)C(\[-?\d+\]|\d*)$/i.exec(ref);if(!m)fail('#REF!');const pos=(p,base)=>p.startsWith('[')?base+Number(p.slice(1,-1)):p?Number(p)-1:base;return address(pos(m[1],ctx.position.r),pos(m[2],ctx.position.c));};
-      const split=text.lastIndexOf('!');text=text.slice(0,split+1)+text.slice(split+1).split(':').map(convert).join(':');
-    }
-    let node;try{node=new Parser(text).parse();}catch{fail('#REF!');}
-    if(!['ref','range','referenceOp','name','structured'].includes(node.type))fail('#REF!');const value=evaluate(node);if(!isRef(value)&&!(isRange(value)&&value.sheet))fail('#REF!');return value;
-  }
-  if(name==='OFFSET'){
-    const ref=metadata(nodes[0]);if(!ref.sheet)fail('#VALUE!');
-    const args=nodes.slice(1).map(node=>Math.trunc(numeric(evaluate(node))));
-    return getRange(ctx,ref.sheet,ref.top+args[0],ref.left+args[1],args[2]??ref.rows,args[3]??ref.cols);
-  }
+  if(name==='INDIRECT'||name==='OFFSET'){const ref=referenceCallMetadata({name,args:nodes},ctx,evaluate);return getRange(ctx,ref.sheet,ref.top,ref.left,ref.rows,ref.cols);}
   if(name==='SUBTOTAL'){
     const code=Math.trunc(numeric(evaluate(nodes[0]))),index=code>100?code-100:code;
     const target=['','AVERAGE','COUNT','COUNTA','MAX','MIN','PRODUCT','STDEV.S','STDEV.P','SUM','VAR.S','VAR.P'][index];
@@ -649,6 +675,9 @@ function callFunction(name, nodes, evaluate, ctx) {
       return evaluate(nodes[1]);
     }
   }
+  if(name==='ISREF'){arity(1);try{const ref=tryReferenceMetadata(nodes[0],ctx,evaluate);if(ref?.sheet)return true;}catch(error){if(!(error instanceof FormulaError))throw error;return false;}}
+  if(name==='INDEX'){arity(2,4);const ref=tryReferenceMetadata(nodes[0],ctx,evaluate);if(ref?.sheet||nodes[0]?.type==='referenceOp'&&nodes[0].op===','){const selected=referenceCallMetadata({name,args:nodes},ctx,evaluate);return getRange(ctx,selected.sheet,selected.top,selected.left,selected.rows,selected.cols);}}
+  const sparse=sparseFunction(name,nodes,evaluate,{BLANK,FormulaError,fail,checked,numeric,logical,finite,asRange,numericItems,criterion:(v,o)=>criterion(v,{...o,dateOffset:ctx.dateOffset}),compare,wildcardRegex,metadata:node=>tryReferenceMetadata(node,ctx,evaluate),readRange:(ref,options)=>getSparseRange(ctx,ref,options),readCell:(sheet,ref)=>readCell(ctx,sheet,ref),maxCells:MAX_RANGE_CELLS,aggregate:(name,args)=>callFunction(name,args.map(value=>({type:'literal',value})),evaluate,ctx),filteredRows:filteredRowsForSheet,address});if(sparse)return sparse.value;
   const known = new Set(['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'AND', 'OR', 'NOT', 'ROUND', 'ROUNDUP', 'ROUNDDOWN', 'ABS', 'SQRT', 'POWER', 'MOD', 'INT', 'LEN', 'LEFT', 'RIGHT', 'MID', 'CONCAT', 'CONCATENATE', 'TRIM', 'UPPER', 'LOWER', 'SUMIF', 'COUNTIF', 'VLOOKUP', 'XLOOKUP', 'TODAY', 'DATE', 'YEAR', 'MONTH', 'DAY']);
   if (!known.has(name)) return ctx.runtime(name,nodes,evaluate,{
     referenceFunction:(name,nodes,evaluate)=>referenceFunction(ctx,name,nodes,evaluate),
@@ -837,13 +866,14 @@ export function rewriteTableFormula(formula,{tableName,newTableName=tableName,co
 
 export function absoluteFormula(formula,ownerSheet){
   const offset=formula.startsWith('=')?1:0,tokens=tokenize(formula.slice(offset)),patches=[];let previous;
+  for(const range of wholeReferences(tokens))for(const [i,point] of [range.first,range.last].entries()){const prefix=i===0&&!point.explicitSheet&&ownerSheet?"'"+ownerSheet.replace(/'/g,"''")+"'!":'';patches.push({start:point.token.start+offset,end:point.token.end+offset,value:prefix+'$'+(range.axis==='c'?colName(point.index):point.index+1)});}
   for(let i=0;i<tokens.length;i++){
     const token=tokens[i],pos=token.type==='word'&&parseAddress(token.value);if(!pos||['(','!'].includes(tokens[i+1]?.value))continue;
     const explicit=tokens[i-1]?.value==='!',inherited=tokens[i-1]?.value===':'&&previous?.index===i-2?previous.sheet:null;
     const sheet=explicit?tokens[i-2]?.value:inherited||ownerSheet,ref='$'+colName(pos.c)+'$'+(pos.r+1),prefix=!explicit&&!inherited&&sheet?"'"+sheet.replace(/'/g,"''")+"'!":'';
     patches.push({start:token.start+offset,end:token.end+offset,value:prefix+ref});previous={index:i,sheet};
   }
-  for(const {start,end,value} of patches.reverse())formula=formula.slice(0,start)+value+formula.slice(end);return formula;
+  for(const {start,end,value} of patches.sort((a,b)=>b.start-a.start))formula=formula.slice(0,start)+value+formula.slice(end);return formula;
 }
 
 /** Returns a recalculation session for rendering many cells with a shared cache. */
@@ -952,6 +982,12 @@ export function transformFormulaReferences(formula, { axis, index, delta, target
   try { tokens = tokenize(formula.slice(offset)); } catch { return formula; }
   const patches = [];
   const target = String(targetSheet).toLowerCase();
+  for(const range of wholeReferences(tokens))if(range.axis===axis&&String(range.first.sheet||ownerSheet).toLowerCase()===target&&String(range.last.sheet||ownerSheet).toLowerCase()===target){
+    const {first,last,limit}=range,low=Math.min(first.index,last.index),high=Math.max(first.index,last.index),point=(p,n)=>{const replacement=(p.locked?'$':'')+(axis==='c'?colName(n):n+1);if(n<0||n>=limit)return false;if(replacement!==String(p.token.value))patches.push({start:p.token.start,end:p.token.end,replacement});return true;};
+    if(delta<0&&low===index&&high===index)patches.push({start:first.start,end:last.token.end,replacement:'#REF!'});
+    else if(delta>0){const moved=p=>p.index>=index&&!(low!==high&&p.index===limit-1)?p.index+1:p.index;if([first,last].some(p=>moved(p)>=limit))patches.push({start:first.start,end:last.token.end,replacement:'#REF!'});else for(const p of [first,last])point(p,moved(p));}
+    else{const lo=low>index?low-1:low,hi=high>=index?high-1:high;point(first,first.index<=last.index?lo:hi);point(last,first.index<=last.index?hi:lo);}
+  }
   const readReference = (start, inheritedSheet) => {
     let at = start, token = tokens[at], explicitSheet = null;
     if (!token) return null;
@@ -1048,6 +1084,7 @@ export function shiftFormula(formula, dr, dc) {
   let tokens;
   try { tokens = tokenize(formula.slice(1)); } catch { return formula; }
   const patches = [];
+  for(const range of wholeReferences(tokens)){const invalid=[range.first,range.last].some(p=>{const n=p.index+(p.locked?0:range.axis==='c'?dc:dr);return n<0||n>=range.limit;});if(invalid){patches.push({start:range.first.start+1,end:range.last.token.end+1,replacement:'#REF!'});continue;}for(const p of [range.first,range.last]){const n=p.index+(p.locked?0:range.axis==='c'?dc:dr);patches.push({start:p.token.start+1,end:p.token.end+1,replacement:(p.locked?'$':'')+(range.axis==='c'?colName(n):n+1)});}}
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (token.type !== 'word' || tokens[index + 1]?.value === '!' || tokens[index + 1]?.value === '(') continue;
@@ -1060,7 +1097,7 @@ export function shiftFormula(formula, dr, dc) {
     patches.push({ start: token.start + 1, end: token.end + 1, replacement });
   }
   let result = formula;
-  for (const patch of patches.reverse()) result = result.slice(0, patch.start) + patch.replacement + result.slice(patch.end);
+  for (const patch of patches.sort((a,b)=>b.start-a.start)) result = result.slice(0, patch.start) + patch.replacement + result.slice(patch.end);
   return result;
 }
 
@@ -1073,6 +1110,7 @@ export function transposeFormula(formula,source,destination){
   if(!formula?.startsWith('='))return formula;
   let tokens;try{tokens=tokenize(formula.slice(1));}catch{return formula;}
   const patches=[];
+  for(const range of wholeReferences(tokens)){const toAxis=range.axis==='c'?'r':'c',limit=toAxis==='c'?MAX_COLS:MAX_ROWS,values=[range.first,range.last].map(p=>p.index+(p.locked?0:range.axis==='c'?destination.r-source.c:destination.c-source.r));if(values.some(n=>n<0||n>=limit)){patches.push({start:range.first.start+1,end:range.last.token.end+1,value:'#REF!'});continue;}for(const [i,p] of [range.first,range.last].entries())patches.push({start:p.token.start+1,end:p.token.end+1,value:(p.locked?'$':'')+(toAxis==='c'?colName(values[i]):values[i]+1)});}
   for(let i=0;i<tokens.length;i++){
     const t=tokens[i],m=/^(\$?)([A-Za-z]{1,3})(\$?)([1-9]\d*)$/.exec(t.value);
     if(t.type!=='word'||!m||['!','('].includes(tokens[i+1]?.value))continue;
@@ -1081,7 +1119,7 @@ export function transposeFormula(formula,source,destination){
     const r=m[1]?p.c:destination.r+p.c-source.c,c=m[3]?p.r:destination.c+p.r-source.r;
     patches.push({start:t.start+1,end:t.end+1,value:validPosition(r,c)?`${m[3]}${colName(c)}${m[1]}${r+1}`:'#REF!'});
   }
-  for(const p of patches.reverse())formula=formula.slice(0,p.start)+p.value+formula.slice(p.end);
+  for(const p of patches.sort((a,b)=>b.start-a.start))formula=formula.slice(0,p.start)+p.value+formula.slice(p.end);
   return formula;
 }
 export function moveFormulaReferences(formula,{sourceSheet,targetSheet,ownerSheet,range,dr,dc,originSheet}){
