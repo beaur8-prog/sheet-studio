@@ -80,7 +80,7 @@ export function nativeSourceChanged(workbook){const p=buildNativePlan(workbook);
 
 // This is a labelled display fallback, never a replacement for VBA evaluation.
 export function nativeCachedValue(workbook,sheetId,key,computed){
-  if(computed!=='#NAME?'||!workbook.nativeSource)return undefined;
+  if(computed!=='#NAME?'||!workbook.nativeSource||workbook.referenceCachesValid===false)return undefined;
   const cell=workbook.sheets.find(s=>s.id===sheetId)?.cells[key];
   const original=workbook.nativeSource.baseline.find(s=>s.id===sheetId)?.cells[key];
   return cell?.raw===original?.raw&&cell?.raw?.startsWith('=')?cell.cachedValue:undefined;

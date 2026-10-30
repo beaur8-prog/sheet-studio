@@ -252,8 +252,7 @@ class Parser {
     if (!sheet && /^(true|false)$/i.test(reference)) return { type: 'literal', value: /^true$/i.test(reference) };
     const pos = parseAddress(reference);
     if (!pos) {
-      if (/^\$?[A-Za-z]+\$?\d+$/.test(reference)) fail('#REF!');
-      return { type: 'error', value: '#NAME?' };
+      return {type:'name',name:reference,sheet};
     }
     const first = { type: 'ref', sheet, pos };
     return first;
@@ -275,6 +274,22 @@ function step(ctx) { if (++ctx.steps > MAX_STEPS) throw new CalculationLimit(); 
 function resolveSheet(ctx, name) {
   if (!name) return ctx.sheet;
   return ctx.workbook.sheets.find(sheet => sheet.name.toLowerCase() === name.toLowerCase()) || fail('#REF!');
+}
+function withNamedNode(node,ctx,callback){
+  const scope=resolveSheet(ctx,node.sheet),names=ctx.workbook.chartNames||[],key=node.name.toLocaleLowerCase();
+  const named=names.find(n=>n.sheetId===scope.id&&n.name.toLocaleLowerCase()===key)||names.find(n=>!n.sheetId&&n.name.toLocaleLowerCase()===key);
+  if(!named)fail(/^\$?[A-Za-z]+\$?\d+$/.test(node.name)?'#REF!':'#NAME?');
+  const id=(named.sheetId||'')+'!'+key,active=ctx.namedActive??=new Set();if(active.has(id))fail('#CYCLE!');if(active.size>=MAX_DEPTH)fail('#NUM!');
+  const frame=ctx.frame??ctx,cache=frame.namedAsts??=new Map();let definition=cache.get(id);
+  if(!definition){
+    const formula=String(named.formula).replace(/^=/,''),tokens=tokenize(formula);
+    // Imported relative names have no trustworthy definition origin in our
+    // model. Preserve them, but do not silently calculate from the wrong cell.
+    if(tokens.some((t,i)=>t.type==='word'&&parseAddress(t.value)&&!['(','!'].includes(tokens[i+1]?.value)&&!/^\$[A-Za-z]+\$\d+$/.test(t.value)))fail('#NAME?');
+    definition=new Parser(formula).parse();cache.set(id,definition);
+  }
+  active.add(id);const previous=ctx.sheet;if(named.sheetId)ctx.sheet=scope;
+  try{return callback(definition);}finally{ctx.sheet=previous;active.delete(id);}
 }
 function literal(raw) {
   if (raw === undefined || raw === null || raw === '') return BLANK;
@@ -365,6 +380,7 @@ function evaluateNodeUncached(node, ctx, depth) {
   const evaluate = child => evaluateNode(child, ctx, depth + 1);
   if (node.type === 'literal') return node.value;
   if (node.type === 'error') fail(node.value);
+  if(node.type==='name')return withNamedNode(node,ctx,definition=>evaluateNode(definition,ctx,depth+1));
   if (node.type === 'ref') {
     const sheet=resolveSheet(ctx,node.sheet);
     return { kind:'reference',sheet,top:node.pos.r,left:node.pos.c,rows:1,cols:1,value:readCell(ctx,sheet,address(node.pos.r,node.pos.c)) };
@@ -537,15 +553,17 @@ function getRange(ctx,sheet,top,left,rows,cols) {
   for(let i=result.values.length;i<rows*cols;i++)result.values.push(readCell(ctx,sheet,address(top+Math.floor(i/cols),left+i%cols)));
   return result;
 }
-function referenceFunction(ctx,name,nodes,evaluate) {
-  const origin={sheet:ctx.sheet,top:ctx.position.r,left:ctx.position.c,rows:1,cols:1};
-  // Metadata functions must not read the referenced cell (ROW(A1) in A1 is not a cycle).
-  const metadata=node=>{
+// Metadata functions must not read cells: ROW(A1) in A1 is not a cycle.
+function referenceMetadata(node,ctx,evaluate){
+    if(node.type==='name')return withNamedNode(node,ctx,definition=>referenceMetadata(definition,ctx,evaluate));
     if(node.type==='ref')return {sheet:resolveSheet(ctx,node.sheet),top:node.pos.r,left:node.pos.c,rows:1,cols:1};
-    if(node.type==='referenceOp'&&node.op!==','){const a=metadata(node.left),b=metadata(node.right);if(!a.sheet||a.sheet.id!==b.sheet?.id)fail('#REF!');const intersection=node.op===' ',top=(intersection?Math.max:Math.min)(a.top,b.top),left=(intersection?Math.max:Math.min)(a.left,b.left),bottom=(intersection?Math.min:Math.max)(a.top+a.rows-1,b.top+b.rows-1),right=(intersection?Math.min:Math.max)(a.left+a.cols-1,b.left+b.cols-1);if(bottom<top||right<left)fail('#NULL!');return {sheet:a.sheet,top,left,rows:bottom-top+1,cols:right-left+1};}
+    if(node.type==='referenceOp'&&node.op!==','){const a=referenceMetadata(node.left,ctx,evaluate),b=referenceMetadata(node.right,ctx,evaluate);if(!a.sheet||a.sheet.id!==b.sheet?.id)fail('#REF!');const intersection=node.op===' ',top=(intersection?Math.max:Math.min)(a.top,b.top),left=(intersection?Math.max:Math.min)(a.left,b.left),bottom=(intersection?Math.min:Math.max)(a.top+a.rows-1,b.top+b.rows-1),right=(intersection?Math.min:Math.max)(a.left+a.cols-1,b.left+b.cols-1);if(bottom<top||right<left)fail('#NULL!');return {sheet:a.sheet,top,left,rows:bottom-top+1,cols:right-left+1};}
     if(node.type==='range')return {sheet:resolveSheet(ctx,node.sheet),top:Math.min(node.start.r,node.end.r),left:Math.min(node.start.c,node.end.c),rows:Math.abs(node.start.r-node.end.r)+1,cols:Math.abs(node.start.c-node.end.c)+1};
     const value=evaluate(node);if(isRef(value)||isRange(value))return value;return fail('#VALUE!');
-  };
+}
+function referenceFunction(ctx,name,nodes,evaluate) {
+  const origin={sheet:ctx.sheet,top:ctx.position.r,left:ctx.position.c,rows:1,cols:1};
+  const metadata=node=>referenceMetadata(node,ctx,evaluate);
   if(name==='ROW'||name==='COLUMN'){const ref=nodes.length?metadata(nodes[0]):origin;if(!ref.sheet)fail('#VALUE!');return (name==='ROW'?ref.top:ref.left)+1;}
   if(name==='ROWS'||name==='COLUMNS'){const ref=metadata(nodes[0]);return name==='ROWS'?ref.rows:ref.cols;}
   if(name==='FORMULATEXT'||name==='ISFORMULA'){
@@ -574,7 +592,7 @@ function referenceFunction(ctx,name,nodes,evaluate) {
       const split=text.lastIndexOf('!');text=text.slice(0,split+1)+text.slice(split+1).split(':').map(convert).join(':');
     }
     let node;try{node=new Parser(text).parse();}catch{fail('#REF!');}
-    if(!['ref','range','referenceOp'].includes(node.type))fail('#REF!');return evaluate(node);
+    if(!['ref','range','referenceOp','name'].includes(node.type))fail('#REF!');const value=evaluate(node);if(!isRef(value)&&!(isRange(value)&&value.sheet))fail('#REF!');return value;
   }
   if(name==='OFFSET'){
     const ref=metadata(nodes[0]);if(!ref.sheet)fail('#VALUE!');
@@ -786,6 +804,23 @@ export function evaluateFormulaArray(workbook,sheetId,formula,options={}){
     const node=new Parser(String(formula)).parse(),result=asRange(runCalculation(ctx,()=>evaluateNode(node,ctx,0)));
     return {rows:result.rows,cols:result.cols,values:result.values.map(value=>guard(()=>value))};
   }catch(error){return {rows:1,cols:1,values:[error instanceof CalculationLimit?'#NUM!':error instanceof FormulaError?error.code:'#VALUE!'],error:true};}
+}
+
+export function formulaReference(workbook,sheetId,formula,options={}){
+  try{const ctx=context(workbook,sheetId);if(options.position&&validPosition(options.position.r,options.position.c))ctx.position=options.position;const node=new Parser(String(formula)).parse();
+    const result=runCalculation(ctx,()=>referenceMetadata(node,ctx,child=>evaluateNode(child,ctx,0)));if(!result.sheet)return null;
+    return {sheetId:result.sheet.id,range:{r1:result.top,r2:result.top+result.rows-1,c1:result.left,c2:result.left+result.cols-1}};
+  }catch{return null;}
+}
+export function absoluteFormula(formula,ownerSheet){
+  const offset=formula.startsWith('=')?1:0,tokens=tokenize(formula.slice(offset)),patches=[];let previous;
+  for(let i=0;i<tokens.length;i++){
+    const token=tokens[i],pos=token.type==='word'&&parseAddress(token.value);if(!pos||['(','!'].includes(tokens[i+1]?.value))continue;
+    const explicit=tokens[i-1]?.value==='!',inherited=tokens[i-1]?.value===':'&&previous?.index===i-2?previous.sheet:null;
+    const sheet=explicit?tokens[i-2]?.value:inherited||ownerSheet,ref='$'+colName(pos.c)+'$'+(pos.r+1),prefix=!explicit&&!inherited&&sheet?"'"+sheet.replace(/'/g,"''")+"'!":'';
+    patches.push({start:token.start+offset,end:token.end+offset,value:prefix+ref});previous={index:i,sheet};
+  }
+  for(const {start,end,value} of patches.reverse())formula=formula.slice(0,start)+value+formula.slice(end);return formula;
 }
 
 /** Returns a recalculation session for rendering many cells with a shared cache. */
@@ -1145,6 +1180,7 @@ export function validateWorkbook(data) {
   };
   if (!object(data) || !Array.isArray(data.sheets) || data.sheets.length < 1 || data.sheets.length > 100) throw new Error('유효한 통합 문서가 아닙니다.');
   if (typeof data.name !== 'string' || data.name.length > 255) throw new Error('통합 문서 이름이 올바르지 않습니다.');
+  if(data.referenceCachesValid!==undefined&&typeof data.referenceCachesValid!=='boolean')throw Error('이전 계산값 상태가 올바르지 않습니다.');
   if(data.date1904!==undefined&&typeof data.date1904!=='boolean')throw new Error('통합 문서의 날짜 체계가 올바르지 않습니다.');
   const ids = new Set(), names = new Set();
   let cellCount = 0, textCount = 0;
@@ -1190,6 +1226,7 @@ export function validateWorkbook(data) {
   if(data.xlsxDxfs!==undefined){if(!Array.isArray(data.xlsxDxfs)||data.xlsxDxfs.length>65536)throw Error('보존된 Excel 조건부 서식이 올바르지 않습니다.');for(const rule of data.xlsxDxfs)validatePreservedXML(rule,'dxf');}
   if(data.chartTheme!==undefined&&(typeof data.chartTheme!=='string'||data.chartTheme.length>2000000||/<!DOCTYPE|<!ENTITY/i.test(data.chartTheme)))throw new Error('차트 테마가 올바르지 않습니다.');
   if(data.chartNames!==undefined&&(!Array.isArray(data.chartNames)||data.chartNames.length>10000||data.chartNames.some(n=>!object(n)||typeof n.name!=='string'||n.name.length>255||typeof n.formula!=='string'||n.formula.length>8192||n.sheetId!==undefined&&typeof n.sheetId!=='string'||n.hidden!==undefined&&typeof n.hidden!=='boolean')))throw new Error('차트 이름 참조가 올바르지 않습니다.');
+  for(const named of data.chartNames||[])if(named.sourceXML!==undefined)validatePreservedXML(named.sourceXML,'definedName');
   if(data.chartNameSheets!==undefined&&(!Array.isArray(data.chartNameSheets)||data.chartNameSheets.length>100||data.chartNameSheets.some(s=>!object(s)||typeof s.id!=='string'||typeof s.name!=='string'||s.name.length>31)))throw new Error('차트 원본 시트가 올바르지 않습니다.');
   if (data.nativeSource !== undefined) {
     const source=data.nativeSource;

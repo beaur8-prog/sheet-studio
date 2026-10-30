@@ -1,6 +1,6 @@
 import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
-import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress} from './engine.mjs';
+import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress,formulaReference} from './engine.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
 import {estimateDataBytes} from './data-size.mjs';
 import {MAX_HISTORY_BYTES} from './limits.mjs';
@@ -100,6 +100,7 @@ async function handle(type, data) {
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
+  if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);
   if (type === 'infer-region') return currentRegion(sheet,data.selection);
   if (type === 'sort-plan') return inferSortPlan(book,sheet,data.selection,data.column);

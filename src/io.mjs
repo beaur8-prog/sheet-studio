@@ -283,7 +283,7 @@ function safeSheetName(name, used) {
 function cachedResult(evaluate, workbook, sheet, addr, cell) {
   let value;
   try { value = evaluate?.(workbook, sheet.id, addr); } catch { /* Excel can recalculate an unsupported formula. */ }
-  if (value === undefined || value === '#NAME?' || value === '#ERROR!') value = !cell.cachedFormula || cell.cachedFormula === cell.raw ? cell.cachedValue : undefined;
+  if (value === undefined || value === '#NAME?' || value === '#ERROR!') value = workbook.referenceCachesValid!==false&&(!cell.cachedFormula || cell.cachedFormula === cell.raw) ? cell.cachedValue : undefined;
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'number') return Number.isFinite(value) ? value : { error: '#NUM!' };
   if (typeof value === 'boolean') return value;

@@ -17,7 +17,7 @@ function pointCache(node){
   for(const pt of children(cache,'pt')){const i=Number(attr(pt,'idx'));if(i>=0&&i<count){const v=first(pt,'v')?.textContent;out[i]=numeric?(Number.isFinite(Number(v))?Number(v):null):v||'';}}
   return out;
 }
-function readRef(node,workbook){if(!node)return undefined;const formula=first(node,'f')?.textContent,ref=parseChartFormula(formula,workbook);return {...ref,...(formula?{formula}:{}),cache:pointCache(node),...(first(node,'formatCode')?{formatCode:first(node,'formatCode').textContent}:{})};}
+function readRef(node,workbook,ownerSheetId){if(!node)return undefined;const formula=first(node,'f')?.textContent,ref=parseChartFormula(formula,workbook,ownerSheetId);return {...ref,...(ownerSheetId?{ownerSheetId}:{}),...(formula?{formula}:{}),cache:pointCache(node),...(first(node,'formatCode')?{formatCode:first(node,'formatCode').textContent}:{})};}
 function anchorRect(anchor,sheet){
   const point=n=>{const c=asNumber(child(n,'col')?.textContent),r=asNumber(child(n,'row')?.textContent);let x=0,y=0;for(let i=0;i<Math.min(16384,c);i++)x+=sheet.columnWidths[i]||sheet.defaultColumnWidth||64;for(let i=0;i<Math.min(1048576,r);i++)y+=sheet.rowHeights[i]||sheet.defaultRowHeight||20;return {x:x+asNumber(child(n,'colOff')?.textContent)/EMU,y:y+asNumber(child(n,'rowOff')?.textContent)/EMU};};
   const from=child(anchor,'from')?point(child(anchor,'from')):{x:asNumber(attr(child(anchor,'pos'),'x'))/EMU,y:asNumber(attr(child(anchor,'pos'),'y'))/EMU};
@@ -39,7 +39,7 @@ async function readParts(zip,roots,types){
 }
 export async function restoreChartParts(bytes,workbook){
   const zip=await JSZip.loadAsync(bytes),bookXML=xml(await zip.file('xl/workbook.xml').async('string')),bookRels=await readRelationships(zip,'xl/workbook.xml');
-  workbook.chartNames=all(bookXML,'definedName').map(n=>({name:attr(n,'name'),formula:n.textContent,...(attr(n,'localSheetId')!==''?{sheetId:workbook.sheets[Number(attr(n,'localSheetId'))]?.id}:{}),hidden:attr(n,'hidden')==='1'}));
+  workbook.chartNames=all(bookXML,'definedName').map(n=>({name:attr(n,'name'),formula:n.textContent,sourceXML:stringify(n),...(attr(n,'localSheetId')!==''?{sheetId:workbook.sheets[Number(attr(n,'localSheetId'))]?.id}:{}),hidden:attr(n,'hidden')==='1'}));
   workbook.chartNameSheets=workbook.sheets.map(s=>({id:s.id,name:s.name}));
   const typesXML=xml(await zip.file('[Content_Types].xml').async('string')),types={overrides:{},defaults:{}};
   all(typesXML,'Override').forEach(n=>types.overrides[attr(n,'PartName').replace(/^\//,'')]=attr(n,'ContentType'));all(typesXML,'Default').forEach(n=>types.defaults[attr(n,'Extension')]=attr(n,'ContentType'));
@@ -67,7 +67,7 @@ export async function restoreChartParts(bytes,workbook){
         const axes=children(plot).filter(n=>['valAx','catAx','dateAx'].includes(n.localName)),primaryAxis=attr(children(base,'axId').at(-1),'val');
         for(const group of known){const kind=groups[group.localName]==='bar'&&val(group,'barDir')==='bar'?'bar-horizontal':groups[group.localName];
           for(const ser of children(group,'ser').slice(0,32)){
-            const tx=child(ser,'tx'),nameRef=readRef(tx,workbook);series.push({name:child(tx,'v')?.textContent||`계열 ${series.length+1}`,nameRef,catRef:readRef(child(ser,'cat'),workbook),valRef:readRef(child(ser,'val')||child(ser,'yVal'),workbook),xRef:readRef(child(ser,'xVal'),workbook),sizeRef:readRef(child(ser,'bubbleSize'),workbook),color:chartColor(ser,palette,chartColors[series.length%chartColors.length]),pointColors:Object.fromEntries(children(ser,'dPt').map(n=>[val(n,'idx'),chartColor(n,palette,chartColors[Number(val(n,'idx'))%chartColors.length])])),type:kind,secondary:attr(children(group,'axId').at(-1),'val')!==primaryAxis,lines:val(group,'scatterStyle').includes('line')});
+            const tx=child(ser,'tx'),nameRef=readRef(tx,workbook,sheet.id);series.push({name:child(tx,'v')?.textContent||`계열 ${series.length+1}`,nameRef,catRef:readRef(child(ser,'cat'),workbook,sheet.id),valRef:readRef(child(ser,'val')||child(ser,'yVal'),workbook,sheet.id),xRef:readRef(child(ser,'xVal'),workbook,sheet.id),sizeRef:readRef(child(ser,'bubbleSize'),workbook,sheet.id),color:chartColor(ser,palette,chartColors[series.length%chartColors.length]),pointColors:Object.fromEntries(children(ser,'dPt').map(n=>[val(n,'idx'),chartColor(n,palette,chartColors[Number(val(n,'idx'))%chartColors.length])])),type:kind,secondary:attr(children(group,'axId').at(-1),'val')!==primaryAxis,lines:val(group,'scatterStyle').includes('line')});
           }
         }
         const usedIds=new Set(Array.from(stringify(anchor).matchAll(/\br:(?:id|embed|link)="([^"]+)"/g),m=>m[1])),rels=drawingRels.filter(r=>usedIds.has(r.id)).map(r=>({...r,target:r.mode==='External'?r.target:resolvePart(drawingPart,r.target)}));
@@ -77,7 +77,7 @@ export async function restoreChartParts(bytes,workbook){
         if(series.some(s=>[s.valRef,s.catRef,s.xRef].some(r=>r?.formula&&!r.sheetId)))chart.previewNote='해석할 수 없는 참조는 저장된 차트 값으로 표시합니다.';
         if(known.some(g=>children(g,'ser').length>32))chart.previewNote='미리 보기: 그룹당 최대 32개 계열 · Excel 원본 보존';
         if(type==='unsupported')chart.unsupportedReason='이 Excel 차트 유형은 원본을 유지하며 저장합니다.';
-        chart.source={root:part,rootType:rel.type,anchor:stringify(anchor),rels,parts:await readParts(zip,rels.filter(r=>r.mode!=='External').map(r=>r.target),types),formulas:all(sourceXML,'f').map(n=>({...parseChartFormula(n.textContent,workbook),formula:n.textContent})),original:{title,legend,plotVisibleOnly:chart.plotVisibleOnly,labels:chart.labels,xTitle:chart.xTitle,yTitle:chart.yTitle,geometry:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}}};
+        chart.source={root:part,rootType:rel.type,anchor:stringify(anchor),rels,parts:await readParts(zip,rels.filter(r=>r.mode!=='External').map(r=>r.target),types),formulas:all(sourceXML,'f').map(n=>({...parseChartFormula(n.textContent,workbook,sheet.id),ownerSheetId:sheet.id,formula:n.textContent})),original:{title,legend,plotVisibleOnly:chart.plotVisibleOnly,labels:chart.labels,xTitle:chart.xTitle,yTitle:chart.yTitle,geometry:{x:chart.x,y:chart.y,width:chart.width,height:chart.height}}};
         sheet.charts.push(chart);
       }
     }
@@ -181,7 +181,7 @@ export async function addChartParts(bytes,workbook,names){
     const doc=xml(await zip.file('xl/workbook.xml').async('string')),root=doc.documentElement,old=child(root,'definedNames');if(old)root.removeChild(old);
     const container=doc.createElementNS(root.namespaceURI,'definedNames');
     for(const named of workbook.chartNames){const local=named.sheetId?workbook.sheets.findIndex(s=>s.id===named.sheetId):-1;if(named.sheetId&&local<0)continue;
-      const node=doc.createElementNS(root.namespaceURI,'definedName');node.setAttribute('name',named.name);if(local>=0)node.setAttribute('localSheetId',String(local));if(named.hidden)node.setAttribute('hidden','1');
+      const node=named.sourceXML?doc.importNode(xml(named.sourceXML).documentElement,true):doc.createElementNS(root.namespaceURI,'definedName');node.removeAttribute('localSheetId');node.removeAttribute('hidden');node.setAttribute('name',named.name);if(local>=0)node.setAttribute('localSheetId',String(local));if(named.hidden)node.setAttribute('hidden','1');
       node.textContent=named.formula.replace(/"(?:[^"]|"")*"|('(?:[^']|'')+'|[A-Za-z_가-힣][\w가-힣]*)!/g,(match,name)=>{if(match.startsWith('"'))return match;const original=workbook.chartNameSheets?.find(s=>s.name.toLowerCase()===name.replace(/^'|'$/g,'').replace(/''/g,"'").toLowerCase()),sheet=workbook.sheets.find(s=>s.id===original?.id);return sheet?"'"+(names.get(sheet.id)||sheet.name).replace(/'/g,"''")+"'!":match;});container.appendChild(node);
     }
     root.insertBefore(container,child(root,'calcPr')||child(root,'pivotCaches')||null);zip.file('xl/workbook.xml',stringify(doc));

@@ -1,47 +1,49 @@
-import {address,parseAddress,createEvaluator,transformFormulaReferences,formatValue,numberFormatKind} from './engine.mjs';
+import {address,parseAddress,createEvaluator,transformFormulaReferences,formatValue,numberFormatKind,formulaReference} from './engine.mjs';
 
 export const chartTypes={bar:'세로 막대형','bar-horizontal':'가로 막대형',line:'꺾은선형',area:'영역형',pie:'원형',doughnut:'도넛형',scatter:'분산형',bubble:'거품형',radar:'방사형',combo:'혼합 (막대·꺾은선)'};
 export const chartColors=['#4472c4','#ed7d31','#70ad47','#ffc000','#5b9bd5','#a5a5a5','#8064a2','#264478'];
 export const chartRef=(sheetId,range)=>({sheetId,range});
-export function parseChartFormula(formula,workbook){
+export function parseChartFormula(formula,workbook,ownerSheetId=workbook.activeSheetId){
   const m=/^(?:'((?:[^']|'')+)'|([^!\[\]]+))!\$?([A-Z]{1,3})\$?([1-9]\d*)(?::\$?([A-Z]{1,3})\$?([1-9]\d*))?$/i.exec(formula||'');
-  if(!m){const named=workbook.chartNames?.find(n=>n.name.toLowerCase()===String(formula).toLowerCase());return named?parseChartFormula(named.formula,{...workbook,chartNames:[]}):null;}
+  if(!m){const ref=formulaReference(workbook,ownerSheetId,formula||'');return ref?{sheetId:ref.sheetId,range:address(ref.range.r1,ref.range.c1)+':'+address(ref.range.r2,ref.range.c2)}:null;}
   const sheet=workbook.sheets.find(s=>s.name.toLowerCase()===(m[1]?.replace(/''/g,"'")||m[2]).toLowerCase());
   if(!sheet)return null;
   const start=m[3].toUpperCase()+m[4],end=(m[5]||m[3]).toUpperCase()+(m[6]||m[4]);
   if(!parseAddress(start)||!parseAddress(end))return null;
   return {sheetId:sheet.id,range:start+':'+end};
 }
+const dynamicReference=formula=>formula&&!/!\$?[A-Z]{1,3}\$?[1-9]\d*(?::\$?[A-Z]{1,3}\$?[1-9]\d*)?$/i.test(formula);
+function resolveChartRef(ref,workbook){if(!ref||!dynamicReference(ref.formula))return ref;const resolved=parseChartFormula(ref.formula,workbook,ref.ownerSheetId||ref.sheetId||workbook.activeSheetId);return resolved?{...ref,...resolved}:{...ref,sheetId:undefined,range:undefined,...(workbook.referenceCachesValid===false?{cache:[]}: {})};}
 export function refFormula(ref,workbook,names,offsets){
   // Resolving a defined name for the preview must not replace the original
   // named reference when saving: changes to that name should still reach Excel.
-  if(ref?.formula&&workbook.chartNames?.some(n=>n.name.toLowerCase()===ref.formula.toLowerCase()))return ref.formula;
+  if(dynamicReference(ref?.formula))return ref.formula;
   const sheet=workbook.sheets.find(s=>s.id===ref?.sheetId);if(!sheet||!ref.range||ref.range.includes('#REF!'))return ref?.sheetId?'#REF!':ref?.formula||'#REF!';
   const name=names?.get(sheet.id)||sheet.name,offset=offsets?.get(sheet.id)||0;
   const range=ref.range.split(':').map(a=>{const p=parseAddress(a);return p?address(p.r+offset,p.c).replace(/^([A-Z]+)(\d+)$/,'$$$1$$$2'):'#REF!';}).join(':');
   return "'"+name.replace(/'/g,"''")+"'!"+range;
 }
-function chartCellValue(cell,evaluate,key,onCached){
+function chartCellValue(cell,evaluate,key,onCached,workbook){
   const value=evaluate(key);
   // A calculation error is current data, not a reason to resurrect an old
   // successful result. Only an unchanged, unsupported formula may use a cache.
-  if(value==='#NAME?'&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){onCached?.();return cell.cachedValue;}
+  if(value==='#NAME?'&&workbook?.referenceCachesValid!==false&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){onCached?.();return cell.cachedValue;}
   return value;
 }
 export function refValues(ref,workbook,{limit=10000,onCached}={}){
-  if(!ref)return [];
+  if(!ref)return [];ref=resolveChartRef(ref,workbook);
   const sheet=workbook.sheets.find(s=>s.id===ref.sheetId),parts=ref.range?.split(':').map(parseAddress);
   if(!sheet||!parts?.[0]||!parts.at(-1))return (ref.cache||[]).slice(0,limit);
   const [a,b=a]=parts,evaluate=createEvaluator(workbook,sheet.id),out=[];
   for(let r=Math.min(a.r,b.r);r<=Math.max(a.r,b.r);r++)for(let c=Math.min(a.c,b.c);c<=Math.max(a.c,b.c);c++){
     if(out.length>=limit)return out;
-    const key=address(r,c),cell=sheet.cells[key],v=chartCellValue(cell,evaluate,key,onCached);
+    const key=address(r,c),cell=sheet.cells[key],v=chartCellValue(cell,evaluate,key,onCached,workbook);
     out.push(cell?.raw===''||!cell?null:v);
   }
   return out;
 }
 function refPositions(ref,workbook,limit=1000){
-  const sheet=workbook.sheets.find(s=>s.id===ref?.sheetId),parts=ref?.range?.split(':').map(parseAddress);
+  ref=resolveChartRef(ref,workbook);const sheet=workbook.sheets.find(s=>s.id===ref?.sheetId),parts=ref?.range?.split(':').map(parseAddress);
   if(!sheet||!parts?.[0]||!parts.at(-1))return [];
   const [a,b=a]=parts,out=[];
   for(let r=Math.min(a.r,b.r);r<=Math.max(a.r,b.r)&&out.length<limit;r++)for(let c=Math.min(a.c,b.c);c<=Math.max(a.c,b.c)&&out.length<limit;c++)out.push({sheet,r,c});
@@ -112,7 +114,7 @@ function sourceAxes(chart,sheet,workbook){
 export function chartLayout(chart,sheet,workbook){
   const axes=sourceAxes(chart,sheet,workbook);if(!axes)return {firstRowAsHeader:false,firstColumnAsLabels:false};
   const {rows,lane1,lane2,point1,point2,xy,implicitX}=axes,evaluate=createEvaluator(workbook,sheet.id),numeric=v=>typeof v==='number'&&Number.isFinite(v);
-  const value=(lane,point)=>{const key=rows?address(lane,point):address(point,lane),cell=sheet.cells[key];return !cell||cell.raw===''?null:chartCellValue(cell,evaluate,key);};
+  const value=(lane,point)=>{const key=rows?address(lane,point):address(point,lane),cell=sheet.cells[key];return !cell||cell.raw===''?null:chartCellValue(cell,evaluate,key,undefined,workbook);};
   let numericFirstLane=false;for(let point=point1;point<=point2;point++)if(numeric(value(lane1,point))){numericFirstLane=true;break;}
   const categories=(rows?chart.firstRowAsHeader:chart.firstColumnAsLabels)??(lane1<lane2&&!numericFirstLane);
   const firstPoint=[];for(let lane=lane1+Number(xy?!implicitX:categories);lane<=lane2;lane++)firstPoint.push(value(lane,point1));
@@ -136,11 +138,11 @@ export function chartRangeError(chart,sheet,workbook){
   return null;
 }
 export function chartSeries(chart,sheet,workbook){
-  if(chart.series?.length)return chart.series;
+  if(chart.series?.length)return chart.series.map(series=>{const copy={...series};for(const key of ['nameRef','catRef','valRef','xRef','sizeRef'])if(copy[key])copy[key]=resolveChartRef(copy[key],workbook);return copy;});
   if(chartRangeError(chart,sheet,workbook))return [];
   const {rows,lane1,lane2,point1,point2,startLane,startPoint,names,categories,xy,implicitX}=seriesShape(chart,sheet,workbook);
   const key=(lane,point)=>rows?address(lane,point):address(point,lane),ref=(lane,from=startPoint,to=point2)=>chartRef(sheet.id,key(lane,from)+':'+key(lane,to));
-  const evaluate=createEvaluator(workbook,sheet.id);let populated=false;for(let lane=startLane;lane<=lane2&&!populated;lane++)for(let point=startPoint;point<=point2;point++){const cell=sheet.cells[key(lane,point)];if(!cell||cell.raw==='')continue;const value=chartCellValue(cell,evaluate,key(lane,point));if(typeof value!=='boolean'&&value!==null&&value!==''&&Number.isFinite(Number(value))){populated=true;break;}}
+  const evaluate=createEvaluator(workbook,sheet.id);let populated=false;for(let lane=startLane;lane<=lane2&&!populated;lane++)for(let point=startPoint;point<=point2;point++){const cell=sheet.cells[key(lane,point)];if(!cell||cell.raw==='')continue;const value=chartCellValue(cell,evaluate,key(lane,point),undefined,workbook);if(typeof value!=='boolean'&&value!==null&&value!==''&&Number.isFinite(Number(value))){populated=true;break;}}
   if(!populated)return [];
   const indexed={cache:Array.from({length:point2-startPoint+1},(_,i)=>xy?i+1:String(i+1))},categoryRef=xy&&!implicitX||!xy&&categories?ref(lane1):indexed,result=[];
   for(let lane=startLane;lane<=lane2;lane+=chart.type==='bubble'?2:1){

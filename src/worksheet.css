@@ -4,3 +4,5 @@
 .cell-border{position:absolute;pointer-events:none}
 
 .validation-list-button{position:absolute;z-index:10;width:20px;padding:0;border:1px solid #107c41;background:#e8f4ec;color:#164f2a;cursor:pointer}.validation-list-button[hidden]{display:none}.validation-menu{max-height:320px;max-width:440px;overflow:auto}.validation-menu button[aria-selected=true]{background:#e2efda}.validation-menu button:focus-visible{outline:2px solid #107c41;outline-offset:-2px}@media print{.validation-list-button{display:none}}
+
+.named-list{max-height:360px;overflow:auto;border:1px solid #ccc}.named-list>div{display:grid;grid-template-columns:110px 90px minmax(90px,1fr) auto auto auto;gap:8px;padding:9px;border-bottom:1px solid #ddd;align-items:center}.named-list code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.named-list button{padding:5px 8px}.named-list>p{padding:12px}.named-list span{font-size:12px;color:#666}
