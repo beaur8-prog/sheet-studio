@@ -85,21 +85,21 @@ async function handle(type, data) {
   if (data.revision !== revision) throw Error('문서가 변경되었습니다. 작업을 다시 실행하세요.');
   if (type === 'recalculate') { evaluators=new Map();conditionals=new Map(); }
   if (type === 'calculate' || type === 'recalculate') return {revision, values: data.refs.map(([id, ref]) => {
-    const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),value=evaluate(ref),position=parseAddress(ref);
+    const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),result=evaluate.result(ref),value=result.value,position=parseAddress(ref);
     if(!conditionals.has(id))conditionals.set(id,sheet?createConditionalEvaluator(book,sheet,evaluate):()=>({}));
-    return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{}];
+    return [id, ref, value, position?conditionals.get(id)(position.r,position.c,value):{},result.error];
   })};
   if (type === 'export') {
     if (data.format === 'json') return {data: new TextEncoder().encode(serializeWorkbook(book)), mime: 'application/json', extension: 'sheet.json'};
-    const snapshots=new WeakMap();
-    return writeSpreadsheet(book, data.format, {...data.options,evaluate:(snapshot,id,ref)=>{
-      if(snapshot===book)return evaluator(id)(ref);
+    const snapshots=new WeakMap(),get=(snapshot,id)=>{
+      if(snapshot===book)return evaluator(id);
       // Pivot export evaluates its refreshed snapshot rather than mixing those
       // cells with caches from the unrefreshed document.
       if(!snapshots.has(snapshot))snapshots.set(snapshot,new Map());
       const cache=snapshots.get(snapshot);if(!cache.has(id))cache.set(id,createEvaluator(snapshot,id));
-      return cache.get(id)(ref);
-    }});
+      return cache.get(id);
+    };
+    return writeSpreadsheet(book,data.format,{...data.options,evaluate:(snapshot,id,ref)=>get(snapshot,id)(ref),evaluateDetailed:(snapshot,id,ref)=>get(snapshot,id).result(ref)});
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');

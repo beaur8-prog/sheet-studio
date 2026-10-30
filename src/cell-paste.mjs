@@ -1,13 +1,14 @@
 import {cloneData} from './clone.mjs';
 import {address,parseAddress,shiftFormula,transposeFormula,numberFormatKind,formulaForXlsx} from './engine.mjs';
 import {tableBounds,overlaps} from './table-schema.mjs';
-export function scalarRaw(value) {
+import {isErrorText} from './cell-values.mjs';
+export function scalarRaw(value,{error=false}={}) {
   if(value===null||value===undefined)return '';
   if(typeof value==='boolean')return value?'TRUE':'FALSE';
   if(typeof value==='number')return String(value);
   const text=String(value);
   // Preserve text identity (identifiers, formula-looking text and apostrophes).
-  return text && (/^[=']/.test(text)||!Number.isNaN(Number(text))||/^(TRUE|FALSE)$/i.test(text))?"'"+text:text;
+  return text && (/^[=']/.test(text)||!Number.isNaN(Number(text))||/^(TRUE|FALSE)$/i.test(text)||!error&&isErrorText(text))?"'"+text:text;
 }
 export function pastePlan(sheet, clip, start, options={}) {
   const {mode='all',transpose=false,skipBlanks=false,operation='none',selection}=options;
@@ -34,7 +35,7 @@ export function pastePlan(sheet, clip, start, options={}) {
     if(mode==='formats'){cell={...cloneData(old),style:cloneData(source.style||{})};if(source.xlsxStyle!==undefined)cell.xlsxStyle=source.xlsxStyle;else delete cell.xlsxStyle;}
     else {
       cell=mode==='all'?cloneData(source):cloneData(old);
-      let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw):source.raw;
+      let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw,{error:clip.errors?.[sr]?.[sc]}):source.raw;
       const dateStyle=source.style?.format==='date'||numberFormatKind(source.style?.numberFormat)==='date';
       if(operation==='none'&&typeof clip.date1904==='boolean'&&clip.date1904!==(options.date1904===true)&&dateStyle&&!raw.startsWith("'")&&raw.trim()!==''&&Number.isFinite(Number(raw)))raw=String(Number(raw)+(clip.date1904?1462:-1462));
       if(mode!=='values'&&!clip.cut&&raw.startsWith('=')){const origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]};raw=transpose?transposeFormula(raw,origin,dest):shiftFormula(raw,dest.r-origin.r,dest.c-origin.c);}
@@ -43,7 +44,7 @@ export function pastePlan(sheet, clip, start, options={}) {
         if(typeof a!=='number'||typeof b!=='number')throw Error('연산 붙여넣기는 숫자 셀에 사용하세요.');
         raw=operation==='divide'&&b===0?'#DIV/0!':String(({add:()=>a+b,subtract:()=>a-b,multiply:()=>a*b,divide:()=>a/b})[operation]());
       }
-      cell.raw=raw;delete cell.cachedValue;delete cell.cachedFormula;
+      cell.raw=raw;delete cell.cachedValue;delete cell.cachedFormula;delete cell.cachedError;
       if(source.xlsxFormula?.shareType==='array'&&arrays){const range=tableBounds(source.xlsxFormula.ref||address(clip.r+sr,clip.c+sc)),origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]},rows=range.r2-range.r1+1,cols=range.c2-range.c1+1,b={r1:dest.r,c1:dest.c,r2:dest.r+(transpose?cols:rows)-1,c2:dest.c+(transpose?rows:cols)-1};if((sheet.tables||[]).some(t=>overlaps(tableBounds(t.range),b)))throw Error('표 안에는 배열 수식을 붙여넣을 수 없습니다.');cell.xlsxFormula=cloneData(source.xlsxFormula);cell.xlsxFormula.ref=address(b.r1,b.c1)+':'+address(b.r2,b.c2);cell.xlsxFormula.raw=raw;cell.xlsxFormula.formula=formulaForXlsx(raw,source.xlsxFormula.formula).slice(1);}
       else if(source.xlsxFormula&&mode!=='values'&&operation==='none'&&raw.startsWith('='))cell.xlsxFormula={...cloneData(source.xlsxFormula),raw,formula:formulaForXlsx(raw,source.xlsxFormula.formula).slice(1)};
       else if(mode!=='formats')delete cell.xlsxFormula;

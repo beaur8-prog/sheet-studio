@@ -26,10 +26,10 @@ export function refFormula(ref,workbook,names,offsets){
   return "'"+name.replace(/'/g,"''")+"'!"+range;
 }
 function chartCellValue(cell,evaluate,key,onCached,workbook){
-  const value=evaluate(key);
+  const result=evaluate.result?.(key),value=result?result.value:evaluate(key);
   // A calculation error is current data, not a reason to resurrect an old
   // successful result. Only an unchanged, unsupported formula may use a cache.
-  if(value==='#NAME?'&&workbook?.referenceCachesValid!==false&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){onCached?.();return cell.cachedValue;}
+  if((result?result.error==='#NAME?':value==='#NAME?')&&workbook?.referenceCachesValid!==false&&cell?.cachedValue!==undefined&&(!cell.cachedFormula||cell.cachedFormula===cell.raw)){onCached?.();return cell.cachedValue;}
   return value;
 }
 export function refValues(ref,workbook,{limit=10000,onCached}={}){
@@ -40,7 +40,7 @@ export function refValues(ref,workbook,{limit=10000,onCached}={}){
   for(let r=Math.min(a.r,b.r);r<=Math.max(a.r,b.r);r++)for(let c=Math.min(a.c,b.c);c<=Math.max(a.c,b.c);c++){
     if(out.length>=limit)return out;
     const key=address(r,c),cell=sheet.cells[key],v=chartCellValue(cell,evaluate,key,onCached,workbook);
-    out.push(cell?.raw===''||!cell?null:v);
+    out.push((cell?.raw===''||!cell)&&v===''?null:v);
   }
   return out;
 }
@@ -144,7 +144,7 @@ export function chartSeries(chart,sheet,workbook){
   if(chartRangeError(chart,sheet,workbook))return [];
   const {rows,lane1,lane2,point1,point2,startLane,startPoint,names,categories,xy,implicitX}=seriesShape(chart,sheet,workbook);
   const key=(lane,point)=>rows?address(lane,point):address(point,lane),ref=(lane,from=startPoint,to=point2)=>chartRef(sheet.id,key(lane,from)+':'+key(lane,to));
-  const evaluate=createEvaluator(workbook,sheet.id);let populated=false;for(let lane=startLane;lane<=lane2&&!populated;lane++)for(let point=startPoint;point<=point2;point++){const cell=sheet.cells[key(lane,point)];if(!cell||cell.raw==='')continue;const value=chartCellValue(cell,evaluate,key(lane,point),undefined,workbook);if(typeof value!=='boolean'&&value!==null&&value!==''&&Number.isFinite(Number(value))){populated=true;break;}}
+  const evaluate=createEvaluator(workbook,sheet.id);let populated=false;for(let lane=startLane;lane<=lane2&&!populated;lane++)for(let point=startPoint;point<=point2;point++){const cell=sheet.cells[key(lane,point)];if((!cell||cell.raw==='')&&!evaluate.isComputed?.(key(lane,point)))continue;const value=chartCellValue(cell,evaluate,key(lane,point),undefined,workbook);if(typeof value!=='boolean'&&value!==null&&value!==''&&Number.isFinite(Number(value))){populated=true;break;}}
   if(!populated)return [];
   const indexed={cache:Array.from({length:point2-startPoint+1},(_,i)=>xy?i+1:String(i+1))},categoryRef=xy&&!implicitX||!xy&&categories?ref(lane1):indexed,result=[];
   for(let lane=startLane;lane<=lane2;lane+=chart.type==='bubble'?2:1){

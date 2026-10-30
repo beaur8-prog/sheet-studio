@@ -47,6 +47,7 @@ export function autoFillPlan({sourceCells,sourceRange,targetRange,hiddenRow=()=>
   if(trend)cell.raw=trend(vertical?ri-rowOffset:ci-colOffset);
   else if(cell.raw?.startsWith('='))cell.raw=shiftFormula(cell.raw,r-sr,c-sc);
   delete cell.cachedValue;
+  delete cell.cachedError;
   updates.push({key:address(r,c),cell});
  }));
  return updates;

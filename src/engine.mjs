@@ -322,6 +322,7 @@ function readCell(ctx, sheet, ref) {
   if (!pos) return new FormulaError('#REF!');
   ref = address(pos.r, pos.c);
   const external=externalEvaluators.get(unwrap(ctx.workbook));let array=null;
+  if(external?.isComputed?.(sheet.id,ref)){const result=external.result?external.result(sheet.id,ref):{value:external(sheet.id,ref)};return result.error?new FormulaError(result.error):result.value;}
   if(!external){array=arraysFor(ctx,sheet).at(pos);
     if(array&&array.ref!==ref){const anchor=readCell(ctx,sheet,array.ref),result=ctx.arrayResults?.get(sheet.id+'!'+array.ref);if(!result)return anchor;const r=result.rows===1?0:pos.r-array.r1,c=result.cols===1?0:pos.c-array.c1,value=r>=result.rows||c>=result.cols?new FormulaError('#N/A'):result.values[r*result.cols+c];return value===BLANK?0:value;}
   }
@@ -343,7 +344,7 @@ function readCell(ctx, sheet, ref) {
   try {
     ctx.sheet = sheet;ctx.position=pos;ctx.arrayMode=!!array;
     const node=external?null:ctx.frame?.key===key?(ctx.frame.ast??=new Parser(raw).parse()):new Parser(raw).parse();
-    const computed=external?external(sheet.id,ref):evaluateNode(node,ctx,0);
+    const supplied=external?.result?.(sheet.id,ref),computed=external?(supplied?supplied.error?new FormulaError(supplied.error):supplied.value:external(sheet.id,ref)):evaluateNode(node,ctx,0);
     if(array){const result=asRange(computed);(ctx.arrayResults??=new Map()).set(key,result);value=checked(result.values[0]);}else value=checked(computed);
     if (value === BLANK && raw.startsWith('=')) value = 0;
   } catch (error) {
@@ -838,6 +839,7 @@ function publicValue(value) {
 function guard(callback) {
   try { return publicValue(callback()); } catch (error) { return error instanceof CalculationLimit ? '#NUM!' : error instanceof FormulaError ? error.code : '#VALUE!'; }
 }
+function detailedGuard(callback){try{return {value:publicValue(callback()),error:null};}catch(error){const code=error instanceof CalculationLimit?'#NUM!':error instanceof FormulaError?error.code:'#VALUE!';return {value:code,error:code};}}
 
 export function evaluateCell(workbook, sheetId, ref) {
   return createEvaluator(workbook,sheetId)(ref);
@@ -895,8 +897,8 @@ export function absoluteFormula(formula,ownerSheet){
 /** Returns a recalculation session for rendering many cells with a shared cache. */
 export function createEvaluator(workbook, sheetId) {
   let ctx;
-  try { ctx = context(workbook, sheetId); } catch { return () => '#REF!'; }
-  return ref => guard(() => { ctx.steps = 0; return runCalculation(ctx,()=>readCell(ctx, ctx.sheet, ref)); });
+  try { ctx = context(workbook, sheetId); } catch { const invalid=()=> '#REF!';invalid.result=()=>({value:'#REF!',error:'#REF!'});return invalid; }
+  const detailed=ref=>detailedGuard(()=>{ctx.steps=0;return runCalculation(ctx,()=>readCell(ctx,ctx.sheet,ref));}),evaluate=ref=>detailed(ref).value;evaluate.result=detailed;evaluate.isComputed=ref=>{const p=parseAddress(ref);if(!p)return false;const external=externalEvaluators.get(unwrap(ctx.workbook));return external?.isComputed?external.isComputed(ctx.sheet.id,ref):!!arraysFor(ctx,ctx.sheet).at(p);};return evaluate;
 }
 
 export function formulaForXlsx(formula,originalFormula) {
@@ -1227,6 +1229,7 @@ export function validateCell(ref, cell) {
   if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
   if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
   if (cell.cachedFormula !== undefined && (typeof cell.cachedFormula !== 'string' || cell.cachedFormula.length > 32768)) throw new Error(`저장된 수식이 올바르지 않습니다: ${ref}`);
+  if(cell.cachedError!==undefined&&typeof cell.cachedError!=='boolean')throw Error(`저장된 수식 결과 종류가 올바르지 않습니다: ${ref}`);
   if(cell.xlsxProtection!==undefined&&(!object(cell.xlsxProtection)||Object.entries(cell.xlsxProtection).some(([key,value])=>!['locked','hidden'].includes(key)||typeof value!=='boolean')))throw Error(`셀 잠금 설정이 올바르지 않습니다: ${ref}`);
   if(cell.xlsxStyle!==undefined&&(!Number.isInteger(cell.xlsxStyle)||cell.xlsxStyle<0||cell.xlsxStyle>=65536))throw Error(`보존된 셀 서식이 올바르지 않습니다: ${ref}`);
   if(cell.xlsxValue!==undefined){const v=cell.xlsxValue;if(!object(v)||typeof v.raw!=='string'||v.raw.length>32768||!object(v.value)||!v.value.richText&&!v.value.hyperlink)throw Error(`보존된 셀 값이 올바르지 않습니다: ${ref}`);validatePreservedData(v,1_000_000);}

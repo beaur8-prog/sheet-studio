@@ -2,8 +2,8 @@ import {tableBounds} from './table-schema.mjs';
 import {unwrap} from './clone.mjs';
 const inside=(a,p)=>p.r>=a.r1&&p.r<=a.r2&&p.c>=a.c1&&p.c<=a.c2;
 /** Stored CSE and imported array ranges, indexed without expanding followers. */
-export function storedArrayIndex(sheet,{validate=false}={}){
-  const regions=[];for(const key in sheet.cells){const cell=sheet.cells[key];if(cell.raw?.startsWith('=')&&cell.xlsxFormula?.shareType==='array'){const b=tableBounds(cell.xlsxFormula.ref||key);if(b)regions.push({ref:key,...b});}}
+export function storedArrayIndex(sheet,{validate=false,regions:provided}={}){
+  const regions=provided?[...provided]:[];if(!provided)for(const key in sheet.cells){const cell=sheet.cells[key];if(cell.raw?.startsWith('=')&&cell.xlsxFormula?.shareType==='array'){const b=tableBounds(cell.xlsxFormula.ref||key);if(b)regions.push({ref:key,...b});}}
   if(regions.length>10000)throw Error('한 시트의 배열 수식 정의는 최대 10,000개까지 지원합니다.');regions.sort((a,b)=>a.r1-b.r1||a.c1-b.c1);
   if(validate){let active=[],row=-1;for(const region of regions){if(region.r1!==row){row=region.r1;active=active.filter(a=>a.r2>=row);}let lo=0,hi=active.length;while(lo<hi){const mid=(lo+hi)>>>1;if(active[mid].c1<region.c1)lo=mid+1;else hi=mid;}if(lo>0&&active[lo-1].c2>=region.c1||lo<active.length&&active[lo].c1<=region.c2)throw Error('배열 수식 범위가 서로 겹칩니다.');active.splice(lo,0,region);}}
   const ends=[];let maximum=-1,last=null;for(const region of regions){maximum=Math.max(maximum,region.r2);ends.push(maximum);}
@@ -21,6 +21,6 @@ export function normalizeArrayCopy(sheet,data,values,sourceRows,sourceCols,seria
   for(let r=0;r<sourceRows.length;r++)for(let c=0;c<sourceCols.length;c++){
     const array=index.at({r:sourceRows[r],c:sourceCols[c]});if(!array)continue;
     if(!complete.has(array.ref)){let all=true;for(let row=array.r1;row<=array.r2&&all;row++)if(!rows.has(row))all=false;for(let col=array.c1;col<=array.c2&&all;col++)if(!cols.has(col))all=false;complete.set(array.ref,all);}
-    if(sourceRows[r]!==array.r1||sourceCols[c]!==array.c1||!complete.get(array.ref)){data[r][c].raw=serialize(values[r][c]);delete data[r][c].xlsxFormula;delete data[r][c].cachedValue;delete data[r][c].cachedFormula;}
+    if(sourceRows[r]!==array.r1||sourceCols[c]!==array.c1||!complete.get(array.ref)){data[r][c].raw=serialize(values[r][c],r,c);delete data[r][c].xlsxFormula;delete data[r][c].cachedValue;delete data[r][c].cachedFormula;delete data[r][c].cachedError;}
   }
 }

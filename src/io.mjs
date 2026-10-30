@@ -1,6 +1,7 @@
 import {tableBounds} from './table-schema.mjs';
 import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
+import {isErrorText} from './cell-values.mjs';
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
 import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
@@ -186,7 +187,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       if(cell.formula&&(value?.shareType==='array'||/_xlfn\.|_xlws\./i.test(cell.formula)))entry.xlsxFormula={raw,formula:cell.formula,...(value?.shareType==='array'?{shareType:'array',ref:value.ref}:{})};
       if (typeof cell.note === 'string') entry.note = cell.note;
       else if (cell.note?.texts) entry.note = cell.note.texts.map(run => run.text).join('');
-      if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result instanceof Date ? Math.round((cell.result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : cell.result?.error || cell.result; entry.cachedFormula = raw; }
+      if (cell.formula && cell.result !== undefined) { entry.cachedValue = cell.result instanceof Date ? Math.round((cell.result.getTime()/DAY+25569-dateOffset)*1e8)/1e8 : cell.result?.error || cell.result; entry.cachedFormula = raw;if(typeof entry.cachedValue==='string'&&/^#/.test(entry.cachedValue))entry.cachedError=!!cell.result?.error; }
       sheet.cells[cell.address] = entry;
     };
     source.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -235,10 +236,10 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
 
 async function evaluator() {
   const caches = new Map();
-  return (workbook, sheetId, addr) => {
+  const get=(workbook,sheetId)=>{
     if (!caches.has(sheetId)) caches.set(sheetId, createEvaluator(workbook, sheetId));
-    return caches.get(sheetId)(addr);
-  };
+    return caches.get(sheetId);
+  },evaluate=(workbook,sheetId,addr)=>get(workbook,sheetId)(addr);evaluate.result=(workbook,sheetId,addr)=>get(workbook,sheetId).result(addr);return evaluate;
 }
 function toScalar(raw) {
   if (typeof raw !== 'string') return raw ?? null;
@@ -285,14 +286,14 @@ function safeSheetName(name, used) {
   used.add(value.toLowerCase());
   return value;
 }
-function cachedResult(evaluate, workbook, sheet, addr, cell) {
-  let value;
-  try { value = evaluate?.(workbook, sheet.id, addr); } catch { /* Excel can recalculate an unsupported formula. */ }
-  if (value === undefined || value === '#NAME?' || value === '#ERROR!') value = workbook.referenceCachesValid!==false&&(!cell.cachedFormula || cell.cachedFormula === cell.raw) ? cell.cachedValue : undefined;
+function cachedResult(evaluate, workbook, sheet, addr, cell,detailed=evaluate?.result) {
+  let value,error;
+  try {if(detailed){const result=detailed(workbook,sheet.id,addr);value=result.value;error=result.error;}else{value=evaluate?.(workbook,sheet.id,addr);error=errors.has(value)?value:null;}} catch { /* Excel can recalculate an unsupported formula. */ }
+  if (value === undefined || ['#NAME?','#ERROR!'].includes(error)){value=workbook.referenceCachesValid!==false&&(!cell.cachedFormula || cell.cachedFormula === cell.raw)?cell.cachedValue:undefined;error=cell.cachedError===false?null:errors.has(value)?value:null;}
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'number') return Number.isFinite(value) ? value : { error: '#NUM!' };
   if (typeof value === 'boolean') return value;
-  if (errors.has(value)) return { error: value };
+  if (error&&errors.has(error)) return { error };
   return String(value);
 }
 
@@ -303,6 +304,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if (workbook.nativeSource && !options.allowMacroLoss) throw new Error('VBA 보존을 위해 XLSM 저장을 사용하세요. 일반 형식 변환에는 매크로 제외 확인이 필요합니다.');
   if (!['xlsx', 'csv', 'tsv'].includes(kind)) throw new Error('지원되지 않는 저장 형식입니다.');
   const evaluate = typeof options.evaluate === 'function' ? options.evaluate : await evaluator(),styleCache=new Map();
+  const detailed=typeof options.evaluateDetailed==='function'?options.evaluateDetailed:evaluate.result;
   if (kind === 'csv' || kind === 'tsv') {
     const sheet = workbook.sheets.find(item => item.id === workbook.activeSheetId) || workbook.sheets[0];
     if(sheet.kind==='chart')throw Error('차트 전용 시트는 XLSX로 저장하세요.');
@@ -321,11 +323,11 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       const row = [];
       for (let c = 0; c <= maxCol; c++) {
         const addr = address(c, r), cell = sheet.cells[addr];
-        let value = cell?.raw?.startsWith?.('=') ? cachedResult(evaluate, workbook, sheet, addr, cell) : arrays.at({r,c})?evaluate(workbook,sheet.id,addr):toScalar(cell?.raw);
-        if (value && typeof value === 'object') value = value.error || '';
+        let value = cell?.raw?.startsWith?.('=') ? cachedResult(evaluate, workbook, sheet, addr, cell,detailed) : arrays.at({r,c})?cachedResult(evaluate,workbook,sheet,addr,cell||{raw:''},detailed):toScalar(cell?.raw);
+        const error=value&&typeof value==='object'&&value.error;if (value && typeof value === 'object') value = value.error || '';
         let text = value === undefined || value === null ? '' : String(value);
         // Prevent plain text beginning with a formula marker from becoming a formula when opened elsewhere.
-        if (typeof value === 'string' && /^[=+@\-\t\r]/.test(text)) text = "'" + text;
+        if (typeof value === 'string' && (/^[=+@\-\t\r]/.test(text)||!error&&isErrorText(value))) text = "'" + text;
         if (text.includes(delimiter) || /["\r\n]/.test(text)) text = '"' + text.replace(/"/g, '""') + '"';
         row.push(text);
       }
@@ -361,7 +363,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       const pos=coordinates(addr), offset=pageFilters.length?pageFilters.length+1:0;
       const targetCell = target.getCell(offset?address(pos.col,pos.row+offset):addr);
       if (typeof cell.raw === 'string' && cell.raw.startsWith('=')) {
-        const result = cachedResult(evaluate, workbook, sheet, addr, cell);
+        const result = cachedResult(evaluate, workbook, sheet, addr, cell,detailed);
         let formula=cell.raw;
         for(const pivot of workbook.sheets.filter(s=>s.pivot)){const pages=pivot.pivot.filters.filter(f=>!pivot.pivot.rows.includes(f.field)&&!pivot.pivot.columns.includes(f.field)).length;for(let i=0;i<(pages?pages+1:0);i++)formula=transformFormulaReferences(formula,{axis:'r',index:0,delta:1,targetSheet:pivot.name,ownerSheet:sheet.name});}
         const original=cell.xlsxFormula,keepOriginal=original?.raw===formula;
@@ -383,8 +385,8 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       if((array.r2-array.r1+1)*(array.c2-array.c1+1)>MAX_CELLS)throw Error('배열 수식 결과가 1,000,000셀 계산 한도를 초과합니다.');
       for(let r=array.r1;r<=array.r2;r++)for(let c=array.c1;c<=array.c2;c++){
         const key=address(c,r);if(key===array.ref)continue;if(!sheet.cells[key]&&++exportedCount>MAX_CELLS)throw Error('배열 결과를 포함한 XLSX의 셀 수가 1,000,000개를 초과합니다.');
-        const value=evaluate(workbook,sheet.id,key);if(value==='#NAME?'&&anchor.xlsxFormula.raw===anchor.raw&&workbook.referenceCachesValid!==false)continue;
-        const offset=pageFilters.length?pageFilters.length+1:0,cell=target.getCell(offset?address(c,r+offset):key);cell.value=errors.has(value)?{error:value}:value===undefined||value===null?'':value;
+        const result=detailed?.(workbook,sheet.id,key),value=result?result.value:evaluate(workbook,sheet.id,key),error=result?result.error:errors.has(value)?value:null;if(error==='#NAME?'&&anchor.xlsxFormula.raw===anchor.raw&&workbook.referenceCachesValid!==false)continue;
+        const offset=pageFilters.length?pageFilters.length+1:0,cell=target.getCell(offset?address(c,r+offset):key);cell.value=error&&errors.has(error)?{error}:value===undefined||value===null?'':value;
       }
     }
     for (const [index, width] of Object.entries(sheet.columnWidths || {})) {

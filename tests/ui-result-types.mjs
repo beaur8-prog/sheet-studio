@@ -1,0 +1,26 @@
+import {_electron} from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import ExcelJS from 'exceljs';
+import platform from '../scripts/platform.cjs';
+import {createWorkbook} from '../src/engine.mjs';
+const root=path.resolve(import.meta.dirname,'..'),dataDir=path.join(root,'.package','result-types-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
+const app=await _electron.launch({executablePath:path.join(platform.findRuntime(root),'dist',platform.runtimeSuffix()),args:[root],env}),page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
+await app.evaluate(({ipcMain})=>{ipcMain.removeHandler('sheet:write-clipboard');ipcMain.handle('sheet:write-clipboard',(_event,payload)=>{globalThis.testTypedClipboard=payload;});});
+const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));};
+const go=async ref=>{await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await settle();},value=ref=>page.evaluate(ref=>sheetStudio.evaluateAsync(ref),ref),raw=ref=>page.evaluate(ref=>sheetStudio.getWorkbook().sheets[0].cells[ref]?.raw,ref);
+const edit=async(ref,text)=>{await go(ref);await page.keyboard.press('F2');await page.locator('#editor').fill(text);await page.locator('#editor').press('Enter');await settle();};
+const copy=async()=>{await page.locator('[data-action="copy"]').click();await settle();return app.evaluate(()=>globalThis.testTypedClipboard.text);};
+const paste=async text=>{await page.locator('#grid').focus();await page.evaluate(text=>{const data=new DataTransfer();data.setData('text/plain',text);document.querySelector('#grid').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));},text);await settle();};
+try{
+  await page.locator('.cell').first().waitFor();const b=createWorkbook(),s=b.sheets[0];b.name='typed-ui';s.cells={A1:{raw:'="#N/A"'},A2:{raw:'=NA()'},A3:{raw:'="#NAME?"'},D1:{raw:'={"#N/A";#N/A}',xlsxFormula:{raw:'={"#N/A";#N/A}',formula:'{"#N/A";#N/A}',shareType:'array',ref:'D1:D2'}},D2:{raw:'999'}};
+  await page.locator('#file-input').setInputFiles({name:'typed-ui.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='typed-ui');await settle();assert.equal(await page.getByRole('gridcell',{name:'D2',exact:true}).textContent(),'#N/A');await edit('B1','=ISTEXT(A1)');await edit('B2','=ISERROR(A2)');assert.equal(await value('B1'),true);assert.equal(await value('B2'),true);
+  await go('A1:A2');await copy();await go('C1');await page.locator('[data-action="paste-special"]').click();await page.locator('#paste-mode').selectOption('values');await page.getByRole('dialog').getByRole('button',{name:'확인',exact:true}).click();await settle();assert.equal(await raw('C1'),"'#N/A");assert.equal(await raw('C2'),'#N/A');
+  await go('D1:D2');const full=await copy();await go('F1');await paste(full);assert.equal(await value('F1'),'#N/A');assert.equal(await value('F2'),'#N/A');
+  await go('D1');const text=await copy();await go('H1');await paste(text);assert.equal(await raw('H1'),"'#N/A");await go('D2');const error=await copy();await go('H2');await paste(error);assert.equal(await raw('H2'),'#N/A');
+  const output=path.join(dataDir,'typed.xlsx');await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},output);await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');const out=new ExcelJS.Workbook();await out.xlsx.load(await fs.readFile(output));const sheet=out.worksheets[0];assert.equal(sheet.getCell('A1').result,'#N/A');assert.deepEqual(sheet.getCell('A2').result,{error:'#N/A'});assert.equal(sheet.getCell('A3').result,'#NAME?');assert.equal(sheet.getCell('C1').value,'#N/A');assert.deepEqual(sheet.getCell('C2').value,{error:'#N/A'});assert.equal(sheet.getCell('F1').result,'#N/A');assert.deepEqual(sheet.getCell('F2').value,{error:'#N/A'});assert.equal(sheet.getCell('H1').value,'#N/A');assert.deepEqual(sheet.getCell('H2').value,{error:'#N/A'});
+  await page.locator('#file-input').setInputFiles(output);await settle();assert.equal(await value('B1'),true);assert.equal(await value('B2'),true);await edit('I1','=ISTEXT(H1)');await edit('I2','=ISERROR(H2)');assert.equal(await value('I1'),true);assert.equal(await value('I2'),true);assert.deepEqual(errors,[]);
+  console.log('PASS: actual text versus error calculation, current array follower display, isolated value paste and partial/full array copies, typed worker XLSX caches and reimport');
+}catch(error){await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/result-types-failure.png')});throw error;}
+finally{await app.close();await fs.rm(dataDir,{recursive:true,force:true});}
