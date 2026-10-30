@@ -1,4 +1,5 @@
 import {tableBounds} from './table-schema.mjs';
+import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
 import {restoreTables,restoreTableFilterVisibility,addTableParts} from './table-xlsx.mjs';
 import {applyFilters} from './filters.mjs';
 import {plainCopy,prepareWorksheetFeatures,addPreservedFeatures} from './xlsx-preservation.mjs';
@@ -218,7 +219,9 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   const result = { name: fileName(filename), activeSheetId: sheets[activeIndex]?.id || sheets[0].id, sheets };
   if(book.properties.date1904)result.date1904=true;
   if(styleModels.length)result.xlsxStyles=styleModels;
+  if(preserved.colors)result.xlsxColors=preserved.colors;
   if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
+  await restoreSheetKinds(colorZip,result,newSheet);
   await restoreWorksheetParts(data,result);
   await restoreTables(colorZip,result);
   await restoreFilterParts(data,result);
@@ -301,6 +304,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   const evaluate = typeof options.evaluate === 'function' ? options.evaluate : await evaluator(),styleCache=new Map();
   if (kind === 'csv' || kind === 'tsv') {
     const sheet = workbook.sheets.find(item => item.id === workbook.activeSheetId) || workbook.sheets[0];
+    if(sheet.kind==='chart')throw Error('차트 전용 시트는 XLSX로 저장하세요.');
     let maxRow = -1, maxCol = -1;
     for (const [addr, cell] of Object.entries(sheet.cells)) {
       if (cell.raw === '' || cell.raw === undefined) continue;
@@ -334,7 +338,8 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   book.creator = 'Sheet Studio';
   book.created = new Date(); book.modified = new Date();
   book.calcProperties.fullCalcOnLoad = true;
-  book.views = [{ activeTab: Math.max(0, workbook.sheets.findIndex(sheet => sheet.id === workbook.activeSheetId)), visibility: 'visible' }];
+  const visibleSheet=sheet=>!sheet.state||sheet.state==='visible',active=workbook.sheets.find(sheet=>sheet.id===workbook.activeSheetId&&visibleSheet(sheet))||workbook.sheets.find(visibleSheet);
+  book.views = [{ activeTab: Math.max(0, workbook.sheets.indexOf(active)), visibility: 'visible' }];
   const names = new Set(), exportNames = new Map();
   for (const sheet of workbook.sheets) {
     const target = book.addWorksheet(safeSheetName(sheet.name, names));
@@ -387,5 +392,5 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   }
   const pivotBytes = await addPivotParts(new Uint8Array(await book.xlsx.writeBuffer()),workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
-  return { data:await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames), mime: XLSX_MIME, extension: 'xlsx' };
+  return { data:await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames), mime: XLSX_MIME, extension: 'xlsx' };
 }

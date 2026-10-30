@@ -58,7 +58,10 @@ export function recordNativeStructure(workbook,sheetId,axis,index,delta){
 export function buildNativePlan(workbook){
   const source=workbook.nativeSource;if(source?.format!=='xlsm')throw new Error('먼저 XLSM 통합 문서를 여세요.');
   const baseline=new Map(source.baseline.map(s=>[s.id,s]));
-  const sheets=workbook.sheets.map(sheet=>{
+  const chartState=sheet=>({name:sheet.name,state:sheet.state,charts:(sheet.charts||[]).map(c=>Object.fromEntries(['id','title','type','grouping','x','y','width','height','legend','labels','plotVisibleOnly','xTitle','yTitle','rebuilt'].map(key=>[key,c[key]])))});
+  for(const sheet of source.baseline.filter(s=>s.kind==='chart')){const current=workbook.sheets.find(s=>s.id===sheet.id);if(!current||!equal(chartState(current),chartState(sheet)))throw Error('XLSM의 차트 전용 시트 구성은 Excel에서 편집하거나 XLSX 사본으로 저장하세요.');}
+  if(workbook.sheets.some(s=>s.kind==='chart'&&!baseline.has(s.id)))throw Error('새 차트 전용 시트는 XLSX로 저장하세요.');
+  const sheets=workbook.sheets.filter(s=>s.kind!=='chart').map(sheet=>{
     const before=baseline.get(sheet.id),cells=[];
     for(const key of new Set([...Object.keys(before?.cells||{}),...Object.keys(sheet.cells)])){
       const old=before?.cells[key]||{raw:''},now=sheet.cells[key]||{raw:''},patch={address:key};
@@ -73,7 +76,7 @@ export function buildNativePlan(workbook){
     if(conditionalFormats&&sheet.unsupportedConditionalCount)throw Error('미지원 조건부 서식은 Excel에서 편집하거나 모두 지운 뒤 저장하세요.');
     return {...(conditionalFormats!==undefined?{conditionalFormats}:{}),...(!equal(sheet.freeze,before?.freeze)?{freeze:sheet.freeze||{rows:0,cols:0}}:{}),...(!equal(sheet.autoFilter,before?.autoFilter)?{autoFilter:nativeFilterPlan(sheet.autoFilter,workbook),manualHiddenRows:Object.entries(sheet.rowHeights||{}).filter(([,h])=>h===0).map(([r])=>+r)}:{}),id:sheet.id,sourceName:before?.name??null,name:sheet.name,cells,columnWidths:dimensions('columnWidths'),rowHeights:dimensions('rowHeights'),unmerge:(before?.merges||[]).filter(v=>!(sheet.merges||[]).includes(v)),merge:(sheet.merges||[]).filter(v=>!(before?.merges||[]).includes(v)),...chartPlan(sheet,before,workbook)};
   });
-  return {pivots:workbook.sheets.filter(s=>s.pivot).map(s=>({sheet:s.name,source:workbook.sheets.find(source=>source.id===s.pivot.sourceSheetId)?.name||null,spec:clone(s.pivot)})),sheets,deleted:source.baseline.filter(s=>!workbook.sheets.some(v=>v.id===s.id)).map(s=>s.name),operations:clone(source.operations||[]),activeSheetId:workbook.activeSheetId};
+  return {pivots:workbook.sheets.filter(s=>s.pivot).map(s=>({sheet:s.name,source:workbook.sheets.find(source=>source.id===s.pivot.sourceSheetId)?.name||null,spec:clone(s.pivot)})),sheets,deleted:source.baseline.filter(s=>s.kind!=='chart'&&!workbook.sheets.some(v=>v.id===s.id)).map(s=>s.name),operations:clone(source.operations||[]),activeSheetId:workbook.activeSheetId};
 }
 
 export function nativeSourceChanged(workbook){const p=buildNativePlan(workbook);return !!(p.deleted.length||p.operations.length||p.sheets.some(s=>!s.sourceName||s.name!==s.sourceName||s.cells.length||s.autoFilter!==undefined||s.freeze!==undefined||s.conditionalFormats!==undefined||s.merge.length||s.unmerge.length||s.charts.length||s.deletedCharts.length||Object.keys(s.columnWidths).length||Object.keys(s.rowHeights).length));}

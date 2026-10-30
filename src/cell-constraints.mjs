@@ -7,12 +7,12 @@ function parsed(source,read){if(!source)return null;if(cache.has(source))return 
 function range(text){const [first,last=first]=String(text).split(':'),a=parseAddress(first),b=parseAddress(last);return a&&b?{r1:Math.min(a.r,b.r),r2:Math.max(a.r,b.r),c1:Math.min(a.c,b.c),c2:Math.max(a.c,b.c)}:null;}
 export function protection(sheet){return parsed(sheet.xlsxFeatures?.sheetProtection,doc=>Object.fromEntries(Array.from(doc.documentElement.attributes).map(a=>[a.name,a.value])));}
 export const sheetIsProtected=sheet=>['1','true'].includes(protection(sheet)?.sheet);
-export function protectionAllows(sheet,operation){if(!sheetIsProtected(sheet))return true;const p=protection(sheet);return ['0','false'].includes(p[operation]);}
+export function protectionAllows(sheet,operation){if(sheet.kind==='chart')return operation==='objects'&&!parsed(sheet.xlsxChartSheet?.xml,doc=>all(doc,'sheetProtection').length);if(!sheetIsProtected(sheet))return true;const p=protection(sheet);return ['0','false'].includes(p[operation]);}
 export function cellProtection(book,sheet,ref){
   const cell=sheet.cells[ref],p=parseAddress(ref),style=book.xlsxStyles?.[cell?.xlsxStyle]?.style;
   return cell?.xlsxProtection||style?.protection||sheet.xlsxProtectionDefaults?.rows?.[p?.r]||sheet.xlsxProtectionDefaults?.columns?.[p?.c]||{};
 }
-export const cellIsLocked=(book,sheet,ref)=>sheetIsProtected(sheet)&&cellProtection(book,sheet,ref).locked!==false;
+export const cellIsLocked=(book,sheet,ref)=>sheet.kind==='chart'||sheetIsProtected(sheet)&&cellProtection(book,sheet,ref).locked!==false;
 export const cellFormulaHidden=(book,sheet,ref)=>sheetIsProtected(sheet)&&cellProtection(book,sheet,ref).hidden===true;
 let arrayIndexes=new WeakMap();
 export function resetConstraintIndexes(){arrayIndexes=new WeakMap();}
@@ -20,6 +20,7 @@ export function refreshConstraintIndexes(book,dirty){for(const sheet of book.she
 export function arrayRegions(sheet){const cells=unwrap(sheet.cells);let index=arrayIndexes.get(cells);if(!index){index=new Set();for(const ref in cells)if(cells[ref]?.xlsxFormula?.shareType==='array')index.add(ref);arrayIndexes.set(cells,index);}const arrays=[];for(const ref of index){const cell=cells[ref];if(cell?.raw?.startsWith('=')&&cell.xlsxFormula?.shareType==='array'){const b=range(cell.xlsxFormula.ref||ref);if(b)arrays.push({ref,...b});}}return arrays;}
 
 export function cellEditError(book,sheet,ref){
+  if(sheet.kind==='chart')return '차트 전용 시트에서는 셀을 편집할 수 없습니다.';
   if(cellIsLocked(book,sheet,ref))return '보호된 셀입니다. 입력이 허용된 셀을 선택하거나 Excel에서 시트 보호를 해제하세요.';
   const p=parseAddress(ref);if(arrayRegions(sheet).some(a=>a.ref!==ref&&inside(a,p)))return '배열 수식 결과의 일부를 변경할 수 없습니다. 배열의 첫 셀에서 수식을 편집하세요.';
   return null;

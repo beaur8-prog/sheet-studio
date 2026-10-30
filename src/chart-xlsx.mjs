@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import {chartSeries,chartData,parseChartFormula,refFormula,refValues,referenceSize,chartColors,chartNumberFormat} from './chart-model.mjs';
 import {chartRect} from './chart-geometry.mjs';
 import {numberFormatKind} from './engine.mjs';
+import {drawingAnchorRect,readOpaqueDrawing,writeOpaqueDrawings,drawingRelationshipIds,remapDrawingRelationships} from './xlsx-drawings.mjs';
 import {C,A,R,D,DECL,xmlEscape as esc,xml,stringify,children,child,all,first,attr,val,resolvePart,relPath,relationship,relationships,readRelationships} from './chart-xml.mjs';
 
 const EMU=9525,CHART_TYPE='application/vnd.openxmlformats-officedocument.drawingml.chart+xml',DRAWING_TYPE='application/vnd.openxmlformats-officedocument.drawing+xml';
@@ -19,10 +20,7 @@ function pointCache(node){
 }
 function readRef(node,workbook,ownerSheetId){if(!node)return undefined;const formula=first(node,'f')?.textContent,ref=parseChartFormula(formula,workbook,ownerSheetId);return {...ref,...(ownerSheetId?{ownerSheetId}:{}),...(formula?{formula}:{}),cache:pointCache(node),...(first(node,'formatCode')?{formatCode:first(node,'formatCode').textContent}:{})};}
 function anchorRect(anchor,sheet){
-  const point=n=>{const c=asNumber(child(n,'col')?.textContent),r=asNumber(child(n,'row')?.textContent);let x=0,y=0;for(let i=0;i<Math.min(16384,c);i++)x+=sheet.columnWidths[i]||sheet.defaultColumnWidth||64;for(let i=0;i<Math.min(1048576,r);i++)y+=sheet.rowHeights[i]||sheet.defaultRowHeight||20;return {x:x+asNumber(child(n,'colOff')?.textContent)/EMU,y:y+asNumber(child(n,'rowOff')?.textContent)/EMU};};
-  const from=child(anchor,'from')?point(child(anchor,'from')):{x:asNumber(attr(child(anchor,'pos'),'x'))/EMU,y:asNumber(attr(child(anchor,'pos'),'y'))/EMU};
-  const end=child(anchor,'to')?point(child(anchor,'to')):null,ext=child(anchor,'ext');
-  return {x:Math.max(0,from.x),y:Math.max(0,from.y),width:Math.max(100,Math.min(10000,end?end.x-from.x:asNumber(attr(ext,'cx'))/EMU||500)),height:Math.max(100,Math.min(10000,end?end.y-from.y:asNumber(attr(ext,'cy'))/EMU||300))};
+  const rect=drawingAnchorRect(anchor,sheet);return {...rect,width:Math.max(100,rect.width),height:Math.max(100,rect.height)};
 }
 function chartColor(node,palette,fallback){const fill=child(child(node,'spPr'),'solidFill'),rgb=child(fill,'srgbClr'),scheme=child(fill,'schemeClr');return rgb?'#'+attr(rgb,'val'):palette[attr(scheme,'val')]||fallback;}
 async function readParts(zip,roots,types){
@@ -51,12 +49,13 @@ export async function restoreChartParts(bytes,workbook){
   for(const entry of all(bookXML,'sheet')){
     const relation=bookRels.find(r=>r.id===attr(entry,'r:id'));if(!relation||relation.mode==='External')continue;
     let sheet=workbook.sheets.find(s=>s.name===attr(entry,'name'));
-    if(!sheet)continue; // Chart-only sheets are not worksheets in the current cell editor.
+    if(!sheet)continue;
     const sheetPart=resolvePart('xl/workbook.xml',relation.target),sheetXML=xml(worksheetMetadataXML(await zip.file(sheetPart).async('string'))),sheetRels=await readRelationships(zip,sheetPart);
-    const format=first(sheetXML,'sheetFormatPr');sheet.defaultColumnWidth=Math.round((Number(attr(format,'defaultColWidth'))||8.43)*digitWidth+5);sheet.defaultRowHeight=(Number(attr(format,'defaultRowHeight'))||15)*4/3;
+    const format=first(sheetXML,'sheetFormatPr');if(sheet.kind!=='chart'){sheet.defaultColumnWidth=Math.round((Number(attr(format,'defaultColWidth'))||8.43)*digitWidth+5);sheet.defaultRowHeight=(Number(attr(format,'defaultRowHeight'))||15)*4/3;}
     for(const drawing of all(sheetXML,'drawing')){
       const drawingRel=sheetRels.find(r=>r.id===attr(drawing,'r:id'));if(!drawingRel||drawingRel.mode==='External')continue;
       const drawingPart=resolvePart(sheetPart,drawingRel.target),drawingXML=xml(await zip.file(drawingPart).async('string')),drawingRels=await readRelationships(zip,drawingPart);
+      const opaque=children(drawingXML.documentElement).filter(anchor=>!all(anchor,'chart').some(n=>n.getAttributeNS(R,'id')));if(opaque.length){sheet.xlsxDrawings||=[];sheet.xlsxDrawings.push(await readOpaqueDrawing(zip,drawingPart,opaque,drawingRels));}
       for(const anchor of children(drawingXML.documentElement)){
         const chartNode=all(anchor,'chart').find(n=>attr(n,'r:id'));if(!chartNode)continue;
         if(++number>200)throw Error('차트는 통합 문서당 200개까지 지원합니다.');
@@ -70,7 +69,7 @@ export async function restoreChartParts(bytes,workbook){
             const tx=child(ser,'tx'),nameRef=readRef(tx,workbook,sheet.id);series.push({name:child(tx,'v')?.textContent||`계열 ${series.length+1}`,nameRef,catRef:readRef(child(ser,'cat'),workbook,sheet.id),valRef:readRef(child(ser,'val')||child(ser,'yVal'),workbook,sheet.id),xRef:readRef(child(ser,'xVal'),workbook,sheet.id),sizeRef:readRef(child(ser,'bubbleSize'),workbook,sheet.id),color:chartColor(ser,palette,chartColors[series.length%chartColors.length]),pointColors:Object.fromEntries(children(ser,'dPt').map(n=>[val(n,'idx'),chartColor(n,palette,chartColors[Number(val(n,'idx'))%chartColors.length])])),type:kind,secondary:attr(children(group,'axId').at(-1),'val')!==primaryAxis,lines:val(group,'scatterStyle').includes('line')});
           }
         }
-        const usedIds=new Set(Array.from(stringify(anchor).matchAll(/\br:(?:id|embed|link)="([^"]+)"/g),m=>m[1])),rels=drawingRels.filter(r=>usedIds.has(r.id)).map(r=>({...r,target:r.mode==='External'?r.target:resolvePart(drawingPart,r.target)}));
+        const usedIds=drawingRelationshipIds(anchor),rels=drawingRels.filter(r=>usedIds.has(r.id)).map(r=>({...r,target:r.mode==='External'?r.target:resolvePart(drawingPart,r.target)}));
         const axisIds=children(base,'axId').map(n=>attr(n,'val')),axisTitle=id=>all(child(axes.find(n=>val(n,'axId')===id),'title'),'t').map(n=>n.textContent).join('');
         const chart={id:crypto.randomUUID(),type:type==='bar'&&val(base,'barDir')==='bar'?'bar-horizontal':type,range:'A1:B2',title,plotVisibleOnly:val(first(sourceXML,'chart'),'plotVisOnly','1')!=='0',nativeName:attr(first(anchor,'cNvPr'),'name'),...anchorRect(anchor,sheet),legend,labels:[...all(sourceXML,'showVal'),...all(sourceXML,'showPercent')].some(n=>attr(n,'val')==='1'),grouping:val(base,'grouping','clustered'),series,xTitle:axisTitle(axisIds[0]),yTitle:axisTitle(axisIds[1])};
         if(groupNodes.some(n=>/3D/.test(n.localName)))chart.previewNote='3D 차트의 2D 미리 보기 · Excel 원본 보존';
@@ -140,15 +139,15 @@ function updateOriginalXML(chart,workbook,names,offsets){
 function absoluteAnchor(chart,graphic){const r=chartRect(chart);return `<xdr:absoluteAnchor><xdr:pos x="${Math.round(r.x*EMU)}" y="${Math.round(r.y*EMU)}"/><xdr:ext cx="${Math.round(r.width*EMU)}" cy="${Math.round(r.height*EMU)}"/>${graphic}<xdr:clientData/></xdr:absoluteAnchor>`;}
 
 export async function addChartParts(bytes,workbook,names){
-  if(!workbook.sheets.some(s=>s.charts?.length)&&!workbook.chartNames?.length&&!workbook.chartTheme)return bytes;
+  if(!workbook.sheets.some(s=>s.charts?.length||s.xlsxDrawings?.length)&&!workbook.chartNames?.length&&!workbook.chartTheme)return bytes;
   const zip=await JSZip.loadAsync(bytes),types=xml(await zip.file('[Content_Types].xml').async('string'));
   const offsets=new Map(workbook.sheets.map(s=>{const n=s.pivot?.filters.filter(f=>!s.pivot.rows.includes(f.field)&&!s.pivot.columns.includes(f.field)).length||0;return [s.id,n?n+1:0];}));
   function content(part,type){const name='/'+part;let n=all(types,'Override').find(n=>attr(n,'PartName')===name);if(!n){n=types.createElementNS(types.documentElement.namespaceURI,'Override');n.setAttribute('PartName',name);types.documentElement.appendChild(n);}n.setAttribute('ContentType',type);}
   let number=0;
   for(let index=0;index<workbook.sheets.length;index++){
-    const sheet=workbook.sheets[index];if(!sheet.charts?.length)continue;
+    const sheet=workbook.sheets[index];if(!sheet.charts?.length&&!sheet.xlsxDrawings?.length)continue;
     let anchors='',drawingRelations='';
-    for(const chart of sheet.charts){
+    for(const chart of sheet.charts||[]){
       const n=++number,id='rIdChart'+n;let graphic,preservedAnchor;
       if(chart.source&&!chart.rebuilt){
         const source=chart.source,prefix=`xl/sheetStudioCharts/chart${n}/`,map=path=>prefix+path.replace(/^(xl\/sheetStudioCharts\/chart\d+\/)+/,'');
@@ -159,7 +158,7 @@ export async function addChartParts(bytes,workbook,names){
         }
         zip.file(map(source.root),updateOriginalXML(chart,workbook,names,offsets));
         const anchorDoc=xml(source.anchor),anchor=anchorDoc.documentElement;
-        for(const rel of source.rels){const newId=id+'_'+rel.id;drawingRelations+=relationship(newId,rel.type,rel.mode==='External'?rel.target:'/'+map(rel.target),rel.mode);for(const node of [anchor,...all(anchor,'*')])for(const attrName of ['r:id','r:embed','r:link'])if(attr(node,attrName)===rel.id)node.setAttribute(attrName,newId);}
+        const relIds=new Map();for(const rel of source.rels){const newId=id+'_'+rel.id;relIds.set(rel.id,newId);drawingRelations+=relationship(newId,rel.type,rel.mode==='External'?rel.target:'/'+map(rel.target),rel.mode);}remapDrawingRelationships(anchor,relIds);
         all(anchor,'cNvPr').forEach(node=>node.setAttribute('id',String(n)));
         if(source.original.geometry&&['x','y','width','height'].every(key=>chart[key]===source.original.geometry[key]))preservedAnchor=stringify(anchor);
         graphic=children(anchor).filter(node=>!['from','to','pos','ext','clientData'].includes(node.localName)).map(stringify).join('');
@@ -171,6 +170,7 @@ export async function addChartParts(bytes,workbook,names){
       }
       anchors+=preservedAnchor||absoluteAnchor(chart,graphic);
     }
+    const opaque=await writeOpaqueDrawings(zip,sheet,index,content);anchors+=opaque.anchors;drawingRelations+=opaque.rels;
     const drawing=`xl/drawings/sheetStudioDrawing${index+1}.xml`,sheetPart=`xl/worksheets/sheet${index+1}.xml`;
     zip.file(drawing,`${DECL}<xdr:wsDr xmlns:xdr="${D}" xmlns:a="${A}" xmlns:r="${R}">${anchors}</xdr:wsDr>`);zip.file(relPath(drawing),relationships(drawingRelations));content(drawing,DRAWING_TYPE);
     const preserved=splitWorksheetXML(await zip.file(sheetPart).async('string')),doc=xml(preserved.metadata),node=doc.createElementNS(doc.documentElement.namespaceURI,'drawing');node.setAttributeNS(R,'r:id','rIdSheetStudioDrawing');const before=children(doc.documentElement).find(n=>['legacyDrawing','legacyDrawingHF','picture','oleObjects','controls','webPublishItems','tableParts','extLst'].includes(n.localName));doc.documentElement.insertBefore(node,before||null);zip.file(sheetPart,preserved.restore(stringify(doc)));

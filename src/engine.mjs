@@ -1,4 +1,6 @@
 import {validateStoredParts} from './xlsx-part-store.mjs';
+import {validateSheetKind} from './sheet-kinds.mjs';
+import {validateDrawings} from './xlsx-drawings.mjs';
 import {validateTables,filteredRowsForSheet} from './table-schema.mjs';
 import {readStructuredToken,resolveStructuredReference,rewriteStructuredSelector} from './table-references.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
@@ -1220,6 +1222,8 @@ export function validateWorkbook(data) {
     if (sheet.autoFilter !== undefined) validateAutoFilter(sheet.autoFilter);
     if (sheet.pivot !== undefined) { validatePivot(sheet.pivot); if (sheet.pivot.sourceSheetId === sheet.id) throw new Error('피벗 원본은 다른 시트여야 합니다.'); }
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
+    validateSheetKind(sheet);
+    if(sheet.xlsxDrawings!==undefined)validateDrawings(sheet.xlsxDrawings);
     for (const [ref, cell] of Object.entries(sheet.cells)) {
       if (++cellCount > MAX_DOCUMENT_CELLS) throw new Error('통합 문서의 셀 수가 제한을 초과했습니다.');
       validateCell(ref, cell);
@@ -1244,9 +1248,11 @@ export function validateWorkbook(data) {
     }
   }
   if (typeof data.activeSheetId !== 'string' || !ids.has(data.activeSheetId)) throw new Error('활성 시트가 없습니다.');
+  if(!data.sheets.some(s=>!s.state||s.state==='visible'))throw Error('통합 문서에는 표시되는 시트가 하나 이상 있어야 합니다.');
   const tableNames=new Set();for(const sheet of data.sheets)for(const table of sheet.tables||[]){const name=table.name.toLocaleLowerCase();if(tableNames.has(name))throw Error('통합 문서의 표 이름은 중복될 수 없습니다.');tableNames.add(name);}
   if(data.xlsxConnections!==undefined){const c=data.xlsxConnections;if(!object(c)||typeof c.root!=='string'||typeof c.type!=='string'||!c.type.endsWith('/connections')||!c.parts?.[c.root])throw Error('원래 데이터 연결 정보가 올바르지 않습니다.');validateStoredParts(c.parts);}
   if(data.xlsxTableStyles!==undefined){if(!Array.isArray(data.xlsxTableStyles)||data.xlsxTableStyles.length>10000)throw Error('원래 표 스타일이 올바르지 않습니다.');for(const style of data.xlsxTableStyles)validatePreservedXML(style,'tableStyle');}
+  if(data.xlsxColors!==undefined)validatePreservedXML(data.xlsxColors,'colors');
   if(data.xlsxStyles!==undefined){if(!Array.isArray(data.xlsxStyles)||data.xlsxStyles.length>65536||data.xlsxStyles.some(s=>!object(s)||!object(s.style)||!object(s.baseline)))throw Error('보존된 Excel 서식 목록이 올바르지 않습니다.');validatePreservedData(data.xlsxStyles,32_000_000);}
   if(data.xlsxDxfs!==undefined){if(!Array.isArray(data.xlsxDxfs)||data.xlsxDxfs.length>65536)throw Error('보존된 Excel 조건부 서식이 올바르지 않습니다.');for(const rule of data.xlsxDxfs)validatePreservedXML(rule,'dxf');}
   if(data.chartTheme!==undefined&&(typeof data.chartTheme!=='string'||data.chartTheme.length>2000000||/<!DOCTYPE|<!ENTITY/i.test(data.chartTheme)))throw new Error('차트 테마가 올바르지 않습니다.');

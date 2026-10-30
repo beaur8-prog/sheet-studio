@@ -6,7 +6,7 @@ const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main',cache=new M
 export const tablePresets={green:{label:'녹색',header:'#107c41',stripe:'#e2efda'},blue:{label:'파랑',header:'#2f5597',stripe:'#d9e2f3'},gray:{label:'회색',header:'#50565d',stripe:'#e7e6e6'}};
 function parse(source,read){let doc=cache.get(source);if(!doc){doc=xml(source);if(cache.size>500)cache.delete(cache.keys().next().value);cache.set(source,doc);}return read(doc);}
 function dxfStyle(book,id){
-  const source=book.xlsxDxfs?.[id];if(!source)return {};const key=source+'\0'+(book.chartTheme||'');if(dxfCache.has(key))return dxfCache.get(key);let resolve=colorCache.get(book.chartTheme||'');if(!resolve){resolve=createColorResolver(book.chartTheme||'',null);if(colorCache.size>10)colorCache.clear();colorCache.set(book.chartTheme||'',resolve);}
+  const source=book.xlsxDxfs?.[id];if(!source)return {};const colors=(book.chartTheme||'')+'\0'+(book.xlsxColors||''),key=source+'\0'+colors;if(dxfCache.has(key))return dxfCache.get(key);let resolve=colorCache.get(colors);if(!resolve){resolve=createColorResolver(book.chartTheme||'',book.xlsxColors?'<styleSheet>'+book.xlsxColors+'</styleSheet>':null);if(colorCache.size>10)colorCache.clear();colorCache.set(colors,resolve);}
   const node=parse(source,doc=>doc.documentElement),font=child(node,'font'),fill=child(child(node,'fill'),'patternFill'),style={};
   const rgb=n=>xmlColor(n,resolve);if(attr(fill,'patternType')==='solid'&&rgb(child(fill,'fgColor')))style.background=rgb(child(fill,'fgColor'));
   if(rgb(child(font,'color')))style.color=rgb(child(font,'color'));
