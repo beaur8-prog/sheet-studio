@@ -11,7 +11,7 @@ const app=await _electron.launch(desktopLaunch(root,env)),page=await app.firstWi
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 async function settings(){await page.locator('[data-tab="페이지 레이아웃"]').click();await page.locator('[data-action="page-setup"]').click();return page.getByRole('dialog',{name:'페이지 설정',exact:true});}
 const tab=async name=>page.locator('[data-print-tab="'+name+'"]').click();
-async function doPrint(){await page.locator('[data-action="print"]').click();const dialog=page.getByRole('dialog',{name:'인쇄',exact:true});await dialog.getByRole('button',{name:'인쇄',exact:true}).click();await settle();}
+async function doPrint(){await page.locator('[data-action="print"]').click();const dialog=page.getByRole('dialog',{name:'인쇄',exact:true});await page.locator('#print-object-layout').selectOption('pages');await dialog.getByRole('button',{name:'인쇄',exact:true}).click();await settle();}
 try{
  await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.locator('.cell').first().waitFor();
  await page.evaluate(()=>{globalThis.testPrintDocuments=[];new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node instanceof HTMLIFrameElement&&node.classList.contains('sheet-print-frame'))node.contentWindow.print=()=>testPrintDocuments.push(node.contentDocument.documentElement.outerHTML);}).observe(document.body,{childList:true});});

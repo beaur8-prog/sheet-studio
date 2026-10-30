@@ -1,4 +1,4 @@
-import {drawingAnchorRect} from './anchor-position.mjs';
+import {drawingAnchorRect,drawingPrintsWithSheet} from './anchor-position.mjs';
 export {drawingAnchorRect} from './anchor-position.mjs';
 import {capturePartTree,writeStoredParts,validateStoredParts,validateStoredRelationships} from './xlsx-part-store.mjs';
 import {xml,stringify,children,child,all,attr,R,resolvePart,relationship} from './chart-xml.mjs';
@@ -27,7 +27,7 @@ export function drawingPreviews(sheet){
   for(const group of sheet.xlsxDrawings||[])for(const source of group.anchors){
     let info=cache.get(source);if(!info){const anchor=xml(source).documentElement,picture=all(anchor,'pic')[0],blip=all(picture,'blip')[0],crop=all(picture,'srcRect')[0],transform=all(picture,'xfrm')[0],complex=Array.from(crop?.attributes||[]).some(a=>Number(a.value)!==0)||Number(attr(transform,'rot'))!==0||['flipH','flipV'].some(key=>['1','true'].includes(attr(transform,key)))||children(blip).some(n=>n.localName!=='extLst');info={anchor,id:!complex&&blip?.getAttributeNS(R,'embed'),name:attr(all(picture,'cNvPr')[0],'name')};if(cache.size>500)cache.clear();cache.set(source,info);}
     const rel=group.rels.find(r=>r.id===info.id&&r.mode!=='External'),file=rel&&group.parts[rel.target];
-    if(file&&/^image\/(?:png|jpeg|gif|webp)$/.test(file.contentType))images.push({...drawingAnchorRect(info.anchor,sheet),src:`data:${file.contentType};base64,${file.data}`,name:info.name||'가져온 이미지'});else other++;
+    if(file&&/^image\/(?:png|jpeg|gif|webp)$/.test(file.contentType))images.push({...drawingAnchorRect(info.anchor,sheet),src:`data:${file.contentType};base64,${file.data}`,name:info.name||'가져온 이미지',printWithSheet:drawingPrintsWithSheet(info.anchor)});else other++;
   }
   return {images,other};
 }

@@ -132,7 +132,8 @@ export function planPrintPages(sheet,ranges,settings){
     const activeBreaks=(breaks,min,max)=>settings.fitToPage?[]:breaks.filter(b=>b.min<=max&&b.max>=min).map(b=>b.id);
     const rp=axisPages(rows,titleRows,r=>printRowHeight(sheet,r),availableHeight/scale,activeBreaks(settings.rowBreaks,range.c1,range.c2));
     const cp=axisPages(cols,titleCols,c=>printColWidth(sheet,c),availableWidth/scale,activeBreaks(settings.colBreaks,range.r1,range.r2));
-    const add=(rr,cc)=>{renderedCells+=rr.length*cc.length;if(renderedCells>100000||pages.length>=MAX_PRINT_PAGES)throw Error('반복 제목과 페이지 나눔으로 인쇄 분량이 너무 커졌습니다. 인쇄 영역을 줄이세요.');pages.push({rows:rr,cols:cc,allRows,allCols,scale,range});};
+    const titleRowSet=new Set(titleRows),titleColSet=new Set(titleCols);
+    const add=(rr,cc)=>{renderedCells+=rr.length*cc.length;if(renderedCells>100000||pages.length>=MAX_PRINT_PAGES)throw Error('반복 제목과 페이지 나눔으로 인쇄 분량이 너무 커졌습니다. 인쇄 영역을 줄이세요.');pages.push({rows:rr,cols:cc,allRows,allCols,scale,range,objectRows:rr.filter(r=>!titleRowSet.has(r)||rr===rp[0]&&r>=range.r1&&r<=range.r2),objectCols:cc.filter(c=>!titleColSet.has(c)||cc===cp[0]&&c>=range.c1&&c<=range.c2)});};
     if(settings.pageOrder==='overThenDown')for(const rr of rp)for(const cc of cp)add(rr,cc);else for(const cc of cp)for(const rr of rp)add(rr,cc);
   }
   return {pages,dataCells};

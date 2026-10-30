@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkbook,createEvaluator,setExternalEvaluator} from '../src/engine.mjs';
+import {createWorkbook,createEvaluator,setExternalEvaluator,formatValue} from '../src/engine.mjs';
 import {buildSheetPrintDocument} from '../src/sheet-print.mjs';
 import {readSpreadsheet} from '../src/io.mjs';
 import {tableFixture} from './tables-fixture.mjs';
@@ -17,9 +17,9 @@ test('Excel table print colors, current calculated totals and conditional styles
   const book=await readSpreadsheet(await tableFixture(),'print.xlsx'),s=book.sheets[0];s.cells.A3.raw='6';s.conditionalRules=[{id:'high',range:'C2:C3',type:'cellIs',operator:'greaterThan',formulae:['20'],style:{background:'#ffcc00'}}];
   const out=buildSheetPrintDocument(book,s.id);assert.match(out.html,/data-ref="C3"[^>]*><div[^>]*>30</);assert.match(out.html,/data-ref="C4"[^>]*><div[^>]*>36</);assert.match(out.html,/background:#ffcc00/);assert.match(out.html,/font-weight:bold/);
 });
-test('charts print after data and chart-only sheets print actual SVG rather than an empty grid',()=>{
+test('individual chart pages remain available and chart-only sheets print actual SVG rather than an empty grid',()=>{
   const book=createWorkbook(),s=book.sheets[0];s.cells={A1:{raw:'Jan'},B1:{raw:'2'},A2:{raw:'Feb'},B2:{raw:'5'}};s.charts=[{id:'c1',type:'bar',title:'Sales & costs',range:'A1:B2',firstRowNames:false,firstColCategories:true,width:500,height:300,legend:false}];
-  const out=buildSheetPrintDocument(book,s.id,{orientation:'landscape'});assert.equal(out.chartCount,1);assert.match(out.html,/size:A4 landscape/);assert.match(out.html,/class="chart-point"/);assert.match(out.html,/Sales &amp; costs/);assert.ok(out.html.indexOf('<table')<out.html.indexOf('<figure'));assert.equal(buildSheetPrintDocument(book,s.id,{includeCharts:false}).chartCount,0);
+  const out=buildSheetPrintDocument(book,s.id,{orientation:'landscape',objectLayout:'pages'});assert.equal(out.chartCount,1);assert.equal(out.pageCount,2);assert.match(out.html,/size:A4 landscape/);assert.match(out.html,/class="chart-point"/);assert.match(out.html,/Sales &amp; costs/);assert.ok(out.html.indexOf('<table')<out.html.indexOf('<figure'));assert.equal(buildSheetPrintDocument(book,s.id,{includeCharts:false}).chartCount,0);
   const chartSheet={id:'chart',name:'Chart',kind:'chart',cells:{},charts:[{...s.charts[0],series:[{name:'Sales',valRef:{sheetId:s.id,range:'B1:B2'},catRef:{sheetId:s.id,range:'A1:A2'}}]}]};book.sheets.push(chartSheet);const chart=buildSheetPrintDocument(book,'chart');assert.equal(chart.dataCells,0);assert.equal(chart.chartCount,1);assert.match(chart.html,/class="chart-point"/);assert.doesNotMatch(chart.html,/<table/);
 });
 test('selected and chart-only printing avoid large data ranges and use a shared calculation snapshot',()=>{
@@ -27,6 +27,6 @@ test('selected and chart-only printing avoid large data ranges and use a shared 
   assert.throws(()=>buildSheetPrintDocument(book,s.id),/20,000/);assert.equal(buildSheetPrintDocument(book,s.id,{scope:'charts'}).chartCount,1);
   assert.throws(()=>buildSheetPrintDocument(book,s.id,{scope:'selection'}),/선택/);
   const evaluate=createEvaluator(book,s.id),result=evaluate.result('A1'),snapshot={...book},shared=(id,ref)=>evaluate(ref);shared.result=(id,ref)=>evaluate.result(ref);shared.isComputed=(id,ref)=>evaluate.isComputed(ref);setExternalEvaluator(snapshot,shared);
-  const print=buildSheetPrintDocument(snapshot,s.id,{scope:'selection',selection:{r1:0,r2:0,c1:0,c2:0},evaluate});assert.equal(print.dataCells,1);assert.ok(print.html.includes(String(result.value)));assert.equal(evaluate('A1'),result.value);
+  const print=buildSheetPrintDocument(snapshot,s.id,{scope:'selection',selection:{r1:0,r2:0,c1:0,c2:0},evaluate});assert.equal(print.dataCells,1);assert.ok(print.html.includes(formatValue(result.value,{},book)));assert.equal(evaluate('A1'),result.value);
   const hidden=createWorkbook(),hs=hidden.sheets[0];hs.cells.A1={raw:'hidden'};hs.rowHeights={0:0};const empty=buildSheetPrintDocument(hidden,hs.id);assert.equal(empty.dataCells,0);assert.match(empty.html,/인쇄할 표시 셀이 없습니다/);assert.doesNotMatch(empty.html,/>hidden</);
 });

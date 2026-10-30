@@ -1,5 +1,6 @@
 import {xml,stringify,children,child,attr,D} from './chart-xml.mjs';
 const EMU=9525,number=value=>Number.isFinite(Number(value))?Number(value):0;
+export function drawingPrintsWithSheet(source){if(!source)return true;const root=typeof source==='string'?xml(source).documentElement:source;return !['0','false'].includes(attr(child(root,'clientData'),'fPrintsWithSheet'));}
 export function anchorPlacement(anchor){return anchor.localName==='absoluteAnchor'||attr(anchor,'editAs')==='absolute'?'fixed':anchor.localName==='oneCellAnchor'||attr(anchor,'editAs')==='oneCell'?'move':'move-size';}
 const axisInfo=(sheet,axis)=>axis==='r'?{sizes:sheet.rowHeights||{},normal:sheet.defaultRowHeight||25,limit:1048576}:{sizes:sheet.columnWidths||{},normal:sheet.defaultColumnWidth||90,limit:16384};
 export function axisOffset(sheet,axis,index){const {sizes,normal}=axisInfo(sheet,axis);let result=index*normal;for(const [key,value] of Object.entries(sizes))if(+key<index)result+=value-normal;return result;}

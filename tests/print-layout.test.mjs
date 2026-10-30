@@ -45,7 +45,7 @@ test('fit-to-page suppresses manual breaks while explicit percentages preserve t
 test('selection and chart-only printing bypass bad saved areas/titles without mutating workbook settings',()=>{
   const b=createWorkbook(),s=b.sheets[0];s.cells.A1={raw:'=RAND()'};s.charts=[{id:'c1',type:'bar',range:'A1:A1',firstRowNames:false,firstColCategories:false}];definition(b,s,'Print_Area',['#REF!']);definition(b,s,'Print_Titles',['#REF!']);
   assert.throws(()=>buildSheetPrintDocument(b,s.id),/인쇄 영역/);const before=JSON.stringify(b),evaluate=createEvaluator(b,s.id),value=evaluate('A1');const out=buildSheetPrintDocument(b,s.id,{scope:'selection',selection:{r1:0,r2:0,c1:0,c2:0},includeCharts:false,evaluate});assert.equal(out.dataCells,1);assert.ok(out.html.includes(formatValue(value,{},b)));assert.equal(buildSheetPrintDocument(b,s.id,{scope:'charts'}).chartCount,1);assert.equal(JSON.stringify(b),before);
-  b.chartNames=b.chartNames.filter(n=>!n.name.endsWith('Print_Titles'));assert.equal(buildSheetPrintDocument(b,s.id,{ignorePrintArea:true}).dataCells,1);
+  b.chartNames=b.chartNames.filter(n=>!n.name.endsWith('Print_Titles'));assert.equal(buildSheetPrintDocument(b,s.id,{ignorePrintArea:true,includeCharts:false}).dataCells,1);
 });
 test('oversized or invalid print metadata fails before output expansion rather than printing unrelated cells',()=>{
   const b=createWorkbook(),s=b.sheets[0];s.cells.A1={raw:'safe'};definition(b,s,'Print_Area',['A1:A20001']);assert.throws(()=>buildSheetPrintDocument(b,s.id),/20,000/);

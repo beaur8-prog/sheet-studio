@@ -11,9 +11,11 @@ import {chartRect} from './chart-geometry.mjs';
 import {drawingPreviews} from './xlsx-drawings.mjs';
 import {nativeCachedValue} from './native-plan.mjs';
 import {readPrintSettings,planPrintPages,checkPrintRange,printRowHeight,printColWidth,MAX_PRINT_PAGES} from './print-layout.mjs';
+import {printObjectAxes,objectCellBounds,printObjectFragments} from './print-objects.mjs';
+import {drawingPrintsWithSheet} from './anchor-position.mjs';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function printRange(sheet,selection,spills=[]){
+function printRange(sheet,selection,spills=[],objects=[]){
   if(selection){
     checkPrintRange(selection);
     return {...selection};
@@ -23,6 +25,7 @@ function printRange(sheet,selection,spills=[]){
   for(const ref in sheet.cells){const cell=sheet.cells[ref];if(cell.raw===''&&!Object.keys(cell.style||{}).length)continue;const p=parseAddress(ref);if(p)include({r1:p.r,r2:p.r,c1:p.c,c2:p.c});}
   for(const table of sheet.tables||[])include(tableBounds(table.range));
   for(const array of [...storedArrayIndex(sheet).regions,...spills])include(array);
+  for(const bounds of objects)include(bounds);
   if(!range)return null;
   // Merge bounds are meaningful when their content lies in the used region.
   for(const ref of sheet.merges||[]){const b=tableBounds(ref);if(b&&b.r1<=range.r2&&b.r2>=range.r1&&b.c1<=range.c2&&b.c2>=range.c1)include(b);}
@@ -55,30 +58,37 @@ function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,
   const html='<section class="print-grid" style="zoom:'+scale+'"><table class="'+(gridLines?'with-grid':'')+'" style="width:'+width+'px"><colgroup>'+columns+'</colgroup><tbody>'+tr+'</tbody></table></section>';
   return {html,count:rows.length*cols.length,cachedCount};
 }
-/** Print cells and supported objects in a paginated flow. Charts follow the
- * data, instead of being silently omitted or clipped at their screen position.
- * This is an immutable document, built with the worker's calculation session.
- */
-export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation,gridLines,ignorePrintArea=false,includeCharts=true,includeImages=true,evaluate,now=new Date()}={}){
+/** Immutable output using one calculation session. Drawings can retain their
+ * worksheet positions or print on individual object pages. */
+export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation,gridLines,ignorePrintArea=false,includeCharts=true,includeImages=true,objectLayout='sheet',evaluate,now=new Date()}={}){
   const sheet=book.sheets.find(s=>s.id===sheetId);if(!sheet)throw Error('인쇄할 시트를 찾을 수 없습니다.');
   const settings=readPrintSettings(book,sheet,{orientation,ignorePrintArea:ignorePrintArea||scope!=='sheet',ignorePrintTitles:scope!=='sheet'});orientation=settings.orientation;gridLines??=settings.gridLines;
-  if(!['sheet','selection','charts'].includes(scope)||!['portrait','landscape'].includes(orientation))throw Error('인쇄 설정이 올바르지 않습니다.');
+  if(!['sheet','selection','charts'].includes(scope)||!['portrait','landscape'].includes(orientation)||!['sheet','pages'].includes(objectLayout))throw Error('인쇄 설정이 올바르지 않습니다.');
   if(scope==='selection'&&!selection)throw Error('인쇄할 선택 영역을 지정하세요.');
   const {contentWidth,contentHeight}=settings,calculate=evaluate||createEvaluator(book,sheetId),chartOnly=scope==='charts'||sheet.kind==='chart';
+  const positioned=objectLayout==='sheet'&&!chartOnly,axes=positioned?printObjectAxes(sheet):null,previews=drawingPreviews(sheet),printedObjects=new Set();let objectFragments=0,objectCharacters=0;
+  const acceptObject=html=>{if(++objectFragments>2000||(objectCharacters+=html.length)>32000000)throw Error('개체의 인쇄 분량이 너무 큽니다. 인쇄 영역을 줄이거나 차트·이미지 포함을 해제하세요.');};
+  const charts=(includeCharts||chartOnly?sheet.charts||[]:[]).filter(chart=>chartOnly||drawingPrintsWithSheet(chart.source?.anchor));
+  const images=includeImages&&scope!=='charts'?previews.images.filter(image=>image.printWithSheet!==false):[];
+  const chartHTML=(chart,width,height)=>{const plot=renderChartSVG(chart,sheet,book);return '<figure class="print-chart" data-chart="'+esc(chart.id)+'" style="width:'+width+'px;height:'+height+'px"><h2>'+esc(chart.title||'차트')+'</h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="'+esc(plot.viewBox)+'" role="img" aria-label="'+esc(chart.title||'차트')+'">'+plot.svg+'</svg></figure>';};
+  const imageHTML=(image,width,height)=>'<figure class="print-image" style="width:'+width+'px;height:'+height+'px"><img src="'+esc(image.src)+'" alt="'+esc(image.name)+'" style="width:100%;height:100%"></figure>';
+  const objects=[...charts.map(chart=>({kind:'chart',rect:chartRect(chart),item:chart})),...images.map(image=>({kind:'image',rect:image,item:image}))];
+  const fullObjectHTML=object=>object.html??=(object.kind==='chart'?chartHTML(object.item,object.rect.width,object.rect.height):imageHTML(object.item,object.rect.width,object.rect.height));
   // Selection printing deliberately ignores saved areas and repeating titles.
   if(scope==='selection'){settings.repeatRows=null;settings.repeatCols=null;}
-  const ranges=chartOnly?[]:settings.areas.length?settings.areas:[printRange(sheet,scope==='selection'?selection:null,calculate.spills?.()||[])],plan=planPrintPages(sheet,ranges,settings);
+  const ranges=chartOnly?[]:settings.areas.length?settings.areas:[printRange(sheet,scope==='selection'?selection:null,calculate.spills?.()||[],positioned?objects.map(item=>objectCellBounds(item.rect,axes)):[])],plan=planPrintPages(sheet,ranges,settings);
+  if(!positioned&&plan.pages.length+objects.length>MAX_PRINT_PAGES)throw Error('차트·이미지를 포함한 인쇄 페이지가 500개를 넘습니다. 인쇄 대상을 줄이세요.');
   let cachedCount=0;
-  const pages=plan.pages.map(page=>{const grid=gridHTML(book,sheet,page,{gridLines,evaluate:calculate});cachedCount+=grid.cachedCount||0;return {html:grid.html,scale:page.scale};});
-  const charts=(includeCharts||chartOnly?sheet.charts||[]:[]).map(chart=>{
-    const rect=chartRect(chart),plot=renderChartSVG(chart,sheet,book),scale=Math.min(1,contentWidth/rect.width,Math.max(20,contentHeight-40)/rect.height),width=rect.width*scale,height=rect.height*scale;
-    return '<figure class="print-chart" data-chart="'+esc(chart.id)+'" style="width:'+width+'px;height:'+height+'px"><h2>'+esc(chart.title||'차트')+'</h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="'+esc(plot.viewBox)+'" role="img" aria-label="'+esc(chart.title||'차트')+'">'+plot.svg+'</svg></figure>';
+  const pages=plan.pages.map(page=>{
+    const grid=gridHTML(book,sheet,positioned?{...page,scale:1}:page,{gridLines,evaluate:calculate});cachedCount+=grid.cachedCount||0;if(!positioned)return {html:grid.html,scale:page.scale};
+    const fragments=objects.map((item,index)=>({item,index})).sort((a,b)=>(a.item.kind==='chart')-(b.item.kind==='chart')).map(({item,index})=>printObjectFragments(item.rect,page,axes).map(f=>{const html=fullObjectHTML(item);acceptObject(html);printedObjects.add(index);return '<div class="print-object-clip" data-object="'+index+'" style="left:'+f.x+'px;top:'+f.y+'px;width:'+f.width+'px;height:'+f.height+'px"><div style="position:absolute;left:'+f.contentX+'px;top:'+f.contentY+'px">'+html+'</div></div>';}).join('')).join('');
+    return {html:'<div class="print-sheet" style="zoom:'+page.scale+';width:'+page.cols.reduce((n,c)=>n+printColWidth(sheet,c),0)+'px;height:'+page.rows.reduce((n,r)=>n+printRowHeight(sheet,r),0)+'px">'+grid.html+fragments+'</div>',scale:page.scale};
   });
-  const previews=drawingPreviews(sheet),images=includeImages&&scope!=='charts'?previews.images.map(image=>{const scale=Math.min(1,contentWidth/image.width,Math.max(20,contentHeight-40)/image.height);return '<figure class="print-image"><img src="'+esc(image.src)+'" alt="'+esc(image.name)+'" style="width:'+(image.width*scale)+'px;height:'+(image.height*scale)+'px"></figure>';}):[];
   const notes=[...settings.notes,...(previews.other&&scope!=='charts'?['미리 보기를 지원하지 않는 이미지·도형 '+previews.other+'개는 인쇄에서 제외했습니다. 원본은 XLSX에 유지됩니다.']:[])];
   if(cachedCount)notes.push('직접 계산할 수 없는 수식 '+cachedCount+'개는 Excel 파일에 저장된 계산값을 사용합니다.');
   if(chartOnly&&!charts.length)throw Error('인쇄할 차트가 없습니다.');
-  const bodies=[...pages,...[...charts,...images].map(html=>({html,scale:1,object:true}))];
+  const objectPages=positioned?[]:objects.map((object,index)=>{const {rect,item}=object,scale=Math.min(1,contentWidth/rect.width,Math.max(20,contentHeight-40)/rect.height),html=object.kind==='chart'?chartHTML(item,rect.width*scale,rect.height*scale):imageHTML(item,rect.width*scale,rect.height*scale);acceptObject(html);printedObjects.add(index);return {html,scale:1,object:true};});
+  const bodies=[...pages,...objectPages];
   if(!bodies.length)bodies.push({html:'<p>인쇄할 표시 셀이 없습니다.</p>',scale:1});
   if(bodies.length>MAX_PRINT_PAGES)throw Error('차트·이미지를 포함한 인쇄 페이지가 500개를 넘습니다. 인쇄 대상을 줄이세요.');
   for(const [kind,margin] of [['Header','top'],['Footer','bottom']])if(HEADER_FIELDS.filter(f=>f.endsWith(kind)).some(f=>settings.headerFooter[f])&&settings.margin[kind.toLowerCase()]>settings.margin[margin])throw Error('머리글·바닥글 위치가 인쇄 여백 밖에 있습니다. 페이지 설정에서 위치와 여백을 조정하세요.');
@@ -87,8 +97,9 @@ export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,or
 
   const style=[
     '@page{size:'+(settings.paper.name==='B5'?settings.paper.width+'mm '+settings.paper.height+'mm':settings.paper.name+' '+orientation)+';margin:0}*{box-sizing:border-box}body{margin:0;color:#222;font:11pt Arial}table{table-layout:fixed;border-collapse:collapse}td{padding:0;overflow:hidden;border:0}table.with-grid td{border:1px solid #ccc}.print-cell{padding:2px 4px;overflow:hidden}tr{break-inside:avoid}.print-page{position:relative;break-after:page;padding:'+['top','right','bottom','left'].map(k=>settings.margin[k]+'mm').join(' ')+';}.print-page:last-of-type{break-after:auto}.print-page-body{height:100%;overflow:hidden}.print-object-page .print-page-body{display:flex;justify-content:center;align-items:flex-start}.print-object-page figure{margin:0}.print-chart,.print-image{margin:18px 0;break-inside:avoid;max-width:100%;background:white}.print-chart{display:flex;flex-direction:column;border:1px solid #ddd;padding:12px 18px}.print-chart h2{font-size:13pt;text-align:center;margin:0 0 6px}.print-chart svg{display:block;flex:1;min-height:0;width:100%;overflow:visible}.print-note{font-size:9pt;color:#555}img{display:block}.print-objects{clear:both}'
+    ,'.print-sheet{position:relative}.print-object-clip{position:absolute;overflow:hidden}.print-object-clip figure{margin:0;max-width:none}'
     ,'.print-header,.print-footer{position:absolute;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;'+headerSide+'}.print-header{top:'+m.header+'mm;height:'+Math.max(0,(m.top-m.header)*mmToPx)+'px;align-items:start}.print-footer{bottom:'+m.footer+'mm;height:'+Math.max(0,(m.bottom-m.footer)*mmToPx)+'px;align-items:end}.print-header-cell{font-size:0;white-space:pre;max-height:100%;overflow:hidden;line-height:1.15}.print-header-cell.center{text-align:center}.print-header-cell.right{text-align:right}@media print{.print-notes{display:none}}'
   ].join('');
   const content=printed.join('')+(notes.length?'<aside class="print-notes">'+notes.map(note=>'<p class="print-note">'+esc(note)+'</p>').join('')+'</aside>':'');
-  return {html:'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:"><title>'+esc(book.name)+' · '+esc(sheet.name)+'</title><style>'+style+'</style></head><body>'+content+'</body></html>',dataCells:plan.dataCells,pageCount:bodies.length,chartCount:charts.length,imageCount:images.length,notes};
+  return {html:'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:"><title>'+esc(book.name)+' · '+esc(sheet.name)+'</title><style>'+style+'</style></head><body>'+content+'</body></html>',dataCells:plan.dataCells,pageCount:bodies.length,chartCount:[...printedObjects].filter(i=>objects[i].kind==='chart').length,imageCount:[...printedObjects].filter(i=>objects[i].kind==='image').length,notes};
 }
