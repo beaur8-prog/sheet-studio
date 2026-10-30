@@ -1,3 +1,4 @@
+import {createEditTextBudget} from './edit-text-budget.mjs';
 import {stripRichTextFormat} from './cell-format-reset.mjs';
 import {cloneData} from './clone.mjs';
 import {address,parseAddress,shiftFormula,transposeFormula,numberFormatKind,formulaForXlsx} from './engine.mjs';
@@ -33,14 +34,18 @@ export function pastePlan(sheet, clip, start, options={}) {
   const rect={r1:start.r,c1:start.c,r2:targetRows.at(-1),c2:targetCols.at(-1)};
   const merges=(sheet.merges||[]).filter(m=>{const [a,b]=m.split(':').map(parseAddress),overlap=a.r<=rect.r2&&b.r>=rect.r1&&a.c<=rect.c2&&b.c>=rect.c1;if(overlap&&(a.r<rect.r1||b.r>rect.r2||a.c<rect.c1||b.c>rect.c2))throw Error('병합 셀 일부에 붙여넣을 수 없습니다. 병합 전체를 선택하거나 병합을 해제하세요.');return !overlap;});
   for(const m of clip.merges||[]){const [a,b]=m.split(':').map(parseAddress);if(transpose||targetRows.some((r,i)=>r!==start.r+i)||targetCols.some((c,i)=>c!==start.c+i))throw Error('병합 셀은 연속된 범위에 원래 방향으로 붙여넣으세요.');for(let r=0;r<height;r+=h)for(let c=0;c<width;c+=w)merges.push(address(start.r+r+a.r-clip.r,start.c+c+a.c-clip.c)+':'+address(start.r+r+b.r-clip.r,start.c+c+b.c-clip.c));}
-  const updates=[];
+  let overwrittenChars=0;
+  if(mode!=='formats'&&Number.isSafeInteger(options.textChars))for(let r=0;r<height;r++)for(let c=0;c<width;c++){
+    const sr=transpose?c%w:r%h,sc=transpose?r%h:c%w;if(skipBlanks&&(clip.data[sr]?.[sc]?.raw??'')==='')continue;
+    const key=address(targetRows[r],targetCols[c]);if(!options.removedKeys?.has(key))overwrittenChars+=sheet.cells[key]?.raw?.length||0;
+  }
+  const checkText=createEditTextBudget(options.textChars,overwrittenChars),updates=[];
   for(let r=0;r<height;r++)for(let c=0;c<width;c++){
     const sr=transpose?c%w:r%h,sc=transpose?r%h:c%w,source=clip.data[sr]?.[sc]||{raw:''};
     if(skipBlanks&&source.raw==='')continue;
     const key=address(targetRows[r],targetCols[c]),old=sheet.cells[key]||{raw:''};let cell;
     if(mode==='formats')cell=formatCellRecord(old,source);
     else {
-      cell=mode==='all'&&!clip.plainText?cloneData(source):cloneData(old);
       let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw,{error:clip.errors?.[sr]?.[sc]}):source.raw;
       if(clip.plainText)raw=entryRaw(raw,options.styleAt?.(targetRows[r],targetCols[c])||old.style);
       const dateStyle=source.style?.format==='date'||numberFormatKind(source.style?.numberFormat)==='date';
@@ -51,6 +56,7 @@ export function pastePlan(sheet, clip, start, options={}) {
         if(typeof a!=='number'||typeof b!=='number')throw Error('연산 붙여넣기는 숫자 셀에 사용하세요.');
         raw=operation==='divide'&&b===0?'#DIV/0!':String(({add:()=>a+b,subtract:()=>a-b,multiply:()=>a*b,divide:()=>a/b})[operation]());
       }
+      checkText(raw);cell=mode==='all'&&!clip.plainText?cloneData(source):cloneData(old);
       cell.raw=raw;delete cell.cachedValue;delete cell.cachedFormula;delete cell.cachedError;
       if(source.xlsxFormula?.shareType==='array'&&arrays){const range=tableBounds(source.xlsxFormula.ref||address(clip.r+sr,clip.c+sc)),origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]},rows=range.r2-range.r1+1,cols=range.c2-range.c1+1,b={r1:dest.r,c1:dest.c,r2:dest.r+(transpose?cols:rows)-1,c2:dest.c+(transpose?rows:cols)-1};if((sheet.tables||[]).some(t=>overlaps(tableBounds(t.range),b)))throw Error('표 안에는 배열 수식을 붙여넣을 수 없습니다.');cell.xlsxFormula=cloneData(source.xlsxFormula);cell.xlsxFormula.ref=address(b.r1,b.c1)+':'+address(b.r2,b.c2);cell.xlsxFormula.raw=raw;cell.xlsxFormula.formula=formulaForXlsx(raw,source.xlsxFormula.formula).slice(1);}
       else if(source.xlsxFormula&&mode!=='values'&&operation==='none'&&raw.startsWith('='))cell.xlsxFormula={...cloneData(source.xlsxFormula),raw,formula:formulaForXlsx(raw,source.xlsxFormula.formula).slice(1)};

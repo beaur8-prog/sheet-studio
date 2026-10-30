@@ -1,3 +1,4 @@
+import {createEditTextBudget} from './edit-text-budget.mjs';
 import {cloneData} from './clone.mjs';
 import {address,shiftFormula} from './engine.mjs';
 
@@ -28,7 +29,7 @@ function validateRange(b){
  if((b.r2-b.r1+1)*(b.c2-b.c1+1)>100000)throw Error('한 번에 최대 100,000개 셀을 채울 수 있습니다.');
 }
 
-export function autoFillPlan({sourceCells,sourceRange,targetRange,hiddenRow=()=>false,hiddenCol=()=>false,isEditable=()=>true}){
+export function autoFillPlan({sourceCells,currentCells=sourceCells,textChars,sourceRange,targetRange,hiddenRow=()=>false,hiddenCol=()=>false,isEditable=()=>true}){
  validateRange(sourceRange);validateRange(targetRange);
  const s=sourceRange,t=targetRange;
  if(!inside(s.r1,s.c1,t)||!inside(s.r2,s.c2,t))throw Error('자동 채우기 범위에 원본 셀이 포함되어야 합니다.');
@@ -39,16 +40,17 @@ export function autoFillPlan({sourceCells,sourceRange,targetRange,hiddenRow=()=>
  const trends=new Map();
  if(vertical)for(const c of sourceCols)trends.set(c,numericTrend(sourceRows.map(r=>sourceCells[address(r,c)])));
  if(horizontal)for(const r of sourceRows)trends.set(r,numericTrend(sourceCols.map(c=>sourceCells[address(r,c)])));
- const updates=[];
- rows.forEach((r,ri)=>cols.forEach((c,ci)=>{
-  if(inside(r,c,s)||!isEditable(r,c))return;
-  const sr=sourceRows[modulo(ri-rowOffset,sourceRows.length)],sc=sourceCols[modulo(ci-colOffset,sourceCols.length)],cell=cloneData(sourceCells[address(sr,sc)]||{raw:''});
-  const trend=trends.get(vertical?sc:sr);
-  if(trend)cell.raw=trend(vertical?ri-rowOffset:ci-colOffset);
-  else if(cell.raw?.startsWith('='))cell.raw=shiftFormula(cell.raw,r-sr,c-sc);
+ const targets=[];let overwrittenChars=0;
+ rows.forEach((r,ri)=>cols.forEach((c,ci)=>{if(inside(r,c,s)||!isEditable(r,c))return;targets.push({r,c,ri,ci});overwrittenChars+=currentCells[address(r,c)]?.raw?.length||0;}));
+ const updates=[],checkText=createEditTextBudget(textChars,overwrittenChars);
+ for(const {r,c,ri,ci} of targets){
+  const sr=sourceRows[modulo(ri-rowOffset,sourceRows.length)],sc=sourceCols[modulo(ci-colOffset,sourceCols.length)],source=sourceCells[address(sr,sc)]||{raw:''},trend=trends.get(vertical?sc:sr);
+  let raw=trend?trend(vertical?ri-rowOffset:ci-colOffset):source.raw||'';
+  if(!trend&&raw.startsWith('='))raw=shiftFormula(raw,r-sr,c-sc);
+  checkText(raw);const cell=cloneData(source);cell.raw=raw;
   delete cell.cachedValue;
   delete cell.cachedError;
   updates.push({key:address(r,c),cell});
- }));
+ }
  return updates;
 }
