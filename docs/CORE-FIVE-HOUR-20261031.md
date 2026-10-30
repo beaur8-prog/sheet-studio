@@ -29,7 +29,7 @@
 - [x] 편집·복사·XLSX 왕복
 - [x] 인쇄 후속
 - [x] 대용량·플랫폼 회귀
-- [ ] Git 반영·검증한 로컬 앱 준비
+- [x] Git 반영·검증한 로컬 앱 준비
 
 ## 재현과 수정 기록
 
@@ -207,7 +207,7 @@ ISNUMBER·ISTEXT·ISNONTEXT·ISLOGICAL·ISBLANK·ISERROR·ISERR·ISNA, ERROR.TYP
 
 ### 종료 검증: 마지막 수정판과 앱 보관
 
-마지막 앱 동작 변경 `c7083a2`의 [설치 패키지 검사](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211)는 Windows x64·Mac arm64·Ubuntu x64에서 모두 통과했다. 설치·파일 연결·다른 앱의 공유 등록 정보 보존과 패키지의 편집 묶음 20개를 포함한다. 계산 응답 전 빠른 편집은 각 OS에서 결과 셀과 배열 밖 입력을 각각 10회 검사했고, 즉시 저장·진행 중 한글 편집·리본/시트 이동·정상 종료 후 복구도 통과했다. [전체 편집 회귀 41124600035](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035)의 최종 결과는 완료 후 기록한다.
+마지막 앱 동작 변경 `c7083a2`의 [설치 패키지 검사](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124604211)는 Windows x64·Mac arm64·Ubuntu x64에서 모두 통과했다. 설치·파일 연결·다른 앱의 공유 등록 정보 보존과 패키지의 편집 묶음 20개를 포함한다. 계산 응답 전 빠른 편집은 각 OS에서 결과 셀과 배열 밖 입력을 각각 10회 검사했고, 즉시 저장·진행 중 한글 편집·리본/시트 이동·정상 종료 후 복구도 통과했다. 첫 [전체 편집 회귀 41124600035](https://github.com/beaur8-prog/sheet-studio/actions/runs/41124600035)는 Windows·Ubuntu에서 통과했다. Mac은 기존 OS 클립보드 검사 정체로 중단했고, 검증 경로를 격리한 [Mac 전체 재실행 41130260091](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130260091)을 진행한다. 앱 동작과 프로덕션 파일은 같다.
 
 마지막 패키지의 100만 결과 관찰값(각 운영체제의 CI 기기, 성능 보장 수치가 아님):
 
@@ -236,3 +236,5 @@ ISNUMBER·ISTEXT·ISNONTEXT·ISLOGICAL·ISBLANK·ISERROR·ISERR·ISNA, ERROR.TYP
 이 검사를 실제 preload/신뢰 출처 IPC와 렌더러 붙여넣기 경로는 유지하되, Electron의 클립보드 읽기/쓰기는 격리된 메모리로 대체했다. HTML·TSV·원래 수식/병합·외부 표·한글 줄바꿈·행 높이·실행 취소/다시 실행·복구·XLSX 재열기 검증을 그대로 수행하며 사용자 클립보드의 모든 형식을 건드리지 않는다. 실행 단계와 실패 화면을 추가했고 로컬 Mac에서 통과했다. 이 결과를 OS 자체 클립보드의 새 검증으로 주장하지 않는다.
 
 워크플로에는 운영체제 선택(기본값은 기존처럼 세 OS 전체)과 각 시나리오 시작 로그를 추가했다. 변경한 클립보드 검사만 세 OS에서 확인하고 Mac 전체 회귀를 별도로 다시 실행한다. 앱 동작·프로덕션 파일·서명한 후보는 이 검증 도구 보강으로 바뀌지 않았다.
+
+클립보드 검사 보강 `93f1b41`의 [세 OS 집중 검사 41130264726](https://github.com/beaur8-prog/sheet-studio/actions/runs/41130264726)는 Windows·Mac·Ubuntu 모두 통과했다. 같은 도구로 별도 보관한 최종 Mac 패키지도 통과했으며, 불균등 행 높이와 병합 셀의 실제 화면을 다시 확인했다. 새 도구의 검증은 기존에 중단한 실행의 통과를 의미하지 않으며, Mac 전체 회귀 재실행과 구분한다.
