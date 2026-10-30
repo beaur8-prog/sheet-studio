@@ -201,6 +201,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       if(row.height)sheet.rowHeights[r]=row.height*4/3;
       if(row.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.rows[r]=sheet.rowHeights[r]||sheet.defaultRowHeight||25;sheet.rowHeights[r]=0;}
     }
+    const protectionDefaults={rows:{},columns:{}};for(const row of sparseRows)if(row.style?.protection)protectionDefaults.rows[row.number-1]=plainCopy(row.style.protection);for(const col of source.columns||[])if(col.style?.protection)protectionDefaults.columns[col.number-1]=plainCopy(col.style.protection);if(Object.keys(protectionDefaults.rows).length||Object.keys(protectionDefaults.columns).length)sheet.xlsxProtectionDefaults=protectionDefaults;
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * 7 + 5);
     for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
     const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
@@ -340,6 +341,8 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     if(sheet.defaultRowHeight)target.properties.defaultRowHeight=sheet.defaultRowHeight*3/4;
     if(sheet.freeze?.rows||sheet.freeze?.cols)target.views=[{state:'frozen',xSplit:sheet.freeze.cols,ySplit:sheet.freeze.rows,topLeftCell:address(sheet.freeze.cols,sheet.freeze.rows),activeCell:'A1'}];
     exportNames.set(sheet.id,target.name);
+    for(const [r,protection] of Object.entries(sheet.xlsxProtectionDefaults?.rows||{}))target.getRow(+r+1).protection=plainCopy(protection);
+    for(const [c,protection] of Object.entries(sheet.xlsxProtectionDefaults?.columns||{}))target.getColumn(+c+1).protection=plainCopy(protection);
     const pageFilters=sheet.pivot?.filters.filter(f=>!sheet.pivot.rows.includes(f.field)&&!sheet.pivot.columns.includes(f.field))||[];
     const conditionalSheet=pageFilters.length?cloneData(sheet):sheet;if(pageFilters.length)for(let i=0;i<pageFilters.length+1;i++)shiftWorksheetFeatures(conditionalSheet,'r',0,1);exportConditional(target,conditionalSheet);
     pageFilters.forEach((f,i)=>{target.getCell(i+1,1).value=f.field;target.getCell(i+1,2).value=f.values.length===1?String(f.values[0]):'(여러 항목)';});
@@ -358,9 +361,10 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
         if(original?.value?.hyperlink&&typeof targetCell.value==='string'&&targetCell.value)targetCell.value={...plainCopy(original.value),text:targetCell.value};
       }
       const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!cell.style?.format||cell.style.format==='general');
-      const key=String(cell.xlsxStyle??'')+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
+      const key=String(cell.xlsxStyle??'')+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
       if(cachedStyle)targetCell.style=cachedStyle;
       else{applyStyle(targetCell,cell.style);restoreCellStyle(targetCell,cell,workbook.xlsxStyles?.[cell.xlsxStyle]);if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);}
+      if(cell.xlsxProtection)targetCell.style={...targetCell.style,protection:plainCopy(cell.xlsxProtection)};
       if(cell.xlsxValue?.value?.richText&&cell.xlsxValue.raw===cell.raw){const original=workbook.xlsxStyles?.[cell.xlsxStyle],delta=fontChanges(cell.style||{},original?.baseline||{},targetCell.font);if(Object.keys(delta).length)targetCell.value={richText:targetCell.value.richText.map(run=>({...run,font:{...run.font,...delta}}))};}
       if (typeof cell.note === 'string') targetCell.note = cell.note;
     }

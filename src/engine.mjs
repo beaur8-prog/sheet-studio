@@ -1,3 +1,4 @@
+import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 import {validatePreservedData,validatePreservedXML} from './xlsx-preservation-schema.mjs';
 import {MAX_DOCUMENT_CELLS, MAX_DOCUMENT_TEXT_CHARS, MAX_FORMULA_CELLS} from './limits.mjs';
 import {unwrap} from './clone.mjs';
@@ -769,13 +770,22 @@ export function evaluateCell(workbook, sheetId, ref) {
   return createEvaluator(workbook,sheetId)(ref);
 }
 
-export function evaluateFormula(workbook, sheetId, formula) {
+export function evaluateFormula(workbook, sheetId, formula, options={}) {
   return guard(() => {
     const ctx = context(workbook, sheetId);
+    if(options.position&&validPosition(options.position.r,options.position.c))ctx.position=options.position;
     const node=new Parser(String(formula)).parse();
     const result = checked(runCalculation(ctx,()=>evaluateNode(node, ctx, 0)));
     return result === BLANK ? 0 : result;
   });
+}
+
+/** Evaluate an array expression for range consumers such as validation lists. */
+export function evaluateFormulaArray(workbook,sheetId,formula,options={}){
+  try{const ctx=context(workbook,sheetId);if(options.position&&validPosition(options.position.r,options.position.c))ctx.position=options.position;
+    const node=new Parser(String(formula)).parse(),result=asRange(runCalculation(ctx,()=>evaluateNode(node,ctx,0)));
+    return {rows:result.rows,cols:result.cols,values:result.values.map(value=>guard(()=>value))};
+  }catch(error){return {rows:1,cols:1,values:[error instanceof CalculationLimit?'#NUM!':error instanceof FormulaError?error.code:'#VALUE!'],error:true};}
 }
 
 /** Returns a recalculation session for rendering many cells with a shared cache. */
@@ -913,7 +923,7 @@ export function transformFormulaReferences(formula, { axis, index, delta, target
     const last = tokens[first.next]?.value === ':' ? readReference(first.next + 1, first.sheet) : null;
     if (last && String(first.sheet).toLowerCase() === target && String(last.sheet).toLowerCase() === target) {
       const n1 = first.position[axis], n2 = last.position[axis];
-      if (delta === 1) { patchSingle(first); patchSingle(last); }
+      if (delta === 1) { for(const ref of [first,last]){const n=ref.position[axis],limit=axis==='r'?MAX_ROWS:MAX_COLS;if(n1!==n2&&n===limit-1&&n>=index)patchCoordinate(ref,n);else patchSingle(ref);} }
       else {
         const lo = Math.min(n1, n2), hi = Math.max(n1, n2);
         if (lo === index && hi === index) patches.push({ start: first.start, end: last.end, replacement: '#REF!' });
@@ -964,6 +974,7 @@ export function rewriteSheetReferences(formula, oldName, newName) {
 export function rewriteWorkbookSheetReferences(workbook, oldName, newName) {
   for(const named of workbook.chartNames||[])named.formula=rewriteSheetReferences(named.formula,oldName,newName);
   for (const sheet of workbook.sheets) {
+    transformPreservedFeatures(sheet,{formula:f=>rewriteSheetReferences(f,oldName,newName)});
     for (const cell of Object.values(sheet.cells)) {
       if (cell.raw?.startsWith('=')) cell.raw = rewriteSheetReferences(cell.raw, oldName, newName);
     }
@@ -1104,6 +1115,7 @@ export function validateCell(ref, cell) {
   if (!parseAddress(ref) || ref.includes('$') || ref !== ref.toUpperCase() || !object(cell) || typeof cell.raw !== 'string' || cell.raw.length > 32768) throw new Error(`셀 데이터가 올바르지 않습니다: ${ref}`);
   if (cell.style !== undefined && !object(cell.style)) throw new Error(`셀 서식이 올바르지 않습니다: ${ref}`);
   if (cell.cachedFormula !== undefined && (typeof cell.cachedFormula !== 'string' || cell.cachedFormula.length > 32768)) throw new Error(`저장된 수식이 올바르지 않습니다: ${ref}`);
+  if(cell.xlsxProtection!==undefined&&(!object(cell.xlsxProtection)||Object.entries(cell.xlsxProtection).some(([key,value])=>!['locked','hidden'].includes(key)||typeof value!=='boolean')))throw Error(`셀 잠금 설정이 올바르지 않습니다: ${ref}`);
   if(cell.xlsxStyle!==undefined&&(!Number.isInteger(cell.xlsxStyle)||cell.xlsxStyle<0||cell.xlsxStyle>=65536))throw Error(`보존된 셀 서식이 올바르지 않습니다: ${ref}`);
   if(cell.xlsxValue!==undefined){const v=cell.xlsxValue;if(!object(v)||typeof v.raw!=='string'||v.raw.length>32768||!object(v.value)||!v.value.richText&&!v.value.hyperlink)throw Error(`보존된 셀 값이 올바르지 않습니다: ${ref}`);validatePreservedData(v,1_000_000);}
   if(cell.xlsxFormula!==undefined){const f=cell.xlsxFormula;if(!object(f)||typeof f.raw!=='string'||f.raw.length>32768||typeof f.formula!=='string'||f.formula.length>32768||f.shareType!==undefined&&f.shareType!=='array'||f.ref!==undefined&&(typeof f.ref!=='string'||!/^\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?$/.test(f.ref)))throw Error(`보존된 배열 수식이 올바르지 않습니다: ${ref}`);}
@@ -1142,6 +1154,7 @@ export function validateWorkbook(data) {
     ids.add(sheet.id); names.add(sheet.name.toLowerCase());
     for(const key of ['defaultColumnWidth','defaultRowHeight'])if(sheet[key]!==undefined&&(!Number.isFinite(sheet[key])||sheet[key]<1||sheet[key]>10000))throw new Error('시트 기본 크기가 올바르지 않습니다.');
     if(sheet.hiddenSizes!==undefined){if(!object(sheet.hiddenSizes))throw Error('숨김 크기가 올바르지 않습니다.');for(const k of ['rows','cols']){if(!object(sheet.hiddenSizes[k]))throw Error('숨김 크기가 올바르지 않습니다.');for(const [i,v] of Object.entries(sheet.hiddenSizes[k]))if(!/^\d+$/.test(i)||+i>=(k==='rows'?1048576:16384)||!Number.isFinite(v)||v<0||v>10000)throw Error('숨김 크기가 올바르지 않습니다.');}}
+    if(sheet.xlsxProtectionDefaults!==undefined){if(!object(sheet.xlsxProtectionDefaults)||!object(sheet.xlsxProtectionDefaults.rows)||!object(sheet.xlsxProtectionDefaults.columns))throw Error('행·열 잠금 설정이 올바르지 않습니다.');validatePreservedData(sheet.xlsxProtectionDefaults,16_000_000);}
     if(sheet.xlsxFeatures!==undefined){if(!object(sheet.xlsxFeatures))throw Error('보존된 시트 정보가 올바르지 않습니다.');for(const key of ['dataValidations','sheetProtection'])if(sheet.xlsxFeatures[key]!==undefined)validatePreservedXML(sheet.xlsxFeatures[key],key);if(sheet.xlsxFeatures.conditionalFormatting!==undefined){const rules=sheet.xlsxFeatures.conditionalFormatting;if(!Array.isArray(rules)||rules.length>10000)throw Error('보존된 조건부 서식이 올바르지 않습니다.');for(const rule of rules)validatePreservedXML(rule,'conditionalFormatting');}}
     if(sheet.freeze!==undefined)validateFreeze(sheet.freeze);
     if(sheet.conditionalRules!==undefined)validateConditionalRules(sheet.conditionalRules);

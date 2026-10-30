@@ -1,3 +1,4 @@
+import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
 import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, validateWorkbookMetadata, validateCell, createEvaluator, parseAddress} from './engine.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
@@ -9,7 +10,7 @@ import {applyFilters, filterOptions, filterPredicates, valueKey, sortFilterRange
 
 let book = createWorkbook(), revision = 0, store, prepared = null, evaluators = new Map(), conditionals = new Map();
 let dirty = new Map(), replacements = new Set(), needsSave = false, metadataDirty = false;
-function changed() { evaluators = new Map(); conditionals = new Map(); needsSave = true; }
+function changed() { resetConstraintIndexes();evaluators = new Map(); conditionals = new Map(); needsSave = true; }
 const evaluator = id => {
   if (!evaluators.has(id)) evaluators.set(id, createEvaluator(book, id));
   return evaluators.get(id);
@@ -99,6 +100,7 @@ async function handle(type, data) {
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');
+  if (type === 'validation-options') return validationChoices(book,sheet,data.ref);
   if (type === 'infer-region') return currentRegion(sheet,data.selection);
   if (type === 'sort-plan') return inferSortPlan(book,sheet,data.selection,data.column);
   if (type === 'infer-filter') return inferFilterRange(sheet, data.selection);
@@ -117,6 +119,7 @@ async function handle(type, data) {
     return target.autoFilter;
   }
   if (type === 'sort-filter' || type === 'sort') {
+    const range=type==='sort-filter'?{...sheet.autoFilter.range,r1:sheet.autoFilter.range.r1+1}:data.range;assertSortAllowed(book,sheet,range);
     const target = structuredClone(sheet);
     const next = {...book, sheets: book.sheets.map(item => item.id === sheet.id ? target : item)};
     if(type==='sort-filter')sortFilterRange(next, target, data.column, data.desc);

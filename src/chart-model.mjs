@@ -178,7 +178,7 @@ export function chartData(chart,sheet,workbook){
 }
 export function updateChartReferences(workbook,sheetId,axis,index,delta){
   const target=workbook.sheets.find(s=>s.id===sheetId);if(!target)return;
-  for(const named of workbook.chartNames||[])named.formula=transformFormulaReferences(named.formula,{axis,index,delta,targetSheet:target.name,ownerSheet:target.name});
+  for(const named of workbook.chartNames||[])named.formula=transformFormulaReferences(named.formula,{axis,index,delta,targetSheet:target.name,ownerSheet:workbook.sheets.find(s=>s.id===named.sheetId)?.name||target.name});
   for(const owner of workbook.sheets)for(const chart of owner.charts||[]){
     if(owner.id===sheetId&&!chart.source)chart.range=transformFormulaReferences(chart.range,{axis,index,delta,targetSheet:target.name,ownerSheet:target.name});
     for(const series of chart.series||[])for(const key of ['nameRef','catRef','valRef','xRef','sizeRef']){const ref=series[key];if(ref?.sheetId===sheetId)ref.range=transformFormulaReferences(ref.range,{axis,index,delta,targetSheet:target.name,ownerSheet:target.name});}

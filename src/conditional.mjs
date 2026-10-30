@@ -1,3 +1,4 @@
+import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 import {address,parseAddress,evaluateFormula,createEvaluator,shiftFormula,transformFormulaReferences} from './engine.mjs';
 import {validateConditionalRules} from './worksheet-schema.mjs';
 import {normalizeColor} from './spreadsheet-colors.mjs';
@@ -59,7 +60,10 @@ export function createConditionalEvaluator(book,sheet,evaluate=createEvaluator(b
 export function shiftWorksheetFeatures(sheet,axis,index,delta,targetSheet=sheet.name) {
   const local=targetSheet.toLowerCase()===sheet.name.toLowerCase();
   if(local&&sheet.hiddenSizes){const key=axis==='r'?'rows':'cols',sizes={};for(const [keyIndex,size] of Object.entries(sheet.hiddenSizes[key]||{})){let n=+keyIndex;if(delta<0&&n===index)continue;if(n>=index)n+=delta;if(n>=0&&n<(axis==='r'?1048576:16384))sizes[n]=size;}sheet.hiddenSizes[key]=sizes;}
+  if(local&&sheet.xlsxProtectionDefaults){const key=axis==='r'?'rows':'columns',values={};for(const [i,value] of Object.entries(sheet.xlsxProtectionDefaults[key]))if(!(delta<0&&+i===index)){const next=+i>=index?+i+delta:+i;if(next>=0&&next<(axis==='r'?1048576:16384))values[next]=value;}sheet.xlsxProtectionDefaults[key]=values;}
   if(local&&sheet.freeze){const key=axis==='r'?'rows':'cols';if(index<sheet.freeze[key])sheet.freeze[key]=Math.max(0,sheet.freeze[key]+delta);}
+  const transform=f=>transformFormulaReferences(f,{axis,index,delta,targetSheet,ownerSheet:sheet.name});
+  transformPreservedFeatures(sheet,{reference:local?transform:f=>f,formula:transform,rebase:(formula,range)=>{const anchor=parseAddress(range?.split(':')[0]);return local&&delta<0&&anchor&&index===(axis==='r'?anchor.r:anchor.c)?shiftFormula('='+formula.replace(/^=/,''),axis==='r'?1:0,axis==='c'?1:0).replace(/^=/,formula.startsWith('=')?'=':''):formula;}});
   sheet.conditionalRules=(sheet.conditionalRules||[]).flatMap(rule=>{
     const range=local?transformFormulaReferences(rule.range,{axis,index,delta,targetSheet,ownerSheet:sheet.name}):rule.range;
     if(range.includes('#REF!'))return [];

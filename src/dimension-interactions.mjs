@@ -1,6 +1,6 @@
 // The headers are virtualized. Capture on their stable parent, never a handle
 // that is replaced while the sheet is redrawn.
-export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoundary,commitEdit,checkpoint,preview,changed}){
+export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoundary,canResize=()=>true,commitEdit,checkpoint,preview,changed}){
   let gesture=null;
   const guide=document.createElement('div'),line=document.createElement('div'),label=document.createElement('div');
   guide.className='dimension-guide';guide.hidden=true;
@@ -32,8 +32,9 @@ export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoun
   host.addEventListener('pointerdown',event=>{
     const handle=event.target.closest('[data-resize-col],[data-resize-row]');
     if(event.button!==0||!handle||gesture)return;
-    event.preventDefault();event.stopPropagation();commitEdit();grid.focus();
+    event.preventDefault();event.stopPropagation();if(commitEdit()===false)return;grid.focus();
     const axis=handle.hasAttribute('data-resize-col')?'c':'r',index=Number(axis==='c'?handle.dataset.resizeCol:handle.dataset.resizeRow);
+    if(!canResize(axis))return;
     const sheet=getSheet(),property=axis==='c'?'columnWidths':'rowHeights';sheet[property]||={};
     const original=sheet[property][index],size=Math.max(axis==='c'?26:18,original||(axis==='c'?sheet.defaultColumnWidth||90:sheet.defaultRowHeight||25));
     gesture={sheet,axis,index,property,original,size,value:size,start:axis==='c'?event.clientX:event.clientY,scale:getZoom()/100,pointerId:event.pointerId,previewed:false};
