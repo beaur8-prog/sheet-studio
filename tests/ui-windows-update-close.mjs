@@ -13,7 +13,7 @@ import {powershellCommand} from '../electron/studio-updater.cjs';
 import platform from '../scripts/platform.cjs';
 if(process.platform!=='win32'||process.env.GITHUB_ACTIONS!=='true')throw Error('Requires a disposable Windows CI runner');
 const root=path.resolve(import.meta.dirname,'..'),version=createRequire(import.meta.url)('../package.json').version;
-const original=platform.packagedExecutable(root,version),directory=await fs.mkdtemp(path.join(os.tmpdir(),'sheet-update-close-'));
+const original=platform.packagedExecutable(root,version),directory=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'sheet-update-close-')));
 const report=path.join(root,'test-results/windows-update-close');await fs.mkdir(report,{recursive:true});
 const ps=path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -23,7 +23,13 @@ await fs.writeFile(path.join(directory,'payload.cs'),'using System; using System
 await fs.writeFile(path.join(directory,'installer.cs'),'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_PID"))); if (!parent.HasExited) throw new Exception("Editor still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_ROOT"); File.Copy(Path.Combine(root,"payload.exe"), Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_EXE"), true); File.WriteAllText(Path.Combine(root,"installed"),"yes"); } }');
 execFileSync(ps,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',powershellCommand('param($JobFile)\n$ErrorActionPreference="Stop"\nforeach ($name in @("payload","installer")) { Add-Type -Path (Join-Path $JobFile "$name.cs") -OutputAssembly (Join-Path $JobFile "$name.exe") -OutputType WindowsApplication }',directory)],{stdio:'inherit',timeout:60000});
 const results=[];let application,page;
-async function launch(executable,env){console.log('Launching packaged fixture:',executable);const environment={...env};delete environment.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:executable,args:[],env:environment,timeout:45000});page=await application.firstWindow();page.setDefaultTimeout(20000);await page.locator('.cell').first().waitFor();console.log('Packaged fixture editor ready');}
+async function launch(executable,env){console.log('Launching packaged fixture:',executable);const environment={...env};delete environment.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:executable,args:[],env:environment,timeout:45000});page=await application.firstWindow();page.setDefaultTimeout(20000);page.on('pageerror',error=>console.error('Fixture renderer error:',error.message));
+ try{await page.locator('.cell').first().waitFor();}catch(error){
+  console.error('Fixture main:',await application.evaluate(({app,BrowserWindow})=>({appPath:app.getAppPath(),url:BrowserWindow.getAllWindows()[0]?.webContents.getURL()})));
+  console.error('Fixture page:',await page.evaluate(async()=>({url:location.href,text:document.body.innerText,version:await desktop.getAppVersion().catch(error=>error.message)})));
+  throw error;
+ }
+ console.log('Packaged fixture editor ready');}
 async function edit(ref,text){await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await page.keyboard.type(text);await page.keyboard.press('Enter');}
 try{
  for(const mode of ['install','save-failure']){
