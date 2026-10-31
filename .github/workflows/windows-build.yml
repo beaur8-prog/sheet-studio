@@ -30,7 +30,8 @@ jobs:
         run: |
           $tokens = $null
           $issues = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'electron/studio-update-windows.ps1'), [ref]$tokens, [ref]$issues) | Out-Null
+          $source = [IO.File]::ReadAllText((Join-Path $PWD 'electron/studio-update-windows.ps1'), [Text.Encoding]::UTF8)
+          [System.Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$issues) | Out-Null
           if ($issues.Count) { $issues | Format-List; throw 'Update helper syntax check failed' }
       - run: npm run package:win
       - name: Check packaged editor, update UI and document recovery
