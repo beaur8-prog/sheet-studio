@@ -2,10 +2,11 @@ import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import {createHash} from 'node:crypto';
 import {desktopLaunch} from './electron-launch.mjs';
 
-const root=path.resolve(import.meta.dirname,'..'),profile=await fs.mkdtemp(path.join(root,'.package/update-ui-'));
+const root=path.resolve(import.meta.dirname,'..'),profile=await fs.mkdtemp(path.join(os.tmpdir(),'sheet-update-ui-'));
 const environment={...process.env,SHEET_STUDIO_DATA:profile,STUDIO_DISABLE_UPDATES:'1'};
 let application,page;
 const errors=[];
