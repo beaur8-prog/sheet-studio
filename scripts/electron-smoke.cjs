@@ -29,8 +29,19 @@ async function smoke() {
       nodeIntegration: typeof window.require, bridge: Object.keys(window.desktop).sort(),
       body: document.body.innerText.slice(0, 350),
     }));
+    const expectedVersion = require('../package.json').version;
+    assert.equal(await application.evaluate(({ app }) => app.getVersion()), expectedVersion);
+    assert.equal(await page.evaluate(() => desktop.getAppVersion()), expectedVersion);
+    assert.equal(await page.locator('#app-version').innerText(), 'v'+expectedVersion);
+    assert.ok(state.title.endsWith(' — Sheet Studio '+expectedVersion));
+    assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()), state.title);
+    await page.locator('[data-tab="도움말"]').click();
+    await page.locator('[data-action="about"]').click();
+    assert.equal(await page.locator('[role="dialog"] .pill').innerText(), expectedVersion);
+    await page.locator('[data-close]').click();
+    await page.locator('[data-tab="홈"]').click();
     assert.equal(state.nodeIntegration, 'undefined');
-    assert.deepEqual(state.bridge, ['confirmFile', 'editText', 'onBeforeClose', 'onMenuAction', 'onOpenRequested', 'onWindowBlur', 'openFile', 'pasteClipboard', 'saveFile', 'setTitle', 'takeRequestedFile', 'vbaCancel', 'vbaCommand', 'vbaProbe', 'vbaResult', 'vbaStart', 'vbaStatus', 'writeClipboard']);
+    assert.deepEqual(state.bridge, ['confirmFile', 'editText', 'getAppVersion', 'onBeforeClose', 'onMenuAction', 'onOpenRequested', 'onWindowBlur', 'openFile', 'pasteClipboard', 'saveFile', 'setTitle', 'takeRequestedFile', 'vbaCancel', 'vbaCommand', 'vbaProbe', 'vbaResult', 'vbaStart', 'vbaStatus', 'writeClipboard']);
     assert.equal(typeof (await page.evaluate(() => window.desktop.vbaProbe())).available, 'boolean');
     assert.ok(state.cells > 0, 'Spreadsheet grid rendered');
     await page.evaluate(() => window.desktop.setTitle('Sheet Studio – smoke test'));

@@ -7,12 +7,14 @@ const { verifyRuntime } = require('./runtime-proof.cjs');
 const { generateManifest } = require('./artifacts.cjs');
 const { buildTarget, findRuntime, runtimeLocations, outputDir } = require('./platform.cjs');
 const { fileAssociations } = require('../electron/file-open-requests.cjs');
+const { assertCurrentBuild } = require('./build-version.cjs');
 const { windowsFileAssociations } = require('./windows-file-associations.cjs');
 
 async function packageApp() {
   const target = buildTarget(process.argv.slice(2));
-  const { build, Platform, Arch } = require('electron-builder');
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+  assertCurrentBuild(root, manifest.version);
+  const { build, Platform, Arch } = require('electron-builder');
   const electronRoot = findRuntime(root);
   const runtime = JSON.parse(await fs.readFile(path.join(electronRoot, 'package.json'), 'utf8'));
   if (runtime.version !== manifest.devDependencies.electron) throw new Error('Installed Electron version differs from package.json. Run npm install.');

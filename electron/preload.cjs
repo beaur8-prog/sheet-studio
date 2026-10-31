@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
+  getAppVersion: () => ipcRenderer.invoke('sheet:app-version'),
   writeClipboard: payload => ipcRenderer.invoke('sheet:write-clipboard', payload),
   pasteClipboard: () => ipcRenderer.invoke('sheet:paste-clipboard'),
   openFile: documentId => ipcRenderer.invoke('sheet:open-file', documentId),

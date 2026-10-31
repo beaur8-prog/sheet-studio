@@ -47,6 +47,8 @@ function trusted(event) {
       event.senderFrame.url.split('#')[0] !== rendererURL) throw new Error('허용되지 않는 앱 요청입니다.');
 }
 
+ipcMain.handle('sheet:app-version', event => { trusted(event); return app.getVersion(); });
+
 function notifyFileOpenRequests() {
   if (fileOpenRequests.size && win && !win.isDestroyed()) win.webContents.send('sheet:open-requested');
 }
