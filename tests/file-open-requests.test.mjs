@@ -92,8 +92,8 @@ test('unreadable and invalid documents do not strand the next file or a notifica
   const desktop = bridge(files);
   desktop.takeRequestedFile = async () => {
     const file = files.shift();
+    if (files.length) desktop.notify();
     if (file instanceof Error) throw file;
-    if (file) desktop.notify();
     return file || null;
   };
   const dispose = installRequestedFileOpener({ desktop, canOpen: () => true, openFile: async file => {
@@ -102,5 +102,27 @@ test('unreadable and invalid documents do not strand the next file or a notifica
   try {
     await until(() => opened.length);
     assert.deepEqual(opened, ['valid.xlsx']); assert.deepEqual(errors, ['missing', 'invalid']);
+  } finally { dispose(); }
+});
+
+
+test('a persistent native read failure returns control and waits for a new request', async () => {
+  const desktop = bridge([]), errors = [], opened = [];
+  let attempts = 0, failing = true;
+  desktop.takeRequestedFile = async () => {
+    attempts++;
+    if (failing) throw Error('native unavailable');
+    return attempts === 2 ? { name: 'later.xlsx' } : null;
+  };
+  const dispose = installRequestedFileOpener({ desktop, canOpen: () => true,
+    openFile: async file => opened.push(file.name), onError: error => errors.push(error.message) });
+  try {
+    await until(() => errors.length);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(attempts, 1);
+    assert.deepEqual(errors, ['native unavailable']);
+    failing = false; desktop.notify();
+    await until(() => opened.length);
+    assert.deepEqual(opened, ['later.xlsx']);
   } finally { dispose(); }
 });

@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, shell, Notification, systemPreferences } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
@@ -8,6 +8,7 @@ const vba = require('./vba.cjs');
 const { applicationMenu } = require('./menu.cjs');
 const { updateMenu } = require('./update-menu.cjs');
 const { createFileLocations } = require('./file-locations.cjs');
+const { prepareFileDialogLocation } = require('./file-dialog-location.cjs');
 const { createStudioUpdater } = require('./studio-updater.cjs');
 const { FileOpenRequests } = require('./file-open-requests.cjs');
 
@@ -104,7 +105,9 @@ ipcMain.handle('sheet:take-requested-file', (event, ...args) => {
 });
 
 ipcMain.handle('sheet:open-file', (event, documentId) => withNativeOperation(event, async () => {
-  const result = await dialog.showOpenDialog(win, { title: '통합 문서 열기', defaultPath: await fileLocations.directory(documentId), properties: ['openFile'], filters });
+  const directory = await fileLocations.directory(documentId);
+  prepareFileDialogLocation(systemPreferences, directory);
+  const result = await dialog.showOpenDialog(win, { title: '통합 문서 열기', defaultPath: directory, properties: ['openFile'], filters });
   if (result.canceled || !result.filePaths.length) return null;
   return readWorkbookFile(result.filePaths[0]);
 }));
@@ -118,8 +121,10 @@ ipcMain.handle('sheet:save-file', (event, payload) => withNativeOperation(event,
   }
   const basename = path.basename(payload.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || '통합 문서.xlsx';
   const extension = basename.toLowerCase().endsWith('.sheet.json') ? 'json' : path.extname(basename).slice(1);
+  const directory = await fileLocations.directory(payload.documentId);
+  prepareFileDialogLocation(systemPreferences, directory);
   const result = await dialog.showSaveDialog(win, {
-    title: '통합 문서 저장', defaultPath: path.join(await fileLocations.directory(payload.documentId), basename),
+    title: '통합 문서 저장', defaultPath: path.join(directory, basename),
     filters: [{ name: extension === 'xlsx' ? 'Excel 통합 문서' : extension.toUpperCase(), extensions: [extension || 'xlsx'] }],
   });
   if (result.canceled || !result.filePath) return null;

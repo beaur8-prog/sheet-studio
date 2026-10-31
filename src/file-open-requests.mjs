@@ -16,7 +16,12 @@ export function installRequestedFileOpener({ desktop, canOpen, openFile, onError
         if (!pending) {
           requested = false;
           try { pending = await desktop.takeRequestedFile(); }
-          catch (error) { onError(error); requested = true; continue; }
+          catch (error) {
+            // The main process notifies us if more paths remain. A persistent
+            // IPC failure must wait for a new notification, not retry forever.
+            onError(error);
+            break;
+          }
           if (!pending) continue;
         }
         if (!canOpen()) break;

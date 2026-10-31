@@ -79,6 +79,22 @@ try {
     assert.equal(await app.evaluate(({ app }) => app.commandLine.getSwitchValue('xdg-portal-required-version')), '4');
     checks.push('older Linux portals fall back to a chooser that supports defaultPath');
   }
+  await app.evaluate(({dialog}) => {
+    globalThis.fileDialogCalls = 0;
+    dialog.showOpenDialog = () => { globalThis.fileDialogCalls++; return new Promise(resolve => { globalThis.finishOpenDialog = resolve; }); };
+  });
+  await menu('open'); await page.locator('.file-dialog-wait').waitFor();
+  for (let i = 0; i < 3; i++) await menu('open');
+  await page.keyboard.type('must not edit');
+  await page.evaluate(() => { const data = new DataTransfer(); data.setData('text/plain', 'must not paste'); document.dispatchEvent(new ClipboardEvent('paste', {clipboardData: data, bubbles: true, cancelable: true})); });
+  assert.equal(await app.evaluate(() => globalThis.fileDialogCalls), 1);
+  assert.equal(await page.evaluate(() => sheetStudio.getCell('A1')?.raw || ''), '');
+  await app.evaluate(() => globalThis.finishOpenDialog({canceled: true, filePaths: []}));
+  await page.locator('.file-dialog-wait').waitFor({state: 'detached'});
+  await app.evaluate(({dialog}) => { dialog.showOpenDialog = async () => { throw Error('chooser failure'); }; });
+  await menu('open'); await page.locator('.toast').filter({hasText: 'chooser failure'}).waitFor();
+  await page.locator('.file-dialog-wait').waitFor({state: 'detached'});
+  checks.push('waiting chooser is visible; repeated open requests and typing are ignored; cancellation and failure release waiting state');
   await inspectDirectory(documents, 'first use falls back to Documents');
   await open(path.join(a, 'first.csv'), '첫 문서'); const firstId = await id();
   await inspectDirectory(a, 'opened workbook folder and canceled dialogs');
