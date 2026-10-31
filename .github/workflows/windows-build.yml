@@ -1,0 +1,64 @@
+name: Windows installer build and updater validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run runtime:install
+      - run: npm test
+      - run: npm run test:updates
+      - name: Check Windows PowerShell helper syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $issues = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'electron/studio-update-windows.ps1'), [ref]$tokens, [ref]$issues) | Out-Null
+          if ($issues.Count) { $issues | Format-List; throw 'Update helper syntax check failed' }
+      - run: npm run package:win
+      - name: Check packaged editor, update UI and document recovery
+        shell: bash
+        run: |
+          node scripts/electron-smoke.cjs --packaged
+          node tests/ui-updates.mjs --packaged
+          node tests/ui-recovery.mjs --packaged
+          node tests/ui-file-dialogs.mjs --packaged
+          node tests/ui-user-journeys.mjs --packaged
+      - name: Verify install, reinstall, file associations and uninstall
+        shell: pwsh
+        run: ./scripts/check-windows-install.ps1
+      - name: Verify actual Sheet close guards and recovery during native updates
+        run: node tests/ui-windows-update-close.mjs
+      - name: Verify native helper handoff, cancellation, failure and tampering
+        run: node scripts/test-windows-updater-handoff.cjs
+      - name: Prepare versioned installer and checksum
+        shell: bash
+        env:
+          TARGET_PLATFORM: win
+          TARGET_ARCH: x64
+        run: node scripts/release-assets.cjs
+      - name: Upload verified Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: sheet-studio-windows-installer
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sheet-studio-windows-validation
+          path: |
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 30
