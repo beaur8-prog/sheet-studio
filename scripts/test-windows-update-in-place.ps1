@@ -53,8 +53,11 @@ function Remove-TestInstall([string]$Directory,[string]$Scope) {
   $process = Start-Process -FilePath $uninstall -ArgumentList @('/S',$Scope) -PassThru
   if (-not $process.WaitForExit(120000)) { throw 'CI uninstall timed out.' }
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
-  while (Test-Path (Join-Path $Directory 'Sheet Studio.exe')) {
-    if ([DateTime]::UtcNow -gt $deadline) { throw 'CI uninstall left its executable.' }
+  # NSIS may finish its launcher before the copied uninstaller child removes
+  # registration and shortcuts. Do not seed the next scenario until all of
+  # those observable installation artifacts are gone; retained copies still fail.
+  while ((Test-Path (Join-Path $Directory 'Sheet Studio.exe')) -or @(Entries).Count -ne 0 -or @(Desktop-Links).Count -ne 0) {
+    if ([DateTime]::UtcNow -gt $deadline) { throw 'CI uninstall left an executable, registration or shortcut.' }
     Start-Sleep -Milliseconds 250
   }
 }
