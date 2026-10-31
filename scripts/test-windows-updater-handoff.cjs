@@ -10,6 +10,7 @@ const { powershellCommand } = require('../electron/studio-updater.cjs');
 if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true') throw Error('Requires a disposable Windows CI runner');
 const root = path.resolve(__dirname, '..');
 const report = path.join(root, 'test-results', 'updater-handoff');
+const registryKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SheetHandoff-' + process.pid;
 const ps = path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function poll(check, timeout = 30000) { const end = Date.now() + timeout; while (Date.now() < end) { if (await check()) return; await delay(100); } throw Error('Timed out waiting for fixture'); }
@@ -21,7 +22,7 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
   const assembly = version => `using System; using System.IO; using System.Reflection; [assembly: AssemblyVersion("${version}.0")] [assembly: AssemblyInformationalVersion("${version}")] `;
   await fs.writeFile(path.join(directory, 'old.cs'), assembly('0.0.0') + 'public class OldApp { public static void Main() {} }');
   await fs.writeFile(path.join(directory, 'payload.cs'), assembly('1.0.0') + 'public class NewApp { public static void Main() { File.WriteAllText(Path.Combine(Environment.GetEnvironmentVariable("STUDIO_HANDOFF_FIXTURE_ROOT"), "reopened"), "yes"); } }');
-  await fs.writeFile(path.join(directory, 'installer.cs'), 'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("STUDIO_HANDOFF_PARENT_PID"))); if (!parent.HasExited) throw new Exception("Editor is still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("STUDIO_HANDOFF_FIXTURE_ROOT"); File.Copy(Path.Combine(root, "payload.exe"), Environment.GetEnvironmentVariable("STUDIO_HANDOFF_TARGET_EXE"), true); File.WriteAllText(Path.Combine(root, "installed"), "yes"); } }');
+  await fs.writeFile(path.join(directory, 'installer.cs'), 'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("STUDIO_HANDOFF_PARENT_PID"))); if (!parent.HasExited) throw new Exception("Editor is still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("STUDIO_HANDOFF_FIXTURE_ROOT"); File.Copy(Path.Combine(root, "payload.exe"), Environment.GetEnvironmentVariable("STUDIO_HANDOFF_TARGET_EXE"), true); File.WriteAllText(Path.Combine(root, "installer-args.json"), string.Join("\\n", Environment.GetCommandLineArgs())); File.WriteAllText(Path.Combine(root, "installed"), "yes"); } }');
   const compile = `param([string]$JobFile)\n$ErrorActionPreference = 'Stop'\nforeach ($name in @('old','payload','installer')) { Add-Type -Path (Join-Path $JobFile "$name.cs") -OutputAssembly (Join-Path $JobFile "$name.exe") -OutputType WindowsApplication }`;
   execFileSync(ps, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', powershellCommand(compile, directory)], { stdio: 'inherit', timeout: 60000 });
   // Keep the renderer executable's path simple, as in the upstream test.
@@ -69,19 +70,23 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
       });
       if(mode==='cancel') win.on('close', event=>{if(!canceled){event.preventDefault();canceled=true;void updater.cancelInstall().then(()=>{write('cancelled.json',{editorStillOpen:!win.isDestroyed()});setTimeout(()=>{win.destroy();app.quit();},1000);});}});
       await updater.check(true);
-      if(mode==='blocked'||mode==='tampered'){write('blocked-complete.json',{phase:updater.getState().phase});win.destroy();app.quit();}
+      if(mode==='blocked'||mode==='tampered'||mode==='unregistered'){write('blocked-complete.json',{phase:updater.getState().phase});win.destroy();app.quit();}
     }).catch(error=>{write('fixture-error.json',{error:String(error.stack)});app.exit(1);});
   `;
   await fs.writeFile(path.join(appDirectory, 'main.cjs'), nativeMain);
   const results = [];
   try {
-    for (const [id, mode] of [['sheet', 'install'], ['sheet', 'cancel'], ['sheet', 'blocked'], ['sheet', 'tampered']]) {
+    for (const [id, mode] of [['sheet', 'install'], ['sheet', 'cancel'], ['sheet', 'blocked'], ['sheet', 'tampered'], ['sheet', 'unregistered']]) {
       const name = id + '-' + mode, folder = path.join(directory, name), product = { sheet: 'Sheet Studio', slide: 'Slide Studio', word: 'Word Studio' }[id];
       await fs.mkdir(folder);
       for (const file of ['old.exe', 'payload.exe', 'installer.exe']) await fs.copyFile(path.join(directory, file), path.join(folder, file));
       const target = path.join(folder, product + '.exe');
       await fs.copyFile(path.join(folder, 'old.exe'), target);
       await fs.writeFile(path.join(folder, 'Uninstall ' + product + '.exe'), 'disposable uninstaller marker');
+      const registration = mode === 'unregistered'
+        ? `param($JobFile)\nRemove-Item -LiteralPath '${registryKey}' -Recurse -Force -ErrorAction SilentlyContinue`
+        : `param($JobFile)\nNew-Item -Path '${registryKey}' -Force | Out-Null\nNew-ItemProperty -LiteralPath '${registryKey}' -Name DisplayName -Value 'Sheet Studio' -Force | Out-Null\nNew-ItemProperty -LiteralPath '${registryKey}' -Name UninstallString -Value ('"' + (Join-Path $JobFile 'Uninstall Sheet Studio.exe') + '" /currentuser') -Force | Out-Null`;
+      execFileSync(ps, ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',powershellCommand(registration,folder)], {stdio:'inherit'});
       const binary = path.join(runtime, product + '.exe'); await fs.copyFile(path.join(runtime, 'electron.exe'), binary);
       const env = { ...process.env, STUDIO_HANDOFF_FIXTURE_ROOT: folder, STUDIO_HANDOFF_TARGET_EXE: target, STUDIO_HANDOFF_ID: id, STUDIO_HANDOFF_MODE: mode }; delete env.ELECTRON_RUN_AS_NODE;
       const child = spawn(binary, [], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -98,6 +103,8 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
         if (mode === 'install') {
           await poll(() => exists(path.join(folder, 'reopened')));
           assert(await exists(path.join(folder, 'installed')));
+          const args = (await fs.readFile(path.join(folder, 'installer-args.json'),'utf8')).split('\n');
+          assert.deepEqual(args.slice(1), ['/currentuser', '--updated', '/D=' + folder]);
           assert.equal(JSON.parse(await fs.readFile(path.join(folder, 'before-quit.json'))).acknowledged, true);
           assert.match(await fs.readFile(path.join(folder, 'profile/updates/last-install.log'), 'utf8'), /Installed /);
           results.push({ id, mode, nativeElectronQuit: true, helperAcknowledgedBeforeQuit: true, installed: true, versionVerified: true, reopened: true });
@@ -116,6 +123,7 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
     }
     await fs.writeFile(path.join(report, 'results.json'), JSON.stringify({ platform: process.platform, passed: true, results }, null, 2) + '\n');
   } finally {
+    execFileSync(ps, ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',powershellCommand(`param($JobFile)\nRemove-Item -LiteralPath '${registryKey}' -Recurse -Force -ErrorAction SilentlyContinue`,directory)], {stdio:'inherit'});
     await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(error => console.warn('Fixture cleanup:', error.message));
     await fs.rm(runtime, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(error => console.warn('Runtime cleanup:', error.message));
   }

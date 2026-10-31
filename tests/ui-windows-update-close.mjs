@@ -22,6 +22,7 @@ async function until(check){const end=Date.now()+45000;while(Date.now()<end){if(
 await fs.writeFile(path.join(directory,'payload.cs'),'using System; using System.IO; using System.Reflection; [assembly: AssemblyVersion("9.9.9.0")] [assembly: AssemblyInformationalVersion("9.9.9")] public class NewApp { public static void Main() { File.WriteAllText(Path.Combine(Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_ROOT"), "reopened"), "yes"); } }');
 await fs.writeFile(path.join(directory,'installer.cs'),'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_PID"))); if (!parent.HasExited) throw new Exception("Editor still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_ROOT"); File.Copy(Path.Combine(root,"payload.exe"), Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_EXE"), true); File.WriteAllText(Path.Combine(root,"installed"),"yes"); } }');
 execFileSync(ps,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',powershellCommand('param($JobFile)\n$ErrorActionPreference="Stop"\nforeach ($name in @("payload","installer")) { Add-Type -Path (Join-Path $JobFile "$name.cs") -OutputAssembly (Join-Path $JobFile "$name.exe") -OutputType WindowsApplication }',directory)],{stdio:'inherit',timeout:60000});
+const registryKey='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SheetClose-'+process.pid;
 const results=[];let application,page;
 async function launch(executable,env){console.log('Launching packaged fixture:',executable);const environment={...env};delete environment.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:executable,args:[],env:environment,timeout:45000});page=await application.firstWindow();page.setDefaultTimeout(20000);page.on('pageerror',error=>console.error('Fixture renderer error:',error.message));
  try{await page.locator('.cell').first().waitFor();}catch(error){
@@ -37,6 +38,7 @@ try{
   await fs.cp(path.dirname(original),appFolder,{recursive:true});
   for(const file of ['payload.exe','installer.exe'])await fs.copyFile(path.join(directory,file),path.join(folder,file));
   const executable=path.join(appFolder,'Sheet Studio.exe');await fs.writeFile(path.join(appFolder,'Uninstall Sheet Studio.exe'),'disposable marker');
+  execFileSync(ps,['-NoProfile','-NonInteractive','-EncodedCommand',powershellCommand(`param($JobFile)\nNew-Item -Path '${registryKey}' -Force | Out-Null\nNew-ItemProperty -LiteralPath '${registryKey}' -Name DisplayName -Value 'Sheet Studio' -Force | Out-Null\nNew-ItemProperty -LiteralPath '${registryKey}' -Name UninstallString -Value ('"' + (Join-Path $JobFile 'Uninstall Sheet Studio.exe') + '" /currentuser') -Force | Out-Null`,appFolder)],{stdio:'inherit'});
   const env={...process.env,SHEET_STUDIO_DATA:profile,STUDIO_DISABLE_UPDATES:'1',SHEET_UPDATE_FIXTURE_ROOT:folder,SHEET_UPDATE_FIXTURE_EXE:executable};
   await launch(executable,env);
   const bytes=await fs.readFile(path.join(folder,'installer.exe')),sha256=createHash('sha256').update(bytes).digest('hex');
@@ -100,6 +102,7 @@ try{
  }
  throw error;
 }finally{
+ execFileSync(ps,['-NoProfile','-NonInteractive','-EncodedCommand',powershellCommand(`param($JobFile)\nRemove-Item -LiteralPath '${registryKey}' -Recurse -Force -ErrorAction SilentlyContinue`,directory)],{stdio:'inherit'});
  if(application)await application.close().catch(error=>console.error('Fixture close:',error.message));
  await fs.rm(directory,{recursive:true,force:true,maxRetries:10,retryDelay:200}).catch(error=>console.error('Fixture cleanup:',error.message));
 }

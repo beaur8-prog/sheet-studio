@@ -11,9 +11,11 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -48,6 +50,24 @@ jobs:
         run: node scripts/test-windows-updater-handoff.cjs
       - name: Verify actual Sheet close guards and recovery during native updates
         run: node tests/ui-windows-update-close.mjs
+      - name: Build the pinned pre-fix installer for actual upgrade reproduction
+        shell: pwsh
+        run: |
+          $baseline = Join-Path $env:RUNNER_TEMP 'sheet-update-baseline'
+          git worktree add --detach $baseline 0aba3913ff5f7148351ee2963d49e57159906d1a
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare baseline source.' }
+          Push-Location $baseline
+          try {
+            npm ci
+            if ($LASTEXITCODE -ne 0) { throw 'Baseline dependencies failed.' }
+            npm run runtime:install
+            if ($LASTEXITCODE -ne 0) { throw 'Baseline runtime failed.' }
+            npm run package:win
+            if ($LASTEXITCODE -ne 0) { throw 'Baseline package failed.' }
+          } finally { Pop-Location }
+      - name: Verify real NSIS updates preserve scope, custom directory and single relaunch
+        shell: pwsh
+        run: ./scripts/test-windows-update-in-place.ps1
       - name: Prepare versioned installer and checksum
         shell: bash
         env:

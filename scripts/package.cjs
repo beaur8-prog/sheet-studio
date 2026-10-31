@@ -59,13 +59,13 @@ async function packageApp() {
         maintainer: 'beaur8-prog <beaur8-prog@users.noreply.github.com>' },
       win: { target: 'nsis', signAndEditExecutable: false, icon },
       nsis: {
-        ...(target.platform === 'win32' ? { include: windowsInclude } : {}),
+        ...(target.platform === 'win32' ? { include: path.join(stage, 'electron/windows-installer.nsh') } : {}),
         artifactName: 'Sheet-Studio-${version}-Windows-${arch}-Setup.exe',
         oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
         createDesktopShortcut: true, createStartMenuShortcut: true,
         shortcutName: 'Sheet Studio', uninstallDisplayName: 'Sheet Studio',
         installerIcon: icon, uninstallerIcon: icon,
-        installerLanguages: ['ko_KR', 'en_US'], displayLanguageSelector: true,
+        installerLanguages: ['ko_KR', 'en_US'], displayLanguageSelector: false,
         runAfterFinish: true, deleteAppDataOnUninstall: false,
       },
       mac: {
