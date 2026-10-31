@@ -3,6 +3,14 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
   getAppVersion: () => ipcRenderer.invoke('sheet:app-version'),
+  getUpdateState: () => ipcRenderer.invoke('sheet:update-state'),
+  updateAction: (command, value) => ipcRenderer.invoke('sheet:update-action', command, value),
+  onUpdateState: listener => {
+    if (typeof listener !== 'function') throw TypeError('An update listener is required.');
+    const handler = (_event, state) => listener(state);
+    ipcRenderer.on('sheet:update-state', handler);
+    return () => ipcRenderer.removeListener('sheet:update-state', handler);
+  },
   writeClipboard: payload => ipcRenderer.invoke('sheet:write-clipboard', payload),
   pasteClipboard: () => ipcRenderer.invoke('sheet:paste-clipboard'),
   openFile: documentId => ipcRenderer.invoke('sheet:open-file', documentId),
@@ -34,7 +42,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   },
   onMenuAction: listener => {
     if (typeof listener !== 'function') throw new TypeError('A menu listener is required.');
-    const allowed = new Set(['new', 'open', 'save', 'undo', 'redo', 'cut', 'copy', 'paste', 'select-all', 'find']);
+    const allowed = new Set(['new', 'open', 'save', 'undo', 'redo', 'cut', 'copy', 'paste', 'select-all', 'find', 'updates-check', 'updates-manual', 'updates-status']);
     const handler = (_event, action) => { if (allowed.has(action)) listener(action); };
     ipcRenderer.on('sheet:menu-action', handler);
     return () => ipcRenderer.removeListener('sheet:menu-action', handler);

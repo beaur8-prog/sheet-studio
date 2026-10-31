@@ -1,7 +1,6 @@
 'use strict';
 
-// Canonical updater source. sync-updater.cjs copies this module and its Windows
-// helper into each independent app before its existing ASAR packaging step.
+// Studio updater, with Sheet Studio status and explicit check/download controls.
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
@@ -71,19 +70,22 @@ async function hashFile(file) {
   for await (const chunk of fsSync.createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
 }
-async function verifyFile(file, asset) {
+async function verifyFile(file, asset, verifying = () => {}) {
   const stat = await fs.lstat(file);
-  if (!stat.isFile() || stat.size !== asset.bytes || await hashFile(file) !== asset.sha256) throw new Error('업데이트 파일이 원본과 일치하지 않습니다.');
+  if (!stat.isFile() || stat.size !== asset.bytes) throw new Error('업데이트 파일이 원본과 일치하지 않습니다.');
+  verifying();
+  if (await hashFile(file) !== asset.sha256) throw new Error('업데이트 파일이 원본과 일치하지 않습니다.');
 }
-async function download(asset, cache, fetchImpl, signal, progress = () => {}) {
+async function download(asset, cache, fetchImpl, signal, progress = () => {}, verifying = () => {}) {
   await fs.mkdir(cache, { recursive: true, mode: 0o700 });
   const directory = path.join(cache, asset.sha256);
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const destination = path.join(directory, asset.filename);
-  try { await verifyFile(destination, asset); return destination; }
+  try { await verifyFile(destination, asset, verifying); return destination; }
   catch (error) {
     if (error.code !== 'ENOENT') await fs.rm(destination, { force: true });
   }
+  progress(0, 0, asset.bytes);
   const temporary = destination + '.' + randomUUID() + '.partial';
   try {
     const response = await fetchImpl(asset.url, { signal });
@@ -98,8 +100,9 @@ async function download(asset, cache, fetchImpl, signal, progress = () => {}) {
         if (bytes > asset.bytes) throw new Error('업데이트 크기가 배포 정보와 다릅니다.');
         hash.update(chunk);
         await handle.writeFile(chunk);
-        progress(Math.floor(bytes / asset.bytes * 100));
+        progress(Math.floor(bytes / asset.bytes * 100), bytes, asset.bytes);
       }
+      verifying();
       if (bytes !== asset.bytes || hash.digest('hex') !== asset.sha256) throw new Error('업데이트 파일이 원본과 일치하지 않습니다.');
       await handle.sync();
     } finally { await handle.close(); }
@@ -115,17 +118,17 @@ function powershellCommand(script, jobFile) {
 }
 
 function createStudioUpdater({ app, dialog, shell, Notification, id, getWindow, platform = process.platform, arch = process.arch,
-  fetchImpl = globalThis.fetch, launch = spawn, executable = process.execPath, pid = process.pid, logger = console }) {
+  fetchImpl = (...args) => globalThis.fetch(...args), launch = spawn, executable = process.execPath, pid = process.pid, logger = console }) {
   if (!Object.hasOwn(PRODUCTS, id)) throw new Error('Unknown Studio app');
   const product = PRODUCTS[id];
   const releasePage = `https://github.com/beaur8-prog/${id}-studio/releases/latest`;
   const cache = path.join(app.getPath('userData'), 'updates');
   const settingsFile = path.join(cache, 'settings.json');
   let enabled = true, busy = null, ready = null, pendingJob = null, controller = null;
-  let startTimer, interval, disposed = false, manualWaiting = false, notification;
+  let startTimer, interval, disposed = false, manualWaiting = false, downloadWaiting = false, promptWaiting = false, notification;
   const listeners = new Set();
-  const changed = () => { for (const listener of listeners) listener(); };
-  const state = { phase: 'idle', percent: 0, version: null };
+  const changed = () => { state.revision++; for (const listener of listeners) listener(); };
+  const state = { revision: 0, phase: 'idle', percent: 0, version: null, downloadedBytes: 0, totalBytes: 0, checkedAt: null, error: null };
   function update(patch) { Object.assign(state, patch); changed(); }
   function window() { const win = getWindow?.(); return win && !win.isDestroyed() ? win : undefined; }
   function message(options) { const win = window(); return win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options); }
@@ -165,7 +168,7 @@ function createStudioUpdater({ app, dialog, shell, Notification, id, getWindow, 
         return;
       }
       const answer = await message({ type: 'info', title: product + ' 업데이트', message: ready.asset.version + ' 버전을 설치할까요?',
-        detail: '앱을 종료한 뒤 새 버전을 설치하고 다시 실행합니다. 문서 저장·종료가 취소되면 업데이트도 취소됩니다.',
+        detail: '문서 복구 저장 후 앱을 종료하고 설치 화면을 엽니다. 설치 화면에서 안내에 따라 진행하면 앱이 다시 실행됩니다. 문서 저장·종료가 취소되면 업데이트도 취소됩니다.',
         buttons: ['종료하고 업데이트', '나중에'], defaultId: 1, cancelId: 1, noLink: true });
       if (answer.response !== 0 || disposed) return;
       const job = path.join(path.dirname(ready.file), 'install-' + randomUUID() + '.json');
@@ -181,6 +184,7 @@ function createStudioUpdater({ app, dialog, shell, Notification, id, getWindow, 
     } catch (error) { await showError(error); }
   }
   async function showError(error) {
+    update({ phase: 'error', error: String(error.message).slice(0, 300) });
     logger.warn('Studio updater:', error.message);
     await message({ type: 'warning', title: product + ' 업데이트', message: '업데이트를 완료하지 못했습니다.',
       detail: '작업은 계속할 수 있습니다. 네트워크와 디스크 공간을 확인한 뒤 도움말에서 다시 시도하세요.\n\n' + String(error.message).slice(0, 300), buttons: ['확인'] });
@@ -196,7 +200,7 @@ function createStudioUpdater({ app, dialog, shell, Notification, id, getWindow, 
     controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30 * 60 * 1000)]);
     try {
-      update({ phase: 'checking', percent: 0 });
+      update({ phase: 'checking', percent: 0, downloadedBytes: 0, totalBytes: 0, error: null });
       const endpoint = platform === 'darwin' ? 'releases?per_page=20' : 'releases/latest';
       const response = await fetchImpl(`https://api.github.com/repos/beaur8-prog/${id}-studio/${endpoint}`, {
         headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': product.replaceAll(' ', '-') + '-Updater' },
@@ -206,27 +210,34 @@ function createStudioUpdater({ app, dialog, shell, Notification, id, getWindow, 
       const options = { id, currentVersion: app.getVersion(), platform, arch };
       const asset = platform === 'darwin' ? selectMacRelease(release, options) : selectRelease(release, options);
       if (!asset) {
-        ready = null; update({ phase: 'idle', version: null });
-        if (manualWaiting) await message({ type: 'info', title: product + ' 업데이트', message: '최신 버전을 사용하고 있습니다.', buttons: ['확인'] });
+        ready = null; update({ phase: 'up-to-date', version: null, checkedAt: new Date().toISOString() });
+        if (promptWaiting) await message({ type: 'info', title: product + ' 업데이트', message: '최신 버전을 사용하고 있습니다.', buttons: ['확인'] });
         return;
       }
-      update({ phase: 'downloading', version: asset.version });
-      const file = await download(asset, cache, fetchImpl, signal, percent => { if (percent !== state.percent) update({ percent }); });
+      if (ready && (ready.asset.sha256 !== asset.sha256 || ready.asset.version !== asset.version || ready.asset.bytes !== asset.bytes)) ready = null;
+      update({ phase: ready ? 'ready' : 'available', percent: ready ? 100 : 0, downloadedBytes: ready ? asset.bytes : 0, version: asset.version, totalBytes: asset.bytes, checkedAt: new Date().toISOString() });
+      if (!downloadWaiting) return;
+      update({ phase: 'downloading', percent: 0 });
+      const file = await download(asset, cache, fetchImpl, signal, (percent, downloadedBytes, totalBytes) => {
+        if (percent !== state.percent || state.phase !== 'downloading') update({ phase: 'downloading', percent, downloadedBytes, totalBytes });
+      }, () => update({ phase: 'verifying' }));
       if (disposed) return;
-      ready = { asset, file }; update({ phase: 'ready', percent: 100 });
-      if (manualWaiting) await installNow(true); else notifyReady();
+      ready = { asset, file }; update({ phase: 'ready', percent: 100, downloadedBytes: asset.bytes });
+      if (promptWaiting) await installNow(true); else if (!manualWaiting) notifyReady();
     } catch (error) {
       if (!disposed && !controller.signal.aborted) {
-        update({ phase: ready ? 'ready' : 'error' });
-        if (manualWaiting) await showError(error); else logger.warn('Studio update check:', error.message);
+        update({ phase: 'error', error: String(error.message).slice(0, 300) });
+        if (promptWaiting) await showError(error); else logger.warn('Studio update check:', error.message);
       }
-    } finally { controller = null; manualWaiting = false; }
+    } finally { controller = null; manualWaiting = false; downloadWaiting = false; promptWaiting = false; }
   }
-  async function check(manual = false) {
+  async function check(manual = false, { download: downloadRequested = true, prompt = manual } = {}) {
     if (disposed) return;
     if (platform === 'linux') { if (manual) await shell.openExternal(releasePage); return; }
     if (!app.isPackaged) { if (manual) await message({ type: 'info', message: '설치된 배포 앱에서 업데이트를 확인할 수 있습니다.', buttons: ['확인'] }); return; }
     if (manual) manualWaiting = true;
+    if (downloadRequested) downloadWaiting = true;
+    if (prompt) promptWaiting = true;
     if (busy) return busy;
     // Refresh release metadata even for cached files: removed/revoked releases
     // and downgrades must not be installed just because a cache exists.
@@ -238,7 +249,7 @@ function createStudioUpdater({ app, dialog, shell, Notification, id, getWindow, 
     enabled = Boolean(value);
     try { await saveSettings(); }
     catch (error) { enabled = previous; changed(); await showError(error); return; }
-    if (!enabled && !manualWaiting) { controller?.abort(); update({ phase: ready ? 'ready' : 'idle', percent: 0 }); }
+    if (!enabled && !manualWaiting && controller) { controller.abort(); update({ phase: ready ? 'ready' : 'idle', percent: ready ? 100 : 0 }); }
     changed();
   }
   function menuTemplate() {
@@ -274,8 +285,11 @@ function createStudioUpdater({ app, dialog, shell, Notification, id, getWindow, 
     disposed = true; clearTimeout(startTimer); clearInterval(interval); controller?.abort(); notification?.close();
     app.removeListener('quit', onQuit); listeners.clear();
   }
-  return { start, check, installNow, cancelInstall, setAutomatic, menuTemplate, onChange: callback => { listeners.add(callback); return () => listeners.delete(callback); },
-    getState: () => ({ ...state, automatic: enabled }), dispose };
+  return { start, check, checkOnly: () => check(true, { download: false, prompt: false }),
+    downloadUpdate: () => check(true, { prompt: false }), openManual: () => shell.openExternal(releasePage),
+    installNow, cancelInstall, setAutomatic, menuTemplate, onChange: callback => { listeners.add(callback); return () => listeners.delete(callback); },
+    getState: () => ({ ...state, automatic: enabled, currentVersion: app.getVersion(), platform,
+      packaged: app.isPackaged, supportsAutomatic: platform !== 'linux' }), dispose };
 }
 
 module.exports = { createStudioUpdater, selectRelease, selectMacRelease, newer, readJSON, download, verifyFile, powershellCommand };

@@ -176,3 +176,74 @@ test('PowerShell job paths are data, including apostrophes and command character
   assert.ok(command.endsWith("-JobFile 'C:\\O''Brien;$x\\job.json'"));
   assert.throws(() => powershellCommand('x','bad\npath'));
 });
+
+
+test('explicit check finds a release without downloading, prompting or quitting', async t => {
+  const f = await fixture(t);
+  await f.updater.checkOnly();
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.updater.getState().phase, 'available');
+  assert.equal(f.updater.getState().version, '1.4.4');
+  assert.equal(f.updater.getState().currentVersion, '1.4.3');
+  assert.ok(f.updater.getState().checkedAt);
+  assert.equal(f.dialogs.length, 0); assert.equal(f.quitCalls(), 0);
+  await f.updater.setAutomatic(false);
+  assert.equal(f.updater.getState().phase, 'available', 'manual mode preserves a found release');
+  await f.updater.downloadUpdate();
+  assert.equal(f.updater.getState().phase, 'ready');
+  assert.equal(f.requests.filter(url => !url.includes('api.github.com')).length, 1);
+  assert.equal(f.dialogs.length, 0); assert.equal(f.quitCalls(), 0);
+});
+test('UI receives ordered download byte counts, integrity verification and readiness', async t => {
+  const f = await fixture(t);
+  const events = [];
+  const remove = f.updater.onChange(() => events.push(f.updater.getState()));
+  await f.updater.downloadUpdate();remove();
+  assert.ok(events.some(s => s.phase === 'checking'));
+  assert.ok(events.some(s => s.phase === 'downloading' && s.downloadedBytes === bytes.length && s.totalBytes === bytes.length));
+  assert.ok(events.some(s => s.phase === 'verifying'));
+  assert.equal(events.at(-1).phase, 'ready');assert.equal(events.at(-1).percent, 100);
+  assert.ok(events.every((s,i) => !i || s.revision > events[i-1].revision));
+  const before=events.length;await f.updater.checkOnly();assert.equal(events.length,before);
+});
+test('a download requested during a metadata check shares its request and never installs implicitly', async t => {
+  let resolveMetadata;
+  const metadata = new Promise(resolve => { resolveMetadata=resolve; });
+  const requests = [];
+  const f=await fixture(t,{fetchImpl:async url=>{requests.push(url);return url.includes('api.github.com')?metadata:new Response(bytes);}});
+  const checking=f.updater.checkOnly(),downloading=f.updater.downloadUpdate();
+  resolveMetadata(Response.json(release()));await Promise.all([checking,downloading]);
+  assert.equal(requests.filter(url=>url.includes('api.github.com')).length,1);
+  assert.equal(f.updater.getState().phase,'ready');assert.equal(f.quitCalls(),0);
+});
+test('UI check reports no update or a recoverable network error without a blocking dialog', async t => {
+  let fail=true;
+  const f=await fixture(t,{fetchImpl:async()=>{if(fail)throw Error('test connection failure');return Response.json(release('word','win32','x64','1.4.3'));}});
+  await f.updater.checkOnly();
+  assert.equal(f.updater.getState().phase,'error');assert.match(f.updater.getState().error,/connection failure/);
+  assert.equal(f.dialogs.length,0);
+  fail=false;await f.updater.checkOnly();
+  assert.equal(f.updater.getState().phase,'up-to-date');assert.equal(f.updater.getState().error,null);
+  assert.equal(f.dialogs.length,0);
+});
+test('UI download integrity errors are visible and never produce an installable file', async t => {
+  const f=await fixture(t,{fetchImpl:async url=>url.includes('api.github.com')?Response.json(release()):new Response(Buffer.alloc(bytes.length))});
+  await f.updater.downloadUpdate();
+  assert.equal(f.updater.getState().phase,'error');assert.match(f.updater.getState().error,/원본과 일치/);
+  assert.deepEqual(await fs.readdir(path.join(f.directory,'updates',sha256)),[]);
+  assert.equal(f.quitCalls(),0);assert.equal(f.launched.length,0);assert.equal(f.dialogs.length,0);
+});
+test('manual download opens only the product release page without changing preferences or fetching a file', async t => {
+  const f=await fixture(t);await f.updater.openManual();
+  assert.deepEqual(f.opened,['https://github.com/beaur8-prog/word-studio/releases/latest']);
+  assert.equal(f.requests.length,0);assert.equal(f.updater.getState().automatic,true);
+});
+test('update menu opens check, manual and progress views without starting hidden operations', () => {
+  const {updateMenu}=require('../../electron/update-menu.cjs'),opened=[],settings=[];
+  const items=updateMenu({automatic:true,supportsAutomatic:true},mode=>opened.push(mode),value=>settings.push(value));
+  for(const item of items.filter(item=>item.id))item.click();
+  assert.deepEqual(opened,['check','manual','status']);
+  const automatic=items.find(item=>item.type==='checkbox');assert.equal(automatic.checked,true);
+  automatic.click({checked:false});assert.deepEqual(settings,[false]);
+  assert.equal(updateMenu({supportsAutomatic:false},()=>{},()=>{}).some(item=>item.type==='checkbox'),false);
+});

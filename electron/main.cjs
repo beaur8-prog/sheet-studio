@@ -6,6 +6,7 @@ const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const vba = require('./vba.cjs');
 const { applicationMenu } = require('./menu.cjs');
+const { updateMenu } = require('./update-menu.cjs');
 const { createFileLocations } = require('./file-locations.cjs');
 const { createStudioUpdater } = require('./studio-updater.cjs');
 const { FileOpenRequests } = require('./file-open-requests.cjs');
@@ -37,10 +38,15 @@ const fileLocations = createFileLocations({ stateFile: path.join(app.getPath('us
 const updates = createStudioUpdater({ app, dialog, shell, Notification, id: 'sheet', getWindow: () => win });
 function installMenu() {
   const template = applicationMenu(process.platform, action => win?.webContents.send('sheet:menu-action', action)) || [];
-  template.push({ label: '도움말', submenu: updates.menuTemplate() });
+  template.push({ label: '도움말', submenu: updateMenu(updates.getState(), mode => win?.webContents.send('sheet:menu-action', 'updates-'+mode), updates.setAutomatic) });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
-updates.onChange(installMenu);
+let menuAutomatic;
+updates.onChange(() => {
+  const state = updates.getState();
+  if (win && !win.isDestroyed()) win.webContents.send('sheet:update-state', state);
+  if (state.automatic !== menuAutomatic) { menuAutomatic = state.automatic; installMenu(); }
+});
 
 function trusted(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame ||
@@ -48,6 +54,19 @@ function trusted(event) {
 }
 
 ipcMain.handle('sheet:app-version', event => { trusted(event); return app.getVersion(); });
+ipcMain.handle('sheet:update-state', event => { trusted(event); return updates.getState(); });
+ipcMain.handle('sheet:update-action', async (event, command, value) => {
+  trusted(event);
+  if (command === 'automatic') {
+    if (typeof value !== 'boolean') throw TypeError('업데이트 설정에는 참/거짓 값이 필요합니다.');
+    await updates.setAutomatic(value);
+  } else {
+    const actions = { check: updates.checkOnly, download: updates.downloadUpdate, install: updates.installNow, manual: updates.openManual };
+    if (!Object.hasOwn(actions, command) || value !== undefined) throw TypeError('허용되지 않는 업데이트 요청입니다.');
+    await actions[command]();
+  }
+  return updates.getState();
+});
 
 function notifyFileOpenRequests() {
   if (fileOpenRequests.size && win && !win.isDestroyed()) win.webContents.send('sheet:open-requested');

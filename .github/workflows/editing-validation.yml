@@ -5,7 +5,7 @@ on:
       scope:
         description: Regression scope
         type: choice
-        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations, studio-clipboard, native-clipboard]
+        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations, studio-clipboard, native-clipboard, updates]
         default: all
       operating_system:
         description: Operating system to validate
@@ -34,6 +34,15 @@ jobs:
       - run: npm ci
       - run: npm run runtime:install
       - run: npm test
+      - run: npm run test:updates
+      - name: Check Windows updater helper syntax
+        if: runner.os == 'Windows' && inputs.scope == 'updates'
+        shell: pwsh
+        run: |
+          $parseTokens = $null
+          $parseIssues = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'electron/studio-update-windows.ps1'), [ref]$parseTokens, [ref]$parseIssues) | Out-Null
+          if ($parseIssues.Count) { $parseIssues | Format-List; throw 'Update helper syntax check failed' }
       - run: npm run build
       - name: Check native composition and existing editing behavior
         shell: bash
@@ -44,6 +53,8 @@ jobs:
             specs="$specs $core_specs"
           elif [ "${{ inputs.scope }}" = excel-parity ]; then
             specs="$core_specs"
+          elif [ "${{ inputs.scope }}" = updates ]; then
+            specs="updates recovery"
           elif [ "${{ inputs.scope }}" = native-clipboard ]; then
             specs="native-clipboard"
           elif [ "${{ inputs.scope }}" = studio-clipboard ]; then
@@ -92,6 +103,7 @@ jobs:
             test-results/capacity-*.json
             test-results/large-spills*.json
             test-results/native-clipboard.json
+            test-results/updates-*.json
             test-results/array-races.json
             test-results/array-views.json
             test-results/pivot-arrays.json
