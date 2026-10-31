@@ -47,10 +47,6 @@ jobs:
         if: inputs.updater_only != true
         shell: pwsh
         run: ./scripts/check-windows-install.ps1
-      - name: Verify native helper handoff, cancellation, failure and tampering
-        run: node scripts/test-windows-updater-handoff.cjs
-      - name: Verify actual Sheet close guards and recovery during native updates
-        run: node tests/ui-windows-update-close.mjs
       - name: Build the pinned pre-fix installer for actual upgrade reproduction
         shell: pwsh
         run: |
@@ -69,6 +65,10 @@ jobs:
       - name: Verify real NSIS updates preserve scope, custom directory and single relaunch
         shell: pwsh
         run: ./scripts/test-windows-update-in-place.ps1
+      - name: Verify native helper handoff, cancellation, failure and tampering
+        run: node scripts/test-windows-updater-handoff.cjs
+      - name: Verify actual Sheet close guards and recovery during native updates
+        run: node tests/ui-windows-update-close.mjs
       - name: Prepare versioned installer and checksum
         shell: bash
         env:

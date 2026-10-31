@@ -31,6 +31,18 @@ Var SheetStudioMachineInstall
   ${EndIf}
 !macroend
 
+!macro customPageAfterChangeDir
+  ; electron-builder normally appends the product name to a custom directory.
+  ; Never alter the folder of an already installed app during a visible update.
+  !undef MUI_PAGE_CUSTOMFUNCTION_PRE
+  !define MUI_PAGE_CUSTOMFUNCTION_PRE SheetStudioInstallFilesPre
+  Function SheetStudioInstallFilesPre
+    ${If} $SheetStudioExistingInstall == "0"
+      Call instFilesPre
+    ${EndIf}
+  FunctionEnd
+!macroend
+
 !macro customFinishPage
   !define MUI_FINISHPAGE_RUN
   !define MUI_FINISHPAGE_RUN_FUNCTION SheetStudioFinishRun

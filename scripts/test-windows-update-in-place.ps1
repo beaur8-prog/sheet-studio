@@ -63,7 +63,7 @@ try {
   & (Join-Path $PSScriptRoot 'test-windows-installer-ui.ps1') -Setup $legacySetup -Stage old-forced-language -ExpectLanguageSelector
   foreach ($scenario in @('current-user','all-users','legacy-helper-with-duplicates')) {
     $scope = if ($scenario -eq 'current-user') { '/currentuser' } else { '/allusers' }
-    $directory = Join-Path $work "$scenario/Sheet Studio 사용자 지정"
+    $directory = Join-Path $work "$scenario/사용자 지정 도구"
     Run-Setup $legacySetup $scope $directory
     $target = Join-Path $directory 'Sheet Studio.exe'
     if (-not (Test-Path $target)) { throw 'Legacy setup ignored the custom directory.' }
