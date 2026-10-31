@@ -24,7 +24,9 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
   await fs.writeFile(path.join(directory, 'installer.cs'), 'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("STUDIO_HANDOFF_PARENT_PID"))); if (!parent.HasExited) throw new Exception("Editor is still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("STUDIO_HANDOFF_FIXTURE_ROOT"); File.Copy(Path.Combine(root, "payload.exe"), Environment.GetEnvironmentVariable("STUDIO_HANDOFF_TARGET_EXE"), true); File.WriteAllText(Path.Combine(root, "installed"), "yes"); } }');
   const compile = `param([string]$JobFile)\n$ErrorActionPreference = 'Stop'\nforeach ($name in @('old','payload','installer')) { Add-Type -Path (Join-Path $JobFile "$name.cs") -OutputAssembly (Join-Path $JobFile "$name.exe") -OutputType WindowsApplication }`;
   execFileSync(ps, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', powershellCommand(compile, directory)], { stdio: 'inherit', timeout: 60000 });
-  const runtime = path.join(directory, 'runtime');
+  // Keep the renderer executable's path simple, as in the upstream test.
+  // Special characters remain in every job, installer and profile path.
+  const runtime = await fs.mkdtemp(path.join(os.tmpdir(), 'studio-handoff-runtime-'));
   await fs.cp(path.dirname(require('electron')), runtime, { recursive: true });
   const appDirectory = path.join(runtime, 'resources', 'app');
   await fs.mkdir(appDirectory, { recursive: true });
@@ -113,5 +115,8 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
       console.log('Verified native updater handoff:', name);
     }
     await fs.writeFile(path.join(report, 'results.json'), JSON.stringify({ platform: process.platform, passed: true, results }, null, 2) + '\n');
-  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(error => console.warn('Fixture cleanup:', error.message));
+    await fs.rm(runtime, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(error => console.warn('Runtime cleanup:', error.message));
+  }
 })().catch(error => { console.error(error); process.exitCode = 1; });
