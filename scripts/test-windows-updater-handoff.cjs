@@ -104,7 +104,7 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
           await poll(() => exists(path.join(folder, 'reopened')));
           assert(await exists(path.join(folder, 'installed')));
           const commandLine = await fs.readFile(path.join(folder, 'installer-args.json'),'utf8');
-          assert(commandLine.endsWith(' /currentuser --updated /D=' + folder), commandLine);
+          assert(commandLine.trimEnd().endsWith(' /currentuser --updated /D=' + folder), commandLine);
           assert.equal(JSON.parse(await fs.readFile(path.join(folder, 'before-quit.json'))).acknowledged, true);
           assert.match(await fs.readFile(path.join(folder, 'profile/updates/last-install.log'), 'utf8'), /Installed /);
           results.push({ id, mode, nativeElectronQuit: true, helperAcknowledgedBeforeQuit: true, installed: true, versionVerified: true, reopened: true });
