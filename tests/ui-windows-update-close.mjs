@@ -13,7 +13,7 @@ import {powershellCommand} from '../electron/studio-updater.cjs';
 import platform from '../scripts/platform.cjs';
 if(process.platform!=='win32'||process.env.GITHUB_ACTIONS!=='true')throw Error('Requires a disposable Windows CI runner');
 const root=path.resolve(import.meta.dirname,'..'),version=createRequire(import.meta.url)('../package.json').version;
-const original=platform.packagedExecutable(root,version),directory=await fs.mkdtemp(path.join(os.tmpdir(),"sheet update close 한글 O'Brien; & "));
+const original=platform.packagedExecutable(root,version),directory=await fs.mkdtemp(path.join(os.tmpdir(),'sheet-update-close-'));
 const report=path.join(root,'test-results/windows-update-close');await fs.mkdir(report,{recursive:true});
 const ps=path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -23,11 +23,11 @@ await fs.writeFile(path.join(directory,'payload.cs'),'using System; using System
 await fs.writeFile(path.join(directory,'installer.cs'),'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_PID"))); if (!parent.HasExited) throw new Exception("Editor still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_ROOT"); File.Copy(Path.Combine(root,"payload.exe"), Environment.GetEnvironmentVariable("SHEET_UPDATE_FIXTURE_EXE"), true); File.WriteAllText(Path.Combine(root,"installed"),"yes"); } }');
 execFileSync(ps,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',powershellCommand('param($JobFile)\n$ErrorActionPreference="Stop"\nforeach ($name in @("payload","installer")) { Add-Type -Path (Join-Path $JobFile "$name.cs") -OutputAssembly (Join-Path $JobFile "$name.exe") -OutputType WindowsApplication }',directory)],{stdio:'inherit',timeout:60000});
 const results=[];let application,page;
-async function launch(executable,env){const environment={...env};delete environment.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:executable,args:[],env:environment,timeout:45000});page=await application.firstWindow();page.setDefaultTimeout(20000);await page.locator('.cell').first().waitFor();}
+async function launch(executable,env){console.log('Launching packaged fixture:',executable);const environment={...env};delete environment.ELECTRON_RUN_AS_NODE;application=await _electron.launch({executablePath:executable,args:[],env:environment,timeout:45000});page=await application.firstWindow();page.setDefaultTimeout(20000);await page.locator('.cell').first().waitFor();console.log('Packaged fixture editor ready');}
 async function edit(ref,text){await page.locator('#name-box').fill(ref);await page.locator('#name-box').press('Enter');await page.keyboard.type(text);await page.keyboard.press('Enter');}
 try{
  for(const mode of ['install','save-failure']){
-  const folder=path.join(directory,mode),appFolder=path.join(folder,'editor'),profile=path.join(folder,'profile');await fs.mkdir(folder);
+  const folder=path.join(directory,mode),appFolder=path.join(folder,'editor'),profile=path.join(folder,"profile 한글 O'Brien; &");await fs.mkdir(folder);
   await fs.cp(path.dirname(original),appFolder,{recursive:true});
   for(const file of ['payload.exe','installer.exe'])await fs.copyFile(path.join(directory,file),path.join(folder,file));
   const executable=path.join(appFolder,'Sheet Studio.exe');await fs.writeFile(path.join(appFolder,'Uninstall Sheet Studio.exe'),'disposable marker');
@@ -49,13 +49,15 @@ try{
    }
   },{bytes:[...bytes],sha256,mode,folder});
   await edit('A1','업데이트 후 복구할 문서');await edit('A2','=1+2');
+  console.log('Downloading inert test update:',mode);
   await page.evaluate(()=>desktop.updateAction('download'));
   assert.equal((await page.evaluate(()=>desktop.getUpdateState())).phase,'ready');
   await edit('A3','종료 직전 입력');
+  console.log('Requesting native update handoff:',mode);
   const closed=mode==='install'?application.waitForEvent('close',{timeout:45000}):null;
   await page.evaluate(()=>{void desktop.updateAction('install').catch(()=>{});});
   if(mode==='install'){
-   await closed;application=null;await until(()=>exists(path.join(folder,'reopened')));
+   await closed;console.log('Real Sheet quit completed');application=null;await until(()=>exists(path.join(folder,'reopened')));
    assert(await exists(path.join(folder,'installed')));
    assert.equal(JSON.parse(await fs.readFile(path.join(folder,'before-quit.json'),'utf8')).helperAcknowledged,true);
    results.push({mode,realSheetClose:true,helperAcknowledgedBeforeQuit:true,installed:true,reopened:true});
@@ -80,4 +82,18 @@ try{
   console.log('PASS packaged Sheet update close:',mode);
  }
  await fs.writeFile(path.join(report,'results.json'),JSON.stringify({ok:true,version,results},null,2));
-}finally{if(application)await application.close();await fs.rm(directory,{recursive:true,force:true});}
+}catch(error){
+ console.error('Original native update fixture failure:',error.stack||error);
+ if(application){
+  try{console.error('Editor state:',await application.evaluate(()=>globalThis.updateCloseFixture));}catch{}
+  try{console.error('Updater state:',await page.evaluate(()=>desktop.getUpdateState()));}catch{}
+ }
+ for(const mode of ['install','save-failure']){
+  const updates=path.join(directory,mode,"profile 한글 O'Brien; &",'updates');
+  await fs.cp(updates,path.join(report,mode+'-failure-updates'),{recursive:true}).catch(()=>{});
+ }
+ throw error;
+}finally{
+ if(application)await application.close().catch(error=>console.error('Fixture close:',error.message));
+ await fs.rm(directory,{recursive:true,force:true,maxRetries:10,retryDelay:200}).catch(error=>console.error('Fixture cleanup:',error.message));
+}

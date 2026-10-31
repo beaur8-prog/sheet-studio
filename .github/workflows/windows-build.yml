@@ -36,10 +36,10 @@ jobs:
       - name: Verify install, reinstall, file associations and uninstall
         shell: pwsh
         run: ./scripts/check-windows-install.ps1
-      - name: Verify actual Sheet close guards and recovery during native updates
-        run: node tests/ui-windows-update-close.mjs
       - name: Verify native helper handoff, cancellation, failure and tampering
         run: node scripts/test-windows-updater-handoff.cjs
+      - name: Verify actual Sheet close guards and recovery during native updates
+        run: node tests/ui-windows-update-close.mjs
       - name: Prepare versioned installer and checksum
         shell: bash
         env:
