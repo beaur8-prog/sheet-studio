@@ -22,7 +22,7 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
   const assembly = version => `using System; using System.IO; using System.Reflection; [assembly: AssemblyVersion("${version}.0")] [assembly: AssemblyInformationalVersion("${version}")] `;
   await fs.writeFile(path.join(directory, 'old.cs'), assembly('0.0.0') + 'public class OldApp { public static void Main() {} }');
   await fs.writeFile(path.join(directory, 'payload.cs'), assembly('1.0.0') + 'public class NewApp { public static void Main() { File.WriteAllText(Path.Combine(Environment.GetEnvironmentVariable("STUDIO_HANDOFF_FIXTURE_ROOT"), "reopened"), "yes"); } }');
-  await fs.writeFile(path.join(directory, 'installer.cs'), 'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("STUDIO_HANDOFF_PARENT_PID"))); if (!parent.HasExited) throw new Exception("Editor is still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("STUDIO_HANDOFF_FIXTURE_ROOT"); File.Copy(Path.Combine(root, "payload.exe"), Environment.GetEnvironmentVariable("STUDIO_HANDOFF_TARGET_EXE"), true); File.WriteAllText(Path.Combine(root, "installer-args.json"), string.Join("\\n", Environment.GetCommandLineArgs())); File.WriteAllText(Path.Combine(root, "installed"), "yes"); } }');
+  await fs.writeFile(path.join(directory, 'installer.cs'), 'using System; using System.IO; using System.Diagnostics; public class Setup { public static void Main() { try { var parent = Process.GetProcessById(int.Parse(Environment.GetEnvironmentVariable("STUDIO_HANDOFF_PARENT_PID"))); if (!parent.HasExited) throw new Exception("Editor is still running"); } catch (ArgumentException) {} var root = Environment.GetEnvironmentVariable("STUDIO_HANDOFF_FIXTURE_ROOT"); File.Copy(Path.Combine(root, "payload.exe"), Environment.GetEnvironmentVariable("STUDIO_HANDOFF_TARGET_EXE"), true); File.WriteAllText(Path.Combine(root, "installer-args.json"), Environment.CommandLine); File.WriteAllText(Path.Combine(root, "installed"), "yes"); } }');
   const compile = `param([string]$JobFile)\n$ErrorActionPreference = 'Stop'\nforeach ($name in @('old','payload','installer')) { Add-Type -Path (Join-Path $JobFile "$name.cs") -OutputAssembly (Join-Path $JobFile "$name.exe") -OutputType WindowsApplication }`;
   execFileSync(ps, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', powershellCommand(compile, directory)], { stdio: 'inherit', timeout: 60000 });
   // Keep the renderer executable's path simple, as in the upstream test.
@@ -103,8 +103,8 @@ async function exists(file) { return fs.access(file).then(() => true, () => fals
         if (mode === 'install') {
           await poll(() => exists(path.join(folder, 'reopened')));
           assert(await exists(path.join(folder, 'installed')));
-          const args = (await fs.readFile(path.join(folder, 'installer-args.json'),'utf8')).split('\n');
-          assert.deepEqual(args.slice(1), ['/currentuser', '--updated', '/D=' + folder]);
+          const commandLine = await fs.readFile(path.join(folder, 'installer-args.json'),'utf8');
+          assert(commandLine.endsWith(' /currentuser --updated /D=' + folder), commandLine);
           assert.equal(JSON.parse(await fs.readFile(path.join(folder, 'before-quit.json'))).acknowledged, true);
           assert.match(await fs.readFile(path.join(folder, 'profile/updates/last-install.log'), 'utf8'), /Installed /);
           results.push({ id, mode, nativeElectronQuit: true, helperAcknowledgedBeforeQuit: true, installed: true, versionVerified: true, reopened: true });
