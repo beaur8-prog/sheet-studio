@@ -1,3 +1,4 @@
+import {assertBlankStart,recoverPrevious} from './recovery-ui.mjs';
 import {desktopLaunch} from './electron-launch.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
@@ -53,7 +54,7 @@ try{
  for(let i=0;i<60;i++){await page.locator('#undo').click();await settle();}await verify(91000);assert.equal(await page.locator('#undo').isDisabled(),true);
  for(let i=0;i<60;i++){await page.locator('#redo').click();await settle();}await verify(88000);assert.equal(await page.locator('#redo').isDisabled(),true);await sample('history');
  await save(file);await page.locator('#file-input').setInputFiles(file);await settle();await verify(88000);await page.evaluate(()=>sheetStudio.flushRecovery());await app.close();app=null;
- await launch();await settle();await verify(88000);await sample('restart');assert.deepEqual(errors,[]);
+ await launch();await assertBlankStart(page);await recoverPrevious(page);await settle();await verify(88000);await sample('restart');assert.deepEqual(errors,[]);
  await fs.writeFile(path.join(root,'test-results/array-soak'+(process.argv.includes('--memory-audit')?'-memory':'')+'.json'),JSON.stringify({at:new Date().toISOString(),platform:process.platform,iterations:72,minRows:80000,maxRows:100000,derivedArrays:2,sourceRecords:4,history,undoRedoOperations:120,milliseconds:Date.now()-start,memoryObservations:samples},null,2));
  console.log('PASS: 72 large typed-filter spill resizes, bounded 60-step history and all 120 undo/redo operations, repeated worker XLSX exports, sparse reopen and process recovery');
 }catch(error){await page?.screenshot({path:path.join(root,'test-results/array-soak-failure.png')}).catch(()=>{});throw error;}

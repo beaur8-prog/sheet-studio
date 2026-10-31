@@ -30,7 +30,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
     if (saveRevision === revision) onSave('saved');
     return result;
   }
-  function sync(book, dirty, token) {
+  function sync(book, dirty, token, documentId) {
     const sheets = [], metadata = !baseline.size || dirty.metadataChanged || token ? workbookMetadata(book) : null;
     for (const sheet of book.sheets) {
       if (baseline.get(sheet.id) !== sheet.cells && !token) sheets.push({id: sheet.id, cells: sheet.cells});
@@ -38,7 +38,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
     }
     adopt(book); values = new Map(); styles = new Map();calculationErrors=new Map();provenance=new Map(); pendingRefs.clear(); ++revision; ++calculationEpoch;
     onSave('saving');
-    synced = call('sync', {metadata, sheets, revision, token});
+    synced = call('sync', {metadata, sheets, revision, token, documentId});
     synced.catch(error => { baseline=new Map();onSave('failed'); onError(error); });
     clearTimeout(flushTimer); flushTimer = setTimeout(() => flush().catch(error => { onSave('failed'); onError(error); }), 100);
     return synced;
@@ -88,7 +88,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
     get revision() { return revision; },
     get calculated() { return !calculateScheduled&&!pendingRefs.size&&!calculating; },
     get saving() { return saveRevision !== revision; },
-    async load(legacy) { const result = await call('load', {legacy}); adopt(result.book); return result; },
+    async load(legacy, options = {}) { const result = await call('load', {legacy, ...options}); adopt(result.book); return result; },
     async import(bytes, name) { return call('import', {bytes, name}, [bytes.buffer]); },
     sync, flush, value, recalculate,
     result(sheetId,ref){return {value:value(sheetId,ref),error:calculationErrors.get(sheetId+'!'+ref)||null,...provenance.get(sheetId+'!'+ref)};},

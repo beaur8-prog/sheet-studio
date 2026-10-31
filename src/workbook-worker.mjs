@@ -19,6 +19,7 @@ import {openRecoveryStore, workbookMetadata} from './recovery-store.mjs';
 import {applyFilters, filterOptions, filterPredicates, valueKey, sortFilterRange, sortRange, inferFilterRange} from './filters.mjs';
 
 let book = createWorkbook(), revision = 0, store, prepared = null, evaluators = new Map(), conditionals = new Map(), arraysSent=false;
+let documentId;
 let dirty = new Map(), replacements = new Set(), needsSave = false, metadataDirty = false;
 function changed() { resetConstraintIndexes();evaluators = new Map(); conditionals = new Map(); arraysSent=false; needsSave = true; }
 const evaluator = id => {
@@ -40,13 +41,33 @@ const describe = book => {
 async function handle(type, data) {
   if (type === 'load') {
     store = await openRecoveryStore();
-    const recovered = await store.load();
-    if (recovered) book = validateWorkbook(recovered);
-    else if (data.legacy) {
-      book = parseWorkbook(data.legacy);
-      await store.save(book, new Map(), new Set(book.sheets.map(sheet => sheet.id)));
+    let recoveryAvailable, migrated = false;
+    const previousId = typeof data.documentId==='string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(data.documentId) ? data.documentId : undefined;
+    if (data.fresh) {
+      recoveryAvailable = await store.startBlank(previousId);
+      if (!recoveryAvailable && data.legacy) {
+        const legacy = parseWorkbook(data.legacy);
+        await store.save(legacy, new Map(), new Set(legacy.sheets.map(sheet => sheet.id)), true, previousId);
+        recoveryAvailable = await store.startBlank(previousId); migrated = true;
+      }
+      book = createWorkbook();
+    } else {
+      const recovered = await store.load();
+      if (recovered) book = validateWorkbook(recovered);
+      else if (data.legacy) {
+        book = parseWorkbook(data.legacy);
+        await store.save(book, new Map(), new Set(book.sheets.map(sheet => sheet.id)), true, previousId); migrated = true;
+      }
+      recoveryAvailable = !!(recovered || migrated);
     }
-    return {book, description: describe(book), migrated: !!data.legacy, revision};
+    documentId = data.fresh ? undefined : store.documentId || previousId;
+    return {book, description: describe(book), migrated, recoveryAvailable, revision};
+  }
+  if (type === 'recover') {
+    const recovered = await store.recover();
+    if (!recovered) return null;
+    const loaded = validateWorkbook(recovered.book), token = crypto.randomUUID(); prepared = {token, book: loaded};
+    return {book: loaded, description: describe(loaded), token, documentId: recovered.documentId};
   }
   if (type === 'import') {
     if (data.bytes.byteLength > 100 * 1024 * 1024) throw Error('100 MB 이하의 파일을 선택하세요.');
@@ -55,6 +76,7 @@ async function handle(type, data) {
     return {book: loaded, description: describe(loaded), token};
   }
   if (type === 'sync') {
+    documentId = data.documentId;
     const metadata=data.metadata||workbookMetadata(book);
     metadataDirty ||= !!data.metadata;
     if(data.metadata)validateWorkbookMetadata(metadata);
@@ -85,7 +107,7 @@ async function handle(type, data) {
   }
   if (type === 'flush') {
     if (!needsSave) return {revision, chunksWritten: 0, fullSheets: 0, metadataWritten: false};
-    const result = await store.save(book, dirty, replacements, metadataDirty);
+    const result = await store.save(book, dirty, replacements, metadataDirty, documentId);
     dirty = new Map(); replacements = new Set(); needsSave = false; metadataDirty=false;
     return {...result, revision};
   }

@@ -1,3 +1,4 @@
+import {assertBlankStart,recoverPrevious} from './recovery-ui.mjs';
 import { _electron } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -109,6 +110,7 @@ try {
   checks.push('XLSX, CSV and app-document save actions retain folder without exporting paths or IDs');
 
   await app.close(); app = null; await launch();
+  await assertBlankStart(page);await recoverPrevious(page);
   assert.equal(await id(), secondId); assert.equal(await page.evaluate(() => sheetStudio.getCell('A2').raw), '두 번째 문서');
   await inspectDirectory(c, 'restart retains recovered workbook folder');
   await menu('new'); await page.getByRole('button', { name: '새로 만들기', exact: true }).click();

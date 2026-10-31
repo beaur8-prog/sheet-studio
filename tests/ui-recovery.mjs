@@ -1,3 +1,4 @@
+import {assertBlankStart,recoverPrevious} from './recovery-ui.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -15,7 +16,7 @@ try{
  await launch();
  const legacy=createWorkbook();legacy.name='기존 자동 복구';legacy.sheets[0].cells={A1:{raw:'이전 문서',style:{bold:true}}};
  await page.evaluate(text=>localStorage.setItem('sheet-studio.book',text),JSON.stringify(legacy));
- await page.reload();await cell().waitFor();await page.waitForFunction(()=>sheetStudio.getCell('A1')?.raw==='이전 문서');
+ await page.reload();await cell().waitFor();await assertBlankStart(page);await recoverPrevious(page);await page.waitForFunction(()=>sheetStudio.getCell('A1')?.raw==='이전 문서');
  assert.equal(await page.evaluate(()=>localStorage.getItem('sheet-studio.book')),null);
  assert.equal(await page.evaluate(()=>sheetStudio.getCell('A1').style.bold),true);
  // Reload during an outstanding write: Electron must wait and retry, rather
@@ -24,8 +25,8 @@ try{
  await page.reload().catch(error=>{if(!/ERR_ABORTED|interrupted by another navigation/.test(error.message))throw error;});
  await page.waitForFunction(()=>globalThis.sheetStudio?.getCell('A1')?.raw==='reload saved');
  await page.locator('#name-box').fill('A1');await page.locator('#name-box').press('Enter');await page.keyboard.type('close saved');await page.keyboard.press('Enter');
- await app.close();await launch();
+ await app.close();await launch();await assertBlankStart(page);await recoverPrevious(page);
  assert.equal(await page.evaluate(()=>sheetStudio.getCell('A1').raw),'close saved');
  assert.deepEqual(errors,[]);await fs.mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/recovery-migrated.png'});
- console.log('PASS: legacy migration is durable before deletion; immediate reload and process close retain the last edit.');
+ console.log('PASS: legacy migration is durable before deletion; reload retains the current edit; cold launch is blank and explicit recovery restores the last edit.');
 }finally{if(app)await app.close();await fs.rm(dataDir,{recursive:true,force:true});}

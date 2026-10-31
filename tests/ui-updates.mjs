@@ -1,3 +1,4 @@
+import {assertBlankStart,recoverPrevious} from './recovery-ui.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -89,6 +90,7 @@ try{
   await application.close();application=null;await launch();
   await page.waitForFunction(async()=>!(await desktop.getUpdateState()).automatic);
   await native('manual');await center().waitFor();assert.equal(await page.locator('#update-manual').isChecked(),true);
+  await assertBlankStart(page);await close();await recoverPrevious(page);
   assert.equal(await page.evaluate(()=>sheetStudio.getCell('A1').raw),'update retains document');
  }else{
   assert.equal(await page.locator('#update-mode').isVisible(),false);

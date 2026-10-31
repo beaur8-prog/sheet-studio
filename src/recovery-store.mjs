@@ -17,14 +17,18 @@ export async function openRecoveryStore() {
   };
   const db = await request(opening);
   db.onversionchange = () => db.close();
-  let saved = null;
-  async function load() {
-    const tx = db.transaction(['state', 'chunks'], 'readonly'), done = completed(tx);
-    saved = await request(tx.objectStore('state').get('current'));
-    if (!saved) { await done; return null; }
-    const book = {...saved.metadata, sheets: saved.metadata.sheets.map(sheet => ({...sheet, cells: {}}))};
+  let saved = null, previous = null, fresh = false;
+  async function readState() {
+    const tx = db.transaction('state', 'readonly'), done = completed(tx), state = tx.objectStore('state');
+    [saved, previous] = await Promise.all([request(state.get('current')), request(state.get('previous'))]);
+    await done;
+  }
+  async function read(snapshot) {
+    if (!snapshot) return null;
+    const tx = db.transaction('chunks', 'readonly'), done = completed(tx);
+    const book = {...snapshot.metadata, sheets: snapshot.metadata.sheets.map(sheet => ({...sheet, cells: {}}))};
     const jobs = book.sheets.map(async sheet => {
-      const generation = saved.generations[sheet.id];
+      const generation = snapshot.generations[sheet.id];
       if (!generation) throw Error('자동 복구 시트 정보가 올바르지 않습니다.');
       const range = IDBKeyRange.bound([generation, 0], [generation, BUCKETS - 1]);
       await new Promise((resolve, reject) => {
@@ -39,12 +43,31 @@ export async function openRecoveryStore() {
     });
     await Promise.all(jobs); await done; return book;
   }
-  async function save(book, dirty, replace, metadataChanged = true) {
-    const publish = !saved || metadataChanged || replace.size > 0;
-    const metadata = publish ? workbookMetadata(book) : saved.metadata, generations = {}, groups = [], obsolete = new Set(Object.values(saved?.generations || {}));
+  async function load() { await readState(); fresh = false; return read(saved); }
+  // A cold launch reads only metadata. Keep the old chunks untouched until the
+  // first edit is saved, then retain their snapshot as the previous document.
+  async function startBlank(documentId) {
+    await readState(); fresh = true;
+    if (saved && !saved.documentId && documentId) {
+      const next = {...saved, documentId}, tx = db.transaction('state', 'readwrite'), done = completed(tx);
+      tx.objectStore('state').put(next, 'current'); await done; saved = next;
+    }
+    return !!(saved || previous);
+  }
+  async function recover() {
+    const snapshot = fresh ? saved || previous : previous || saved;
+    return snapshot ? {book: await read(snapshot), documentId: snapshot.documentId} : null;
+  }
+  async function save(book, dirty, replace, metadataChanged = true, documentId) {
+    const retained = fresh ? saved || previous : previous;
+    const base = fresh ? null : saved;
+    const publish = !base || metadataChanged || replace.size > 0 || base.documentId !== documentId;
+    const metadata = publish ? workbookMetadata(book) : base.metadata, generations = {}, groups = [];
+    const obsolete = new Set([...Object.values(saved?.generations || {}), ...Object.values(previous?.generations || {})]);
+    for (const generation of Object.values(retained?.generations || {})) obsolete.delete(generation);
     for (const sheet of book.sheets) {
-      const full = !saved?.generations[sheet.id] || replace.has(sheet.id);
-      const generation = full ? crypto.randomUUID() : saved.generations[sheet.id];
+      const full = !base?.generations[sheet.id] || replace.has(sheet.id);
+      const generation = full ? crypto.randomUUID() : base.generations[sheet.id];
       generations[sheet.id] = generation; obsolete.delete(generation);
       const chunks = new Map();
       if (full) {
@@ -78,14 +101,15 @@ export async function openRecoveryStore() {
       }
       await Promise.all(patches);
       for (const generation of obsolete) store.delete(IDBKeyRange.bound([generation, 0], [generation, BUCKETS - 1]));
-      const next = {metadata, generations};
+      const next = {metadata, generations, ...(documentId ? {documentId} : {})};
       if (publish) tx.objectStore('state').put(next, 'current');
-      await done; saved = next;
+      if (fresh && retained) tx.objectStore('state').put(retained, 'previous');
+      await done; saved = next; previous = retained; fresh = false;
       return {chunksWritten: groups.reduce((n, group) => n + group.chunks.size, 0), fullSheets: groups.filter(group => group.full).length, metadataWritten: publish};
     } catch (error) {
       try { tx.abort(); } catch {}
       await done.catch(() => {}); throw error;
     }
   }
-  return {load, save, close: () => db.close()};
+  return {load, startBlank, recover, save, get documentId() { return saved?.documentId; }, close: () => db.close()};
 }

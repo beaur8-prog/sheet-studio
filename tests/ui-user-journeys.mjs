@@ -1,3 +1,4 @@
+import {assertBlankStart,recoverPrevious} from './recovery-ui.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -60,7 +61,7 @@ try{
  await page.getByRole('button',{name:'Sheet1',exact:true}).click();await enter('D4','=SUM(D2:D3)',false);
  const xlsx=path.join(fixture,'사용자 검수.xlsx');await save(xlsx);assert.equal((await cells()).D4.raw,'=SUM(D2:D3)');record('saving commits the in-progress formula');
  await page.getByRole('button',{name:'Sheet2',exact:true}).click();await save(xlsx);await verifyInvoice();
- await app.close();app=null;await launch();await verifyInvoice();record('process close/restart preserves edits, formulas, borders and merged cells');
+ await app.close();app=null;await launch();await assertBlankStart(page);await recoverPrevious(page);await verifyInvoice();record('blank restart followed by explicit recovery preserves edits, formulas, borders and merged cells');
  await fresh();await open(xlsx);await verifyInvoice();record('actual XLSX save/reopen preserves two sheets and calculations');
  const json=path.join(fixture,'invoice.sheet.json');await save(json,'json');const beforeJson=await book();await fresh();await open(json);assert.deepEqual(await book(),beforeJson);record('app-document save/reopen preserves the complete model');
  await home();await enter('B10','first');await enter('B10','second');await page.locator('#undo').click();await settle();assert.equal((await cells()).B10.raw,'first');await enter('C10','new branch');assert.ok(await page.locator('#redo').isDisabled());record('editing after undo discards the old redo branch');

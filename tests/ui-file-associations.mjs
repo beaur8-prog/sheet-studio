@@ -1,3 +1,4 @@
+import {assertBlankStart,recoverPrevious} from './recovery-ui.mjs';
 import { _electron } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -142,8 +143,8 @@ try {
     checks.push('startup request takes precedence over the recovered workbook');
     await page.evaluate(() => sheetStudio.flushRecovery());
     await app.close(); app = null;
-    await launch(); await shown('외부 XLSX');
-    checks.push('plain launch retains normal recovery behavior');
+    await launch(); await assertBlankStart(page);await recoverPrevious(page);await shown('외부 XLSX');
+    checks.push('plain launch starts blank; previous workbook is explicitly recoverable');
     assert.deepEqual(errors, []);
   }
   await fs.mkdir(path.join(root, 'test-results'), { recursive: true });

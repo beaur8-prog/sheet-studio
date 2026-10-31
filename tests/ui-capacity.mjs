@@ -1,3 +1,4 @@
+import {assertBlankStart,recoverPrevious} from './recovery-ui.mjs';
 import {_electron} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -55,12 +56,12 @@ try{
  await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());
  assert.equal(await page.getByRole('gridcell',{name:'A2',exact:true}).textContent(),'128');assert.equal(await page.getByRole('gridcell',{name:'A4',exact:true}).count(),0);
  record({case:'background filter covers the full million-cell table',firstVisibleValue:'128'});
- await app.close();await launch();
+ await app.close();await launch();await assertBlankStart(page);await recoverPrevious(page);
  assert.equal(await page.evaluate(()=>sheetStudio.historyStats().cells),1_000_000);
  assert.equal(await raw('A2'),'128');assert.equal(await raw(last),sumFormula);
  assert.equal(await page.locator('[data-filter-column="0"].is-filtered').count(),1);
  await select(last);await page.waitForFunction(({last,value})=>sheetStudio.evaluate(last)===value,{last,value:initialSum+190});
- record({case:'process restart restores all cells, edits and formula',value:initialSum+190});
+ record({case:'explicit recovery after a blank restart restores all cells, edits and formula',value:initialSum+190});
  const output=path.join(dataDir,'million.xlsx');await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},output);
  await heartbeat();const saving=Date.now();await page.locator('#save').click();
  await page.waitForFunction(()=>document.querySelector('.toast')?.textContent==='파일을 저장했습니다.');
