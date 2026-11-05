@@ -8,6 +8,10 @@ import {createWorkbook} from '../src/engine.mjs';
 
 const root=path.resolve(import.meta.dirname,'..'),profile=path.join(root,'.package','array-races-'+Date.now()),env={...process.env,SHEET_STUDIO_DATA:profile};delete env.ELECTRON_RUN_AS_NODE;
 let app,page;const errors=[],checks=[];async function launch(){app=await _electron.launch(desktopLaunch(root,env));page=await app.firstWindow();page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message));await page.locator('.cell').first().waitFor();}
+async function holdArrayReplies(){const worker=page.workers()[0];assert.ok(worker,'workbook worker');await worker.evaluate(()=>{
+ const send=self.postMessage.bind(self);self.__heldArrayReplies=[];self.postMessage=(data,...args)=>{if(data.value?.arrays)self.__heldArrayReplies.push(()=>send(data,...args));else send(data,...args);};self.__releaseArrayReplies=()=>{self.postMessage=send;for(const deliver of self.__heldArrayReplies.splice(0))deliver();};
+});return worker;}
+const releaseArrayReplies=worker=>worker.evaluate(()=>self.__releaseArrayReplies?.());
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
 const value=ref=>page.evaluate(ref=>sheetStudio.evaluateAsync(ref),ref),model=()=>page.evaluate(()=>sheetStudio.getWorkbook().sheets[0].cells);
 let sequence=0;
@@ -16,6 +20,10 @@ async function start(formula='=SEQUENCE(100000)'){await page.keyboard.press('F2'
 async function nativeSave(name){const file=path.join(profile,name+'.xlsx');await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},file);await page.evaluate(()=>document.querySelector('.toast')?.remove());await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.send('sheet:menu-action','save'));await page.locator('.toast').filter({hasText:'파일을 저장했습니다.'}).waitFor();await settle();assert.ok((await fs.stat(file)).size>0);return file;}
 try{
  await launch();await fs.mkdir(path.join(root,'test-results'),{recursive:true});
+ // Make calculation finish after typing has begun, but before Enter. This is
+ // different from pressing Enter while constraints are still pending.
+ await fresh();let heldWorker=await holdArrayReplies();await start();await page.keyboard.type('x');await releaseArrayReplies(heldWorker);await settle();await page.keyboard.press('Enter');await settle();assert.equal((await model()).A2,undefined);assert.equal(await page.locator('#editor').evaluate(el=>el.classList.contains('entry-ready')),true,'rejected spill edit must leave entry mode so the next file can open');await fresh();checks.push('calculation completing during follower editing rejects input and leaves file opening available');
+ heldWorker=await holdArrayReplies();await start();await page.keyboard.press('ArrowRight');await page.keyboard.insertText('한글 유지');await releaseArrayReplies(heldWorker);await settle();await page.keyboard.press('Enter');await settle();assert.equal((await model()).B2.raw,'한글 유지');checks.push('calculation completing during unrelated editing retains Korean input');
  for(let i=0;i<10;i++){
   await fresh();await start();await page.keyboard.type('x');await page.keyboard.press('Enter');await settle();assert.equal(await value('A1'),1);assert.equal((await model()).A2,undefined);
   checks.push('immediate follower edit rejected '+i);
@@ -30,4 +38,4 @@ try{
  await fresh();await start();await page.keyboard.press('ArrowRight');await page.keyboard.insertText('종료 직전');await app.close();app=null;await launch();await assertBlankStart(page);await recoverPrevious(page);await settle();assert.equal((await model()).B2.raw,'종료 직전');assert.equal(await value('A100000'),100000);checks.push('normal close flushes a pending edit, which is explicitly recoverable after a blank restart');
  assert.deepEqual(errors,[]);await fs.writeFile(path.join(root,'test-results/array-races.json'),JSON.stringify({at:new Date().toISOString(),platform:process.platform,checks},null,2));console.log('PASS: pending spill followers protected before calculation responses; unrelated numeric/Korean input, two-dimensional output, isolated paste and native Save retain correct data');
 }catch(error){await page.screenshot({path:path.join(root,'test-results/array-races-failure.png')});throw error;}
-finally{if(app)await app.close();await fs.rm(profile,{recursive:true,force:true});}
+finally{if(app){for(const worker of page.workers())await releaseArrayReplies(worker).catch(()=>{});await app.close();}await fs.rm(profile,{recursive:true,force:true});}

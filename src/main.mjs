@@ -267,7 +267,12 @@ function restoreEditView(){
 }
 function finishEditing(){functionAssistant.hide();editing=false;editSession=null;referenceDrag=null;keyboardReference=null;$('#editor').hidden=true;$('#editor').value='';renderFormulaReferences();focusGrid();render();}
 function commitEdit(move,fillSelection=false,allowInvalid=false){
- if(!editing)return true;if(arrayConstraintsPending){afterArrayConstraints(()=>commitEdit(move,fillSelection,allowInvalid));return false;}const input=$('#editor').value;restoreEditView();const rawFor=(r,c)=>entryRaw(textEntryStyle(effectiveCellStyle(r,c))?input:completeFormula(input),effectiveCellStyle(r,c)),raw=rawFor(editSession.r,editSession.c),edits=[{r:editSession.r,c:editSession.c,raw},...editSession.pending];
+ if(!editing)return true;if(arrayConstraintsPending){afterArrayConstraints(()=>commitEdit(move,fillSelection,allowInvalid));return false;}
+ // Calculation may have made this cell a spill follower after entry began.
+ // Reject that obsolete edit just as the pending-calculation path does, so it
+ // cannot leave the editor blocking the next open/save/navigation command.
+ const owner=book.sheets.find(s=>s.id===editSession.sheetId),error=cellEditError(book,owner,address(editSession.r,editSession.c));if(error){cancelEdit();toast(error);return false;}
+ const input=$('#editor').value;restoreEditView();const rawFor=(r,c)=>entryRaw(textEntryStyle(effectiveCellStyle(r,c))?input:completeFormula(input),effectiveCellStyle(r,c)),raw=rawFor(editSession.r,editSession.c),edits=[{r:editSession.r,c:editSession.c,raw},...editSession.pending];
  if(fillSelection){const b=bounds();if((b.r2-b.r1+1)*(b.c2-b.c1+1)>100000){toast('한 번에 최대 100,000개 셀을 편집할 수 있습니다.');return;}edits.length=0;for(let r=b.r1;r<=b.r2;r++)for(let c=b.c1;c<=b.c2;c++)if(editableCell(r,c)){const value=rawFor(r,c);edits.push({r,c,raw:value.startsWith('=')?shiftFormula(value,r-editSession.r,c-editSession.c):value});}}
  const updates=edits.filter(e=>e.raw!==rawAt(e.r,e.c));
  if(updates.length){const headerPlan=prepareHeaders(updates.map(e=>{const key=address(e.r,e.c),cell={...sheet().cells[key],raw:e.raw},inferred=protectionAllows(sheet(),'formatCells')?entryNumberStyle(e.raw,effectiveCellStyle(e.r,e.c)):null;if(inferred)cell.style={...cell.style,...inferred};return {key,cell};}),{auto:true});if(!headerPlan)return false;const candidates=headerPlan.updates;if(!permitUpdates(candidates,{editAnchor:true}))return false;
