@@ -7,6 +7,7 @@ import {chartData,chartRangeError} from '../src/chart-model.mjs';
 import {buildChartPreview} from '../src/chart-preview.mjs';
 import {writeSpreadsheet,readSpreadsheet} from '../src/io.mjs';
 import {structuralWorkbookPlan} from '../src/workbook-structure.mjs';
+import {createTablePlan} from '../src/tables.mjs';
 import {xml,all,attr,child,children,stringify} from '../src/chart-xml.mjs';
 function fixture(){const book=createWorkbook(),sheet=book.sheets[0];sheet.name="매출 '24";sheet.cells={A1:{raw:'항목'},B1:{raw:'실적'},D1:{raw:'목표'}};for(let i=0;i<4;i++){sheet.cells['A'+(i+2)]={raw:['가','나','다','라'][i]};sheet.cells['B'+(i+2)]={raw:String((i+1)*10)};sheet.cells['D'+(i+2)]={raw:String((i+1)*12)};sheet.cells['F'+(i+2)]={raw:String(i+1)};}const row=(values,name)=>({name,values,categories:'A2:A5',color:'#4472c4',type:'bar',secondary:false,lines:false});return {book,sheet,row};}
 test('explicit non-adjacent series preserve names, references, colors, ordering and the four selected values',()=>{
@@ -22,6 +23,13 @@ test('invalid series ranges, lengths, category sources, names and colors reject 
 test('names and cross-sheet vectors are retained as dynamic formulas instead of silently replacing them with a rectangle',()=>{
   const {book,sheet,row}=fixture(),other={...createWorkbook().sheets[0],id:'other',name:'자료 2',cells:{A1:{raw:'선택 계열'},B2:{raw:'1'},B3:{raw:'2'},B4:{raw:'3'},B5:{raw:'4'}}};book.sheets.push(other);book.chartNames=[{name:'Values',formula:"'자료 2'!$B$2:$B$5"}];
   const plan=chartSeriesPlan([{...row('Values',"='자료 2'!A1"),categories:''}],'line',book,sheet.id);assert.equal(plan.series[0].valRef.formula,'Values');assert.deepEqual(chartData({type:'line',...plan},sheet,book)[0].values,[1,2,3,4]);assert.equal(chartData({type:'line',...plan},sheet,book)[0].name,'선택 계열');assert.deepEqual(chartData({type:'line',...plan},sheet,book)[0].labels,['1','2','3','4']);
+});
+test('a growing named source reports the current preview limit instead of its old resolved rectangle',()=>{
+  const {book,sheet,row}=fixture();book.chartNames=[{name:'Values',formula:"'매출 ''24'!$B$2:$B$5"}];const chart={type:'bar',...chartSeriesPlan([{...row('Values','실적'),categories:''}],'bar',book,sheet.id)};assert.equal(chartData(chart,sheet,book)[0].truncated,false);for(let r=2;r<=1002;r++)sheet.cells['B'+r]={raw:String(r)};book.chartNames[0].formula="'매출 ''24'!$B$2:$B$1002";const data=chartData(chart,sheet,book)[0];assert.equal(data.values.length,1000);assert.equal(data.truncated,true);assert.equal(buildChartPreview(book,sheet.id,{patch:chart}).truncated,true);
+});
+test('table columns can feed a chart through defined names while direct structured chart formulas require the named route',()=>{
+  const {book,sheet,row}=fixture(),plan=createTablePlan(book,sheet,{name:'Sales',range:'A1:B5'});sheet.tables=[plan.table];for(const update of plan.updates)sheet.cells[update.key]=update.cell;book.chartNames=[{name:'PlotValues',formula:'Sales[실적]'},{name:'PlotItems',formula:'Sales[항목]'}];
+  assert.throws(()=>chartSeriesPlan([row('Sales[실적]','실적')],'bar',book,sheet.id),/이름으로/);const chart={type:'bar',...chartSeriesPlan([{...row('PlotValues','실적'),categories:'PlotItems'}],'bar',book,sheet.id)};assert.deepEqual(chartData(chart,sheet,book)[0].values,[10,20,30,40]);
 });
 test('scatter implicit X values and mixed point/line styles survive XLSX without changing their connection policy',async()=>{
   let {book,sheet,row}=fixture();const plan=chartSeriesPlan([{...row('B2:B5','연결'),categories:'',lines:true},{...row('D2:D5','점'),categories:'',lines:false}],'scatter',book,sheet.id);sheet.charts=[{id:'scatter',type:'scatter',title:'XY',x:100,y:100,width:500,height:300,blankCells:'span',...plan}];

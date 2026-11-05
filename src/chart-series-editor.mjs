@@ -13,7 +13,7 @@ function readReference(value,book,sheetId,{optional=false,single=false}={}){
   if(!ref||!b||b.r1!==b.r2&&b.c1!==b.c2)throw Error('계열 참조는 한 행 또는 한 열의 셀 범위·이름이어야 합니다. 예: B2:B10');
   const count=referenceSize(ref);if(count<1||count>10000)throw Error('한 계열은 최대 10,000개 값까지 지정하세요.');if(single&&count!==1)throw Error('계열 이름 참조는 셀 하나를 지정하세요.');
   const direct=/^\$?[A-Z]{1,3}\$?[1-9]\d*(?::\$?[A-Z]{1,3}\$?[1-9]\d*)?$/i.test(input)||/!\$?[A-Z]{1,3}\$?[1-9]\d*(?::\$?[A-Z]{1,3}\$?[1-9]\d*)?$/i.test(input);
-  const local=input.slice(input.lastIndexOf('!')+1);if(!direct&&(/^[^\[]*[()]/.test(local)||/\d+#$/.test(local)))throw Error('셀 범위 또는 정의된 이름을 사용하세요. 함수·스필 수식은 이름으로 등록한 뒤 지정하세요.');
+  const local=input.slice(input.lastIndexOf('!')+1);if(!direct&&(/^[^\[]*[()]/.test(local)||/\d+#$/.test(local)||/[\[\]]/.test(local)))throw Error('셀 범위 또는 정의된 이름을 사용하세요. 표 열·함수·스필 수식은 이름으로 등록한 뒤 지정하세요.');
   return {...ref,...(!direct?{formula:input,ownerSheetId:sheetId}:{})};
 }
 export function chartSeriesPlan(rows,type,book,sheetId){

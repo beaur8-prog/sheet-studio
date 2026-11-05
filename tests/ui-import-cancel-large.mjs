@@ -15,8 +15,18 @@ const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'deta
 try{
   await page.locator('.cell').first().waitFor();const keeper=createWorkbook();keeper.name='keep during real parse';keeper.sheets[0].cells={A1:{raw:'이전 자료'},B1:{raw:'=21*2'}};
   await page.locator('#file-input').setInputFiles({name:'keeper.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(keeper))});await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='keep during real parse');await settle();await page.evaluate(()=>sheetStudio.flushRecovery());
-  const original=await page.evaluate(()=>JSON.stringify(sheetStudio.getWorkbook()));await page.evaluate(()=>{globalThis.__parseGaps=[];let last=performance.now();globalThis.__parseTimer=setInterval(()=>{const now=performance.now();__parseGaps.push(now-last);last=now;},20);});
-  await page.locator('#file-input').setInputFiles(file);await page.locator('.workbook-busy').filter({hasText:'XLSX 셀 데이터를 해석하는 중'}).waitFor();assert.equal(await page.locator('[data-busy-cancel]').isEnabled(),true);const cancelAt=await page.evaluate(()=>performance.now());await page.locator('[data-busy-cancel]').click();await page.locator('.workbook-busy').waitFor({state:'detached'});const canceledAt=await page.evaluate(()=>performance.now());await settle();
+  const original=await page.evaluate(()=>JSON.stringify(sheetStudio.getWorkbook()));await page.evaluate(()=>{
+    globalThis.__parseGaps=[];let last=performance.now();globalThis.__parseTimer=setInterval(()=>{const now=performance.now();__parseGaps.push(now-last);last=now;},20);
+    // A fast CI machine can finish this phase between Playwright locator polls.
+    // Observe the real UI progress update and activate its real cancel button;
+    // do not hold/throttle/mock the parser or change production timing.
+    globalThis.__largeCancel=null;const observer=new MutationObserver(()=>{
+      const overlay=document.querySelector('.workbook-busy'),button=overlay?.querySelector('[data-busy-cancel]');
+      if(!__largeCancel&&overlay?.textContent.includes('XLSX 셀 데이터를 해석하는 중')&&button){__largeCancel={at:performance.now(),enabled:!button.disabled,text:overlay.textContent};button.click();}
+      if(__largeCancel&&!overlay){__largeCancel.finished=performance.now();observer.disconnect();}
+    });observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  });
+  await page.locator('#file-input').setInputFiles(file);await page.waitForFunction(()=>globalThis.__largeCancel?.finished);const cancellation=await page.evaluate(()=>__largeCancel);assert.equal(cancellation.enabled,true);const cancelAt=cancellation.at,canceledAt=cancellation.finished;await settle();
   const gaps=await page.evaluate(()=>{clearInterval(__parseTimer);return {samples:__parseGaps.length,maxGapMs:Math.max(0,...__parseGaps)};});assert.equal(await page.evaluate(()=>JSON.stringify(sheetStudio.getWorkbook())),original);const cleanupMs=await parsersClosed();assert.equal(createHash('sha256').update(await fs.readFile(file)).digest('hex'),sha);assert.ok(canceledAt-cancelAt<1000);
   await page.locator('#file-input').setInputFiles(file);await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='large');await settle();await page.evaluate(()=>sheetStudio.flushRecovery());assert.equal(await page.evaluate(()=>sheetStudio.historyStats().cells),100000);assert.equal(await page.evaluate(()=>sheetStudio.evaluateAsync('J10000')),20000);await parsersClosed();
   const metrics={inputCells:100000,inputBytes:data.length,inputSHA256:sha,cancelDuring:'decode',cancelMs:canceledAt-cancelAt,cleanupMs,...gaps,afterCancelOriginalUnchanged:true,subsequentImport:true,pageErrors:errors};assert.deepEqual(errors,[]);await fs.writeFile(path.join(root,'test-results/import-cancel-large.json'),JSON.stringify(metrics,null,2));console.log('PASS: cancel during real 100k-cell XLSX decode, no source/current-document changes, parser released and subsequent import succeeds',JSON.stringify(metrics));

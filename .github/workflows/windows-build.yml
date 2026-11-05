@@ -52,6 +52,7 @@ jobs:
           node tests/ui-conditional-visual.mjs --packaged
           node tests/ui-pivot-table-source.mjs --packaged
           node tests/ui-entry-formats.mjs --packaged
+          node tests/ui-linked-report.mjs --packaged
           node tests/ui-chart-series.mjs --packaged
           node tests/ui-chart-preview.mjs --packaged
           node tests/ui-chart-blanks.mjs --packaged
