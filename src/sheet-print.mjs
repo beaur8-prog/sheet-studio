@@ -1,3 +1,4 @@
+import {dataBarCSS} from './conditional-visual.mjs';
 import {renderPageHeaders,HEADER_FIELDS} from './print-headers.mjs';
 import {address,parseAddress,createEvaluator,formatValue} from './engine.mjs';
 import {tableBounds} from './table-schema.mjs';
@@ -44,7 +45,7 @@ function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,
       const merge=merges.get(address(r,c));if(merge&&(r!==merge.firstR||c!==merge.firstC))return '';
       const row=merge?.r1??r,col=merge?.c1??c,ref=address(row,col),cell=sheet.cells[ref]||{};let result=evaluate.result(ref);const cached=result.cached&&!result.stale?result.cachedValue:undefined;if(cached!==undefined){result={value:cached,error:result.cachedError|| (cell.cachedError?cached:null)};cachedCount++;}const value=result.value;
       const style={...numberFormatStyle(value,worksheetCellStyle(book,sheet,row,col)),...conditional(row,col,value)};
-      const css=['background:'+(style.background||'white'),'color:'+(style.color||'#222'),'font-family:'+(style.fontFamily||'Arial'),'font-size:'+(style.fontSize||11)+'pt','font-weight:'+(style.bold?'bold':'normal'),'font-style:'+(style.italic?'italic':'normal'),'text-decoration:'+(style.underline?'underline':'none'),'text-align:'+(style.align|| (typeof value==='number'?'right':'left')),'vertical-align:'+(style.verticalAlign||'middle'),'white-space:'+(style.wrap?'pre-wrap':'pre'),bordersCss(style)].join(';');
+      const css=['background:'+(style.background||'white'),'color:'+(style.color||'#222'),'font-family:'+(style.fontFamily||'Arial'),'font-size:'+(style.fontSize||11)+'pt','font-weight:'+(style.bold?'bold':'normal'),'font-style:'+(style.italic?'italic':'normal'),'text-decoration:'+(style.underline?'underline':'none'),'text-align:'+(style.align|| (typeof value==='number'?'right':'left')),'vertical-align:'+(style.verticalAlign||'middle'),'white-space:'+(style.wrap?'pre-wrap':'pre'),bordersCss(style),dataBarCSS(style)].join(';');
       const height=merge?rows.filter(r=>r>=merge.r1&&r<=merge.r2).reduce((n,r)=>n+printRowHeight(sheet,r),0):printRowHeight(sheet,r),edges=cellBorders(style),border=Math.max(gridLines?1:0,...['top','bottom'].map(side=>parseFloat(edgeCss(edges[side]))||0));
       // A fixed inner box clips text to the saved row height. Leave room for
       // collapsed borders so they cannot grow every row beyond the page plan.

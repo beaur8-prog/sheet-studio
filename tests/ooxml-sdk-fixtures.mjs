@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
+import ExcelJS from 'exceljs';
 import {planValidationChange,applyValidationChange} from '../src/data-validation.mjs';
 import {createWorkbook} from '../src/engine.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
@@ -38,4 +39,12 @@ await save('worksheet-formats',worksheetFixture());console.log('Generated synthe
  const book=createWorkbook(),sheet=book.sheets[0];sheet.cells={H1:{raw:'5'}};
  const definitions=[['A1:A10',{type:'list',source:'예,아니오',showInput:true,promptTitle:'승인 여부',prompt:'목록에서 선택하세요.',severity:'warning'}],['B1:B10',{type:'whole',formulae:['1','10']}],['C1:C10',{type:'decimal',operator:'greaterThan',formulae:['=$H$1']}],['D1:D10',{type:'date',formulae:['2026-01-01','2026-12-31']}],['E1:E10',{type:'time',formulae:['09:00','18:00']}],['F1:F10',{type:'textLength',operator:'lessThanOrEqual',formulae:['10']}],['G1:G10',{type:'custom',formulae:['G1>$H$1'],severity:'information'}]];
  for(const [range,input] of definitions)applyValidationChange(sheet,planValidationChange(book,sheet,range,input));applyValidationChange(sheet,planValidationChange(book,sheet,'B2:B3',null));await save('authored-validation',book);
+}
+
+{
+ const book=createWorkbook(),sheet=book.sheets[0];for(const col of ['A','B'])[-10,0,10,'',"'10",'TRUE','#N/A','=""','=5+0'].forEach((raw,i)=>sheet.cells[col+(i+1)]={raw:String(raw)});sheet.conditionalRules=[{id:'scale',range:'A1:A9',type:'colorScale',formulae:[],style:{},cfvo:[{type:'min'},{type:'percent',value:50},{type:'max'}],colors:['#ff0000','#ffffff','#00ff00']},{id:'bar',range:'B1:B9',type:'dataBar',formulae:[],style:{},cfvo:[{type:'min'},{type:'max'}],barColor:'#638ec6'}];await save('visual-conditional',book);
+}
+
+{
+ const source=new ExcelJS.Workbook(),s=source.addWorksheet('Advanced');s.getCell('A1').value=-10;s.getCell('A2').value=20;s.addConditionalFormatting({ref:'A1:A2',rules:[{type:'dataBar',priority:1,cfvo:[{type:'min'},{type:'max'}],color:{argb:'FF638EC6'},gradient:false,negativeFillColor:{argb:'FFFF0000'},axisColor:{argb:'FF000000'}}]});await save('preserved-advanced-bar',await readSpreadsheet(await source.xlsx.writeBuffer(),'advanced.xlsx'));
 }

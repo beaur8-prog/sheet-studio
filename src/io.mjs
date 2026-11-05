@@ -222,7 +222,8 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
     for (const column of source.columns || []) if (column.width) sheet.columnWidths[column.number - 1] = Math.round(column.width * digitWidth + 5);
     for(const column of source.columns||[])if(column.hidden){sheet.hiddenSizes||={rows:{},cols:{}};sheet.hiddenSizes.cols[column.number-1]=sheet.columnWidths[column.number-1]||90;sheet.columnWidths[column.number-1]=0;}
     const view=source.views?.find(v=>v.state==='frozen');if(view)sheet.freeze={rows:view.ySplit||0,cols:view.xSplit||0};
-    importConditional(source,sheet,resolveColor);
+    importConditional(source,sheet,resolveColor,preserved.features.get(source.name)?.conditionalFormatting);
+    if(preserved.features.get(source.name)?.conditionalExtensions?.length)sheet.unsupportedConditionalCount||=preserved.features.get(source.name).conditionalExtensions.length;
     const features=preserved.features.get(source.name);if(features){for(const [ref,tip] of Object.entries(features.hyperlinkTips||{}))if(sheet.cells[ref]?.xlsxValue?.value?.hyperlink)sheet.cells[ref].xlsxValue.value.tooltip=tip;delete features.hyperlinkTips;sheet.xlsxFeatures=features;if(!sheet.unsupportedConditionalCount)delete features.conditionalFormatting;if(!Object.keys(features).length)delete sheet.xlsxFeatures;}
     sheet.merges = [...(source.model.merges || [])];
     return sheet;

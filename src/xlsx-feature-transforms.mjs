@@ -1,5 +1,5 @@
 import {unwrap} from './clone.mjs';
-import {xml,stringify,children,all,attr} from './chart-xml.mjs';
+import {xml,stringify,children,child,all,attr} from './chart-xml.mjs';
 import {transformExtraSheetFeatures} from './worksheet-extra.mjs';
 
 /** Keep preserved XML references in step with supported sheet edits. Formula
@@ -23,6 +23,19 @@ export function transformPreservedFeatures(sheet,{reference=f=>f,formula=f=>f,re
     };
     if(feature.dataValidations){feature.dataValidations=transform(feature.dataValidations,'dataValidations');if(!feature.dataValidations)delete feature.dataValidations;}
     if(feature.conditionalFormatting)feature.conditionalFormatting=feature.conditionalFormatting.map(s=>transform(s,'conditionalFormatting')).filter(Boolean);
+    if(feature.conditionalExtensions)feature.conditionalExtensions=feature.conditionalExtensions.map(source=>{
+      const doc=xml(source),root=doc.documentElement;
+      for(const formats of children(root,'conditionalFormattings')){
+        for(const group of children(formats,'conditionalFormatting')){
+          const node=child(group,'sqref'),original=node?.textContent||'',ranges=original.trim().split(/\s+/).filter(Boolean).map(reference).filter(r=>!r.includes('#REF!'));
+          if(!ranges.length){formats.removeChild(group);continue;}
+          node.textContent=ranges.join(' ');for(const f of all(group,'f'))f.textContent=formula(rebase(f.textContent,original.trim().split(/\s+/)[0]));
+        }
+        if(!children(formats,'conditionalFormatting').length)root.removeChild(formats);
+      }
+      return children(root).length?stringify(doc):null;
+    }).filter(Boolean);
+    if(sheet.unsupportedConditionalCount&&!feature.conditionalFormatting?.length&&!feature.conditionalExtensions?.length)delete sheet.unsupportedConditionalCount;
   }
   const cells=unwrap(sheet.cells);for(const key in cells){
     const cell=sheet.cells[key],original=cell.xlsxFormula;

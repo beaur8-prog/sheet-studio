@@ -39,13 +39,13 @@ test('whole-column validation stays a compact original range without allocating 
   const book=await readSpreadsheet(await zip.generateAsync({type:'uint8array'}),'whole-column.xlsx');assert.equal(Object.keys(book.sheets[0].cells).length,7);assert.ok(book.sheets[0].xlsxFeatures.dataValidations.includes('D1:D1048576'));
   const saved=await JSZip.loadAsync((await writeSpreadsheet(book)).data),doc=xml(await saved.file('xl/worksheets/sheet1.xml').async('string'));assert.equal(attr(all(doc,'dataValidation')[0],'sqref'),'D1:D1048576');assert.equal(all(doc,'c').length,7);
 });
-test('unsupported color scales and icon sets remain saveable with their original priorities and differential styles',async()=>{
+test('supported color scales and preserved icon sets remain saveable with their original priorities and differential styles',async()=>{
   const source=new ExcelJS.Workbook(),s=source.addWorksheet('Conditional');[1,2,3].forEach((value,i)=>s.getCell(i+1,1).value=value);
   s.addConditionalFormatting({ref:'A1:A3',rules:[{type:'colorScale',priority:1,cfvo:[{type:'min'},{type:'max'}],color:[{argb:'FFFF0000'},{argb:'FF00FF00'}]},{type:'cellIs',operator:'greaterThan',formulae:['2'],priority:2,style:{font:{bold:true,color:{argb:'FF0000FF'}}}}]});
   s.addConditionalFormatting({ref:'B1:B3',rules:[{type:'iconSet',iconSet:'3TrafficLights1',priority:3,cfvo:[{type:'percent',value:0},{type:'percent',value:33},{type:'percent',value:67}]}]});
   let bytes=await source.xlsx.writeBuffer();
   for(let i=0;i<3;i++){
-    const book=validateWorkbook(await readSpreadsheet(bytes,'conditional.xlsx'));assert.equal(book.sheets[0].unsupportedConditionalCount,2);bytes=(await writeSpreadsheet(book)).data;
+    const book=validateWorkbook(await readSpreadsheet(bytes,'conditional.xlsx'));assert.equal(book.sheets[0].unsupportedConditionalCount,1);bytes=(await writeSpreadsheet(book)).data;
     const zip=await JSZip.loadAsync(bytes),doc=xml(await zip.file('xl/worksheets/sheet1.xml').async('string')),styles=xml(await zip.file('xl/styles.xml').async('string'));
     assert.deepEqual(all(doc,'cfRule').map(n=>[attr(n,'type'),attr(n,'priority')]),[['colorScale','1'],['cellIs','2'],['iconSet','3']]);
     const id=Number(attr(all(doc,'cfRule')[1],'dxfId')),dxf=child(styles.documentElement,'dxfs').getElementsByTagName('dxf')[id];assert.equal(attr(all(dxf,'color')[0],'rgb'),'FF0000FF');

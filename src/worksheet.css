@@ -24,3 +24,5 @@
 .validation-modal input[type=checkbox]{width:16px;height:16px;margin:0;flex-shrink:0}.validation-modal .worksheet-check{display:flex;align-items:center;gap:7px;margin:10px 0}
 
 .validation-review-table{max-height:220px;overflow:auto}.validation-review-table table{width:100%;border-collapse:collapse;font-size:12px}.validation-review-table th,.validation-review-table td{border:1px solid #ddd;padding:6px;overflow-wrap:anywhere;text-align:left}.validation-review-table th{background:#f0f4f1;position:sticky;top:0}.validation-modal .modal-actions{flex-wrap:wrap}
+
+.conditional-edit-modal{max-height:calc(100dvh - 32px);display:flex;flex-direction:column}.conditional-edit-modal>.modal-body{min-height:0;overflow:auto}.conditional-edit-modal>.modal-actions,.conditional-edit-modal>h2{flex-shrink:0}.cf-point{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 64px;gap:10px}.cf-point label{min-width:0}.cf-point input,.cf-point select{min-width:0}.conditional-edit-modal #cf-visual-help{font-size:12px;line-height:1.6}

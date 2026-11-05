@@ -104,7 +104,7 @@ export function planValidationChange(book,sheet,range,input){
   if(rule&&(rule.type!=='any'||rule.showInput&&(rule.promptTitle||rule.prompt)))root.appendChild(ruleNode(doc,b,rule));
   const count=children(root,'dataValidation').length;root.setAttribute('count',String(count));
   if(count>10000||children(root,'dataValidation').some(node=>attr(node,'sqref').length>32767))throw Error('규칙이 너무 많은 영역으로 나뉩니다. 더 큰 범위를 한 번에 정리하세요.');
-  const result=count?stringify(doc):undefined;if(result?.length>12_000_000)throw Error('입력 규칙의 크기 한도를 넘었습니다.');
+  const result=count?stringify(doc):undefined;if(result?.length>6_000_000)throw Error('입력 규칙의 크기 한도를 넘었습니다.');
   return {xml:result,range:validationRange(b),changed:result!==source};
 }
 export function applyValidationChange(sheet,plan){
