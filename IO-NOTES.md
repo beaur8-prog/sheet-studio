@@ -1,6 +1,6 @@
-# Spreadsheet files and desktop app — 0.7.31 development
+# Spreadsheet files and desktop app — 0.7.39 development
 
-This independent implementation does not contain Microsoft Excel binaries, resources or recovered source code. Development 0.7.31 is not a public release. Current behavior and verification limits are recorded in [the follow-up improvement log](docs/CORE-FIVE-HOUR-20261031.md).
+This independent implementation does not contain Microsoft Excel binaries, resources or recovered source code. Development 0.7.39 is not a public release. Current behavior and verification limits are recorded in [the latest improvement log](docs/EXCEL-NEXT-FOUR-HOUR-20261105.md).
 
 ## Integration
 
@@ -30,7 +30,7 @@ The private ExcelJS loader normalizes the valid XML date-system boolean `true` t
 - Real tables include names, stable column IDs, calculated/totals formulas, styles and per-table filters. Structured references and defined workbook/sheet names are retained; supported references can be edited. Query-table connection graphs remain in the file but do not refresh in the app. See [tables](docs/TABLES.md).
 - Dynamic FILTER/SORT/UNIQUE/SEQUENCE, spill `#` and implicit intersection `@` use derived regions separate from source cells. XLDAPR metadata, ANCHORARRAY/SINGLE syntax and typed follower caches round-trip; original CSE arrays retain fixed ranges. Computable imported follower-only caches are compacted while styles, notes and original metadata remain. Unknown functions remain unsupported; all rich-data extensions and modern array functions are not fully implemented. See [functions](docs/FUNCTIONS.md).
 - Ordered external-workbook references and related OOXML parts, target URIs, definitions and cache payloads remain inert and survive XLSX round trips. The app never downloads or refreshes those targets. Cross-document external-reference formula paste requires values to avoid rebinding workbook indices.
-- Validation ranges/formulas, protection attributes/hashes, original differential/unsupported standard conditional-format XML and indexed colors are retained. Supported validation/protection works in the editor. Unsupported conditional rule types are preserved with limited previews/editing.
+- Validation ranges/formulas, protection attributes/hashes, original differential/unsupported standard conditional-format XML and indexed colors are retained. Supported validation/protection works in the editor. The editor authors list/numeric/date/time/text-length/custom validation and supports two/three-color scales and basic gradient data bars. Advanced conditional rules retain their base XML plus linked x14 definitions, with limited previews/editing. See [validation](docs/DATA-VALIDATION.md) and [conditional formats](docs/CONDITIONAL-FORMATTING.md).
 - Embedded charts retain original XML and related parts, supported series/name references, axes, themes and placement. Real chart sheets keep sheet order/state/names. Image/shape anchors and relationship graphs are retained; only basic raster images have previews. See [charts](docs/CHARTS.md).
 - Page setup, margins, print options, header/footer XML, row/column breaks, ignored errors and linked printer/header-image parts remain in the file. A page-settings editor and paginated headers/footers, print areas/titles, scaling and worksheet-position charts/images feed actual PDF output. Individual object pages remain selectable. Header pictures, unsupported drawings and all driver-specific effects are not rendered. See [printing](docs/PRINTING.md). Original author/creation/document properties remain where supported.
 - This remains a selective OOXML editor. OLE/ActiveX, arbitrary extensions, external/OLAP pivot dependencies, all chart types and all unsupported workbook objects are not guaranteed to round-trip unchanged.
@@ -84,7 +84,7 @@ XLSX support uses [ExcelJS](https://github.com/exceljs/exceljs), pinned at versi
 
 ## Pivot tables
 
-App pivots include definitions in JSON/Custom XML and, for nonempty reports, native PivotTable/cache parts. Page-filter rows and cross-sheet formula offsets are handled during export/import. XLSM plans do not create new native pivot objects. Native pivots created elsewhere are not imported into the app field editor. See [pivot support](docs/PIVOT.md).
+App pivots include definitions in JSON/Custom XML and, for nonempty reports, native PivotTable/cache parts. Table-linked sources resolve stable table/column IDs on refresh, exclude totals and export a real named worksheet source. Missing used columns/tables preserve the last report and block XLSX export until repaired. Page-filter rows and cross-sheet formula offsets are handled during export/import. XLSM plans do not create new native pivot objects. Native pivots created elsewhere are not imported into the app field editor. See [pivot support](docs/PIVOT.md).
 
 ## Filters, worksheet and native preservation
 
@@ -96,3 +96,5 @@ XLSM imports retain original macro bytes and use the Windows Excel bridge for VB
 ## Optional independent application check
 
 `npm run test:interop:libreoffice` requires an installed LibreOffice (`soffice`, or `SHEET_STUDIO_SOFFICE`). It creates synthetic XLSX files and a separate profile with OOXML hard recalculation enabled. One numeric cache per input is deliberately stale. It verifies 22 matching values plus a documented nested-LET difference, original-style sorting, table definitions, both date encodings and 18 chart types/grouping combinations including series data/labels after Calc saves them. This is an interoperability check with LibreOffice, not a substitute for a fresh Microsoft Excel/VBA run. Evidence is written to the ignored `.verification/excel-improvements/libreoffice/` directory.
+
+`node tests/ooxml-sdk-fixtures.mjs` followed by `node tests/libreoffice-next-interop.mjs` checks the 0.7.39 synthetic validation/visual-format/table-pivot/explicit-series files with LibreOffice and three subsequent Sheet Studio roundtrips. External representation changes are reported separately in `test-results/libreoffice-next/report.json`; this is not a Microsoft Excel rendering/VBA test.

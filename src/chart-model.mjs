@@ -174,7 +174,7 @@ export function chartData(chart,sheet,workbook){
   const data=chartSeries(chart,sheet,workbook).map((s,i)=>{
     let usesCachedValues=false;
     const preview=ref=>refValues(ref,workbook,{limit:1000,onCached:()=>{usesCachedValues=true;}});
-    const categoryFormat=refFormat(s.catRef||s.xRef,workbook),sourceValues=preview(s.valRef),sourceX=preview(s.xRef);
+    const categoryFormat=refFormat(s.catRef||s.xRef,workbook),sourceValues=preview(s.valRef),sourceX=s.xRef?preview(s.xRef):['scatter','bubble'].includes(s.type||chart.type)?sourceValues.map((_,i)=>i+1):[];
     return {
     ...s,name:String(refValues(s.nameRef,workbook)[0]??s.name??`계열 ${i+1}`),
     categories:preview(s.catRef||s.xRef),dateCategories:categoryFormat.format==='date'||numberFormatKind(categoryFormat.numberFormat||'General')==='date',

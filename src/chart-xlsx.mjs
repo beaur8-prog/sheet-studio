@@ -12,6 +12,8 @@ import {C,A,R,D,DECL,xmlEscape as esc,xml,stringify,children,child,all,first,att
 
 const EMU=9525,CHART_TYPE='application/vnd.openxmlformats-officedocument.drawingml.chart+xml',DRAWING_TYPE='application/vnd.openxmlformats-officedocument.drawing+xml';
 const groups={barChart:'bar',bar3DChart:'bar',lineChart:'line',line3DChart:'line',areaChart:'area',area3DChart:'area',pieChart:'pie',pie3DChart:'pie',doughnutChart:'doughnut',scatterChart:'scatter',bubbleChart:'bubble',radarChart:'radar'};
+const groupKind=group=>groups[group?.localName]==='bar'&&val(group,'barDir')==='bar'?'bar-horizontal':groups[group?.localName];
+const scatterLines=(group,series)=>['line','lineMarker','smooth','smoothMarker'].includes(val(group,'scatterStyle'))&&!child(child(child(series,'spPr'),'ln'),'noFill');
 const asNumber=v=>Number.isFinite(Number(v))?Number(v):0;
 const from64=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0));
 function to64(bytes){let s='';for(let i=0;i<bytes.length;i+=32768)s+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(s);}
@@ -65,12 +67,12 @@ export async function restoreChartParts(bytes,workbook){
         if(++number>200)throw Error('차트는 통합 문서당 200개까지 지원합니다.');
         const rel=drawingRels.find(r=>r.id===attr(chartNode,'r:id'));if(!rel||rel.mode==='External')continue;
         const part=resolvePart(drawingPart,rel.target),sourceXML=xml(await zip.file(part).async('string')),plot=first(sourceXML,'plotArea'),groupNodes=children(plot).filter(n=>/Chart$/.test(n.localName)),known=groupNodes.filter(n=>groups[n.localName]);
-        const supported=groupNodes.length>0&&known.length===groupNodes.length,base=known[0],type=supported?(known.length>1?'combo':groups[base.localName]):'unsupported';
+        const supported=groupNodes.length>0&&known.length===groupNodes.length,base=known[0],kinds=new Set(known.map(groupKind)),type=supported?(kinds.size>1?'combo':groupKind(base)):'unsupported';
         const title=all(child(first(sourceXML,'chart'),'title'),'t').map(n=>n.textContent).join('')||'',legend=!!first(sourceXML,'legend'),series=[];
         const axes=children(plot).filter(n=>['valAx','catAx','dateAx'].includes(n.localName)),primaryAxis=attr(children(base,'axId').at(-1),'val');
-        for(const group of known){const kind=groups[group.localName]==='bar'&&val(group,'barDir')==='bar'?'bar-horizontal':groups[group.localName];
+        for(const group of known){const kind=groupKind(group);
           for(const ser of children(group,'ser').slice(0,32)){
-            const tx=child(ser,'tx'),nameRef=readRef(tx,workbook,sheet.id);series.push({name:child(tx,'v')?.textContent||`계열 ${series.length+1}`,nameRef,catRef:readRef(child(ser,'cat'),workbook,sheet.id),valRef:readRef(child(ser,'val')||child(ser,'yVal'),workbook,sheet.id),xRef:readRef(child(ser,'xVal'),workbook,sheet.id),sizeRef:readRef(child(ser,'bubbleSize'),workbook,sheet.id),color:chartColor(ser,palette,chartColors[series.length%chartColors.length]),pointColors:Object.fromEntries(children(ser,'dPt').map(n=>[val(n,'idx'),chartColor(n,palette,chartColors[Number(val(n,'idx'))%chartColors.length])])),type:kind,secondary:attr(children(group,'axId').at(-1),'val')!==primaryAxis,lines:val(group,'scatterStyle').includes('line')});
+            const tx=child(ser,'tx'),nameRef=readRef(tx,workbook,sheet.id);series.push({name:child(tx,'v')?.textContent||`계열 ${series.length+1}`,nameRef,catRef:readRef(child(ser,'cat'),workbook,sheet.id),valRef:readRef(child(ser,'val')||child(ser,'yVal'),workbook,sheet.id),xRef:readRef(child(ser,'xVal'),workbook,sheet.id),sizeRef:readRef(child(ser,'bubbleSize'),workbook,sheet.id),color:chartColor(ser,palette,chartColors[series.length%chartColors.length]),pointColors:Object.fromEntries(children(ser,'dPt').map(n=>[val(n,'idx'),chartColor(n,palette,chartColors[Number(val(n,'idx'))%chartColors.length])])),type:kind,secondary:attr(children(group,'axId').at(-1),'val')!==primaryAxis,lines:scatterLines(group,ser)});
           }
         }
         const usedIds=drawingRelationshipIds(anchor),rels=drawingRels.filter(r=>usedIds.has(r.id)).map(r=>({...r,target:r.mode==='External'?r.target:resolvePart(drawingPart,r.target)}));

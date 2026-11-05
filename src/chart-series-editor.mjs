@@ -43,11 +43,12 @@ export function installSeriesEditor({el,current,sheet,book,getRangeChart,onChang
   host.addEventListener('input',()=>{readRows();onChange();});host.addEventListener('change',()=>{readRows();onChange();});
   host.addEventListener('click',event=>{
     const button=event.target.closest('[data-series-add],[data-series-reset],[data-series-up],[data-series-down],[data-series-remove]');if(!button)return;readRows();
-    if(button.hasAttribute('data-series-add'))rows.push({name:'계열 '+(rows.length+1),values:'',categories:rows[0]?.categories||'',size:'',color:chartColors[rows.length%chartColors.length],type:'bar',secondary:false,lines:false});
+    let focusRow=0,focusAction;
+    if(button.hasAttribute('data-series-add')){focusRow=rows.length;seedError='';rows.push({name:'계열 '+(rows.length+1),values:'',categories:rows[0]?.categories||'',size:'',color:chartColors[rows.length%chartColors.length],type:'bar',secondary:false,lines:false});}
     else if(button.hasAttribute('data-series-reset')){rows=chartSeriesRows(getRangeChart(),sheet,book);seedError='';}
-    else if(button.dataset.seriesRemove!==undefined)rows.splice(+button.dataset.seriesRemove,1);
-    else{const i=+(button.dataset.seriesUp??button.dataset.seriesDown),next=i+(button.dataset.seriesUp!==undefined?-1:1);if(next>=0&&next<rows.length)[rows[i],rows[next]]=[rows[next],rows[i]];}
-    render();onChange();
+    else if(button.dataset.seriesRemove!==undefined){focusRow=+button.dataset.seriesRemove;rows.splice(focusRow,1);focusRow=Math.min(focusRow,rows.length-1);}
+    else{const i=+(button.dataset.seriesUp??button.dataset.seriesDown),next=i+(button.dataset.seriesUp!==undefined?-1:1);if(next>=0&&next<rows.length)[rows[i],rows[next]]=[rows[next],rows[i]];focusRow=next;focusAction=button.dataset.seriesUp!==undefined?'up':'down';}
+    render();onChange();const group=host.querySelector(`[data-series-row="${focusRow}"]`),action=group?.querySelector(`[data-series-${focusAction}]:not([disabled])`);(action||group?.querySelector('[data-series-field="name"]')||host.querySelector('[data-series-add]')).focus();
   });
   return {initialize,refresh(){readRows();if(rows)render();},plan(type){return chartSeriesPlan(readRows(),type,book,sheet.id);},count:()=>rows?.length||0,series:()=>rows||[]};
 }
