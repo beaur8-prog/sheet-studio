@@ -39,13 +39,27 @@ export function createTablePlan(book,sheet,{range,name,headerRow=true}){
 const totalCodes={average:101,countNums:102,count:103,max:104,min:105,stdDev:107,var:110,sum:109};
 export function totalFormula(table,column){if(column.totalsFunction==='custom')return column.totalsFormula?'='+column.totalsFormula.replace(/^=/,''):null;const code=totalCodes[column.totalsFunction];return code?`=SUBTOTAL(${code},${table.name}[${escapeColumn(column.name)}])`:null;}
 function assertEditCount(count){if(count>100000)throw Error('한 번에 최대 100,000개 셀의 표 수식을 적용할 수 있습니다. 범위를 나누거나 수식 적용 없이 범위를 변경하세요.');}
+export function appendTableColumnsPlan(book,sheet,table,lastColumn,pending=new Map()){
+  const b=tableBounds(table.range),next=cloneData(table),updates=[];
+  if(!Number.isInteger(lastColumn)||lastColumn<b.c2||lastColumn>=16384)throw Error('표의 오른쪽 끝 열을 확인하세요.');
+  if(lastColumn===b.c2)return {table:next,updates};
+  const cells=new Proxy(sheet.cells,{get:(base,key)=>pending.has(key)?pending.get(key):Reflect.get(base,key),ownKeys:base=>[...new Set([...Reflect.ownKeys(base),...pending.keys()])],getOwnPropertyDescriptor:(base,key)=>pending.has(key)?{value:pending.get(key),enumerable:true,configurable:true,writable:true}:Reflect.getOwnPropertyDescriptor(base,key)});
+  const snapshot={...book,sheets:book.sheets.map(s=>s.id===sheet.id?{...s,cells}:s)},evaluate=createEvaluator(snapshot,sheet.id),used=new Set(table.columns.map(c=>c.name.toLocaleLowerCase()));let id=table.columns.reduce((max,c)=>Math.max(max,c.id||0),0);
+  if(id+lastColumn-b.c2>4294967295)throw Error('표의 고유 열 번호 범위를 초과해 열을 추가할 수 없습니다. Excel에서 표 구성을 확인하세요.');
+  for(let c=b.c2+1;c<=lastColumn;c++){
+    const key=address(b.r1,c),cell=cells[key],value=table.headerRow?evaluate(key):'',text=value===''?'':formatValue(value,cell?.style,book),name=unique(text,used,'열'+(c-b.c1+1));
+    next.columns.push({id:++id,name,filterButton:true});if(table.headerRow)updates.push({key,cell:{...cloneData(cell||{}),raw:scalarRaw(name)}});
+  }
+  next.range=label({...b,c2:lastColumn});if(next.filter)next.filter.range={...next.filter.range,c2:lastColumn};
+  return {table:next,updates};
+}
 export function updateTablePlan(book,sheet,table,values){
   editableTableDefinition(book,sheet,table);const old=tableBounds(table.range),b=tableBounds(values.range||table.range);checkRange(sheet,b,table);
-  if(b.r1!==old.r1||b.c1!==old.c1||b.c2!==old.c2)throw Error('표 크기 변경은 시작 셀과 열 수를 유지하고 마지막 행을 조절하세요.');
-  const name=String(values.name||table.name).trim();checkName(book,name,table);const next={...cloneData(table),name,range:label(b),totalsRow:values.totalsRow??table.totalsRow},updates=[];
+  if(b.r1!==old.r1||b.c1!==old.c1||b.c2<old.c2)throw Error('표 크기 변경은 시작 셀을 유지하세요. 오른쪽 열 추가와 마지막 행 조절을 지원합니다. 열 제거는 행·열 삭제 메뉴를 사용하세요.');
+  const name=String(values.name||table.name).trim();checkName(book,name,table);const expanded=appendTableColumnsPlan(book,sheet,table,b.c2),next={...expanded.table,name,range:label(b),totalsRow:values.totalsRow??table.totalsRow},updates=expanded.updates;
   if(b.r2-b.r1+1<(next.headerRow?1:0)+(next.totalsRow?1:0))throw Error('머리글과 요약 행을 포함할 범위가 필요합니다.');
-  const relocating=next.totalsRow&&(!table.totalsRow||b.r2!==old.r2);
-  if(relocating)for(let c=b.c1;c<=b.c2;c++){const key=address(b.r2,c);if(sheet.cells[key]?.raw&&!(table.totalsRow&&b.r2===old.r2))throw Error('새 요약 행 위치에 데이터가 있습니다. 아래에 빈 행을 확보하세요.');}
+  const relocating=next.totalsRow&&(!table.totalsRow||b.r2!==old.r2||b.c2!==old.c2);
+  if(relocating)for(let c=b.c1;c<=b.c2;c++){const key=address(b.r2,c);if(sheet.cells[key]?.raw&&!(table.totalsRow&&b.r2===old.r2&&c<=old.c2))throw Error('새 요약 행 위치에 데이터가 있습니다. 아래에 빈 행을 확보하세요.');}
   if(table.totalsRow&&(!next.totalsRow||old.r2!==b.r2))for(let c=old.c1;c<=old.c2;c++){const key=address(old.r2,c);updates.push({key,cell:{...cloneData(sheet.cells[key]||{}),raw:''}});}
   if(relocating){
     const hadTotals=next.columns.some(c=>c.totalsFunction!==undefined||c.totalsLabel!==undefined||c.totalsFormula!==undefined);

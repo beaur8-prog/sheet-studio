@@ -1,10 +1,10 @@
 import {address,parseAddress,shiftFormula} from './engine.mjs';
 import {cloneData} from './clone.mjs';
-import {editableTableDefinition} from './tables.mjs';
+import {editableTableDefinition,appendTableColumnsPlan} from './tables.mjs';
 import {tableBounds,overlaps} from './table-schema.mjs';
 import {arrayRegions} from './cell-constraints.mjs';
 const label=b=>address(b.r1,b.c1)+':'+address(b.r2,b.c2);
-/** Excel-style vertical growth and first formula autofill. Explicit values and
+/** Adjacent vertical/horizontal growth and first formula autofill. Explicit values and
  * formula exceptions are never overwritten by these automatic operations.
  */
 export function prepareTableDataEdits(book,sheet,plan){
@@ -12,7 +12,16 @@ export function prepareTableDataEdits(book,sheet,plan){
   for(const original of sheet.tables||[]){
     if(original.filter?.unsupported?.length)continue;
     try{editableTableDefinition(book,sheet,original);}catch{continue;}
-    const prior=changes.get(original.id),table=cloneData(prior?.table||original),old=tableBounds(table.range),b={...old},first=b.r1+(table.headerRow?1:0);let changed=false;
+    const prior=changes.get(original.id);let table=cloneData(prior?.table||original);const old=tableBounds(table.range),b={...old},first=b.r1+(table.headerRow?1:0);let changed=false;
+    // A wider paste below the table adds rows at the old width. Right-hand
+    // columns grow only when input touches a row already inside the table.
+    const cols=new Set(input.filter(u=>u.cell.raw&&u.position.r>=old.r1&&u.position.r<=old.r2-(table.totalsRow?1:0)&&u.position.c>old.c2).map(u=>u.position.c));
+    while(cols.has(b.c2+1))b.c2++;
+    if(b.c2>old.c2){
+      const conflict=(sheet.tables||[]).some(t=>t.id!==table.id&&overlaps(tableBounds(t.range),b))||(sheet.merges||[]).some(m=>overlaps(tableBounds(m),b))||arrayRegions(sheet).some(a=>overlaps(a,b));
+      const occupiedTotal=table.totalsRow&&input.some(u=>u.position.r===old.r2&&u.position.c>old.c2&&u.position.c<=b.c2&&u.cell.raw)||table.totalsRow&&Array.from({length:b.c2-old.c2},(_,i)=>sheet.cells[address(old.r2,old.c2+i+1)]?.raw).some(Boolean);
+      if(!conflict&&!occupiedTotal&&b.c2-old.c2+updates.size<=100000){const expanded=appendTableColumnsPlan(book,sheet,table,b.c2,new Map([...updates].map(([key,u])=>[key,u.cell])));table=expanded.table;for(const u of expanded.updates)updates.set(u.key,u);changed=true;}else b.c2=old.c2;
+    }
     if(!table.totalsRow){
       const rows=new Set(input.filter(u=>u.cell.raw&&u.position.c>=b.c1&&u.position.c<=b.c2&&u.position.r>b.r2).map(u=>u.position.r));while(rows.has(b.r2+1))b.r2++;
       const added=(b.r2-old.r2)*(b.c2-b.c1+1),conflict=(sheet.tables||[]).some(t=>t.id!==table.id&&overlaps(tableBounds(t.range),b))||(sheet.merges||[]).some(m=>overlaps(tableBounds(m),b))||arrayRegions(sheet).some(a=>overlaps(a,b));
@@ -24,7 +33,7 @@ export function prepareTableDataEdits(book,sheet,plan){
           const column=table.columns[c-b.c1];if(!cell.raw&&column.formula!==undefined)cell.raw=shiftFormula('='+column.formula.replace(/^=/,''),r-first,0);
           if(cell.raw||Object.keys(cell.style).length||cell.xlsxStyle!==undefined||cell.xlsxProtection!==undefined||updates.has(key))updates.set(key,{key,cell});
         }
-      }else Object.assign(b,old);
+      }else b.r2=old.r2;
     }
     const last=b.r2-(table.totalsRow?1:0);
     if(input.length===1){
