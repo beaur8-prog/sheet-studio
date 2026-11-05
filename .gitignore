@@ -3,6 +3,7 @@ dist/
 release/
 .package/
 test-results/
+tmp/pdfs/
 *.log
 analysis/
 artifacts/
