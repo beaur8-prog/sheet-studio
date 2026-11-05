@@ -1,3 +1,4 @@
+import {decodeWorkbookWire} from './workbook-wire.mjs';
 import {openingSheetId} from './opening-sheet.mjs';
 import {calculationDisplay} from './calculation-display.mjs';
 import {buildChartPreview} from './chart-preview.mjs';
@@ -31,7 +32,7 @@ const evaluator = id => {
 async function handle(type, data) {
   if(type==='import-port'){
     const {token,port}=data;importPorts.set(token,port);
-    port.onmessage=({data:candidate})=>{if(importPorts.get(token)!==port||candidate.token!==token)return;prepared={token,book:candidate.book,description:candidate.description};importPorts.delete(token);port.postMessage({token,staged:true});port.close();};return true;
+    port.onmessage=({data:candidate})=>{if(importPorts.get(token)!==port||candidate.token!==token)return;try{if(candidate.encoding!=='sheet-json-v1')throw Error('문서 전달 버전이 올바르지 않습니다.');const loaded=decodeWorkbookWire(candidate.bytes);prepared={token,book:loaded,description:candidate.description};port.postMessage({token,staged:true});}catch(error){if(prepared?.token===token)prepared=null;try{port.postMessage({token,error:'읽은 문서를 준비하지 못했습니다: '+error.message});}catch{}}finally{importPorts.delete(token);port.close();}};return true;
   }
   if(type==='import-discard'){const port=importPorts.get(data.token);if(port){port.close();importPorts.delete(data.token);}if(prepared?.token===data.token)prepared=null;return true;}
   if(type==='import-preview'){if(prepared?.token!==data.token)throw Error('파일 열기 작업이 만료되었습니다. 다시 여세요.');return {token:data.token,book:prepared.book,description:prepared.description};}

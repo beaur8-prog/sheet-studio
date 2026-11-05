@@ -1,11 +1,11 @@
-import {importTask} from './import-task.mjs';
+import {importTask,abortable} from './import-task.mjs';
 import {workbookMetadata} from './recovery-store.mjs';
 
-export function createWorkbookTasks({onSave, onCalculated, onError}) {
+export function createWorkbookTasks({onSave, onCalculated, onError,onFatal}) {
   const worker = new Worker(new URL('./workbook-worker.mjs', import.meta.url), {type: 'module'});
   let sequence = 0, revision = 0, calculationEpoch = 0, synced = Promise.resolve(), flushTimer, saveRevision = 0, failed = null;
   let baseline = new Map(), values = new Map(), styles = new Map(), calculationErrors=new Map(),provenance=new Map(),pendingRefs = new Map(), calculateScheduled = false,calculating=0;
-  const pending = new Map();
+  const pending = new Map();let activeImport=null;
   worker.onmessage = ({data}) => {
     const item = pending.get(data.id);
     if (!item) return;
@@ -15,7 +15,7 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
   worker.onerror = () => {
     failed = Error('문서 작업 스레드를 사용할 수 없습니다. 앱을 다시 실행해 주세요.');
     for (const item of pending.values()) item.reject(failed);
-    pending.clear(); onError(failed);
+    pending.clear();activeImport?.abort(failed);onFatal?.(failed);onError(failed);
   };
   const call = (type, payload = {}, transfer = []) => new Promise((resolve, reject) => {
     if (failed) return reject(failed);
@@ -90,12 +90,12 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
     get calculated() { return !calculateScheduled&&!pendingRefs.size&&!calculating; },
     get saving() { return saveRevision !== revision; },
     async load(legacy, options = {}) { const result = await call('load', {legacy, ...options}); adopt(result.book); return result; },
-    async import(bytes,name,options={}){await synced;return importTask(bytes,name,{...options,createWorker:()=>new Worker(new URL('./workbook-import-worker.mjs',import.meta.url),{type:'module'}),prepare:(token,port)=>call('import-port',{token,port},[port]),read:token=>call('import-preview',{token}),discard:token=>call('import-discard',{token}).catch(()=>{})});},
+    async import(bytes,name,options={}){const controller=new AbortController(),cancel=()=>controller.abort(options.signal?.reason);if(options.signal?.aborted)cancel();else options.signal?.addEventListener('abort',cancel,{once:true});activeImport=controller;try{await abortable(synced,controller.signal);return await importTask(bytes,name,{...options,signal:controller.signal,createWorker:()=>new Worker(new URL('./workbook-import-worker.mjs',import.meta.url),{type:'module'}),prepare:(token,port)=>call('import-port',{token,port},[port]),read:token=>call('import-preview',{token}),discard:token=>call('import-discard',{token}).catch(()=>{})});}finally{options.signal?.removeEventListener('abort',cancel);if(activeImport===controller)activeImport=null;}},
     discardImport:token=>call('import-discard',{token}).catch(()=>{}),
     sync, flush, value, recalculate,
     result(sheetId,ref){return {value:value(sheetId,ref),error:calculationErrors.get(sheetId+'!'+ref)||null,...provenance.get(sheetId+'!'+ref)};},
     style(sheetId,ref) { const key=sheetId+'!'+ref;if(styles.has(key))return styles.get(key);value(sheetId,ref);return {}; },
     async run(type, payload = {}) { await synced; return call(type, {...payload, revision}); },
-    destroy() { clearTimeout(flushTimer); worker.terminate(); },
+    destroy() { clearTimeout(flushTimer);activeImport?.abort(Error('문서 작업을 종료했습니다.'));worker.terminate(); },
   };
 }

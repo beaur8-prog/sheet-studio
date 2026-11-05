@@ -28,3 +28,7 @@ test('an already canceled operation never creates a parser or stages a document;
   const {state,options}=harness(),controller=new AbortController();controller.abort();await assert.rejects(importTask(new Uint8Array([1]),'test.xlsx',{...options,signal:controller.signal}),{name:'AbortError'});assert.equal(state.created,0);assert.deepEqual(state.events,[]);
   const next=new AbortController();let fail;const job=abortable(new Promise((_r,reject)=>{fail=reject;}),next.signal);next.abort();await assert.rejects(job,{name:'AbortError'});fail(Error('late read error'));const already=new AbortController();already.abort();let rejectAlready;const late=new Promise((_r,reject)=>{rejectAlready=reject;});await assert.rejects(abortable(late,already.signal),{name:'AbortError'});rejectAlready(Error('already-canceled read error'));await new Promise(resolve=>setTimeout(resolve,1));
 });
+
+test('an original document-worker failure releases an isolated import with the failure reason, not an endless staging wait',async()=>{
+ const {state,options}=harness({hold:true}),controller=new AbortController(),failure=Error('document worker failed');const job=importTask(new Uint8Array([1]),'test.xlsx',{...options,signal:controller.signal});await new Promise(resolve=>setTimeout(resolve,1));controller.abort(failure);await assert.rejects(job,error=>error===failure);assert.equal(state.terminated,1);assert.equal(state.read,0);
+});
