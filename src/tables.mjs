@@ -34,7 +34,7 @@ export function createTablePlan(book,sheet,{range,name,headerRow=true}){
     const key=address(b.r1,c),old=sheet.cells[key],value=headerRow?evaluate(key):'',text=value===''?'':formatValue(value,old?.style,book),name=unique(text,used,'열'+(c-b.c1+1));columns.push({id:c-b.c1+1,name,filterButton:true});
     if(headerRow)updates.push({key,cell:{...cloneData(old||{}),raw:scalarRaw(name)}});
   }
-  const table={id:crypto.randomUUID(),name,range:label(b),headerRow:!!headerRow,totalsRow:false,columns,style:{name:'TableStyleMedium2',showRowStripes:true,showColumnStripes:false,showFirstColumn:false,showLastColumn:false},...(headerRow?{filter:{range:{...b},columns:{},hiddenRows:[]}}:{})};validateTables([table]);return {table,updates,create:true};
+  const table={id:crypto.randomUUID(),name,range:label(b),headerRow:!!headerRow,totalsRow:false,columns,nextColumnId:columns.length+1,style:{name:'TableStyleMedium2',showRowStripes:true,showColumnStripes:false,showFirstColumn:false,showLastColumn:false},...(headerRow?{filter:{range:{...b},columns:{},hiddenRows:[]}}:{})};validateTables([table]);return {table,updates,create:true};
 }
 const totalCodes={average:101,countNums:102,count:103,max:104,min:105,stdDev:107,var:110,sum:109};
 export function totalFormula(table,column){if(column.totalsFunction==='custom')return column.totalsFormula?'='+column.totalsFormula.replace(/^=/,''):null;const code=totalCodes[column.totalsFunction];return code?`=SUBTOTAL(${code},${table.name}[${escapeColumn(column.name)}])`:null;}
@@ -44,13 +44,13 @@ export function appendTableColumnsPlan(book,sheet,table,lastColumn,pending=new M
   if(!Number.isInteger(lastColumn)||lastColumn<b.c2||lastColumn>=16384)throw Error('표의 오른쪽 끝 열을 확인하세요.');
   if(lastColumn===b.c2)return {table:next,updates};
   const cells=new Proxy(sheet.cells,{get:(base,key)=>pending.has(key)?pending.get(key):Reflect.get(base,key),ownKeys:base=>[...new Set([...Reflect.ownKeys(base),...pending.keys()])],getOwnPropertyDescriptor:(base,key)=>pending.has(key)?{value:pending.get(key),enumerable:true,configurable:true,writable:true}:Reflect.getOwnPropertyDescriptor(base,key)});
-  const snapshot={...book,sheets:book.sheets.map(s=>s.id===sheet.id?{...s,cells}:s)},evaluate=createEvaluator(snapshot,sheet.id),used=new Set(table.columns.map(c=>c.name.toLocaleLowerCase()));let id=table.columns.reduce((max,c)=>Math.max(max,c.id||0),0);
+  const snapshot={...book,sheets:book.sheets.map(s=>s.id===sheet.id?{...s,cells}:s)},evaluate=createEvaluator(snapshot,sheet.id),used=new Set(table.columns.map(c=>c.name.toLocaleLowerCase()));let id=Math.max((table.nextColumnId||1)-1,table.columns.reduce((max,c)=>Math.max(max,c.id||0),0));
   if(id+lastColumn-b.c2>4294967295)throw Error('표의 고유 열 번호 범위를 초과해 열을 추가할 수 없습니다. Excel에서 표 구성을 확인하세요.');
   for(let c=b.c2+1;c<=lastColumn;c++){
     const key=address(b.r1,c),cell=cells[key],value=table.headerRow?evaluate(key):'',text=value===''?'':formatValue(value,cell?.style,book),name=unique(text,used,'열'+(c-b.c1+1));
     next.columns.push({id:++id,name,filterButton:true});if(table.headerRow)updates.push({key,cell:{...cloneData(cell||{}),raw:scalarRaw(name)}});
   }
-  next.range=label({...b,c2:lastColumn});if(next.filter)next.filter.range={...next.filter.range,c2:lastColumn};
+  next.nextColumnId=id+1;next.range=label({...b,c2:lastColumn});if(next.filter)next.filter.range={...next.filter.range,c2:lastColumn};
   return {table:next,updates};
 }
 export function updateTablePlan(book,sheet,table,values){

@@ -10,5 +10,6 @@ export function validatePivot(spec) {
   if (new Set([...spec.rows,...spec.columns]).size !== spec.rows.length+spec.columns.length) throw new Error('같은 필드를 행과 열에 중복 배치할 수 없습니다.');
   if (new Set(spec.filters.map(f=>f.field)).size !== spec.filters.length) throw new Error('같은 필터 필드를 중복 배치할 수 없습니다.');
   if(spec.preserveFormatting!==undefined&&typeof spec.preserveFormatting!=='boolean')throw Error('피벗 서식 유지 설정이 올바르지 않습니다.');
+  if(spec.sourceTableId!==undefined||spec.sourceTableName!==undefined||spec.sourceFields!==undefined){if(!field(spec.sourceTableId)||spec.sourceTableId.length>150||!field(spec.sourceTableName)||!Array.isArray(spec.sourceFields)||spec.sourceFields.length>48||spec.sourceFields.some(c=>!c||!Number.isInteger(c.id)||c.id<1||c.id>4294967295||!field(c.name))||new Set(spec.sourceFields.map(c=>c.id)).size!==spec.sourceFields.length||new Set(spec.sourceFields.map(c=>c.name)).size!==spec.sourceFields.length)throw Error('피벗의 표 원본 연결이 올바르지 않습니다.');const used=new Set([...spec.rows,...spec.columns,...spec.values.map(v=>v.field),...spec.filters.map(f=>f.field)]);if([...used].some(name=>!spec.sourceFields.some(c=>c.name===name)))throw Error('피벗의 원본 열 연결이 빠졌습니다.');}
   return spec;
 }

@@ -1,3 +1,4 @@
+import {resolvePivotSpec,restorePivotTableBinding} from './pivot-source.mjs';
 import JSZip from 'jszip';
 import {buildPivot,applyPivot,aggregations,scalarKey} from './pivot.mjs';
 import {validatePivot} from './pivot-schema.mjs';
@@ -40,7 +41,7 @@ export async function addPivotParts(bytes,workbook,names){
   const content=(path,type)=>{const part=`/${path}`;if(!types.includes(`PartName="${part}"`))types=types.replace('</Types>',`<Override PartName="${part}" ContentType="${type}"/></Types>`);};
   let caches='';
   for(let i=0;i<pivots.length;i++){
-    const target=pivots[i],spec=target.pivot,sourceName=names.get(spec.sourceSheetId);
+    const target=pivots[i],spec=resolvePivotSpec(workbook,target.pivot),sourceName=names.get(spec.sourceSheetId);
     const pages=spec.filters.filter(f=>!spec.rows.includes(f.field)&&!spec.columns.includes(f.field)).length;
     const entry={sheet:names.get(target.id),source:sourceName||null,spec,rowOffset:pages?pages+1:0};definitions.push(entry);
     const output=buildPivot(workbook,spec),{headers,records}=output.data,n=i+1;
@@ -54,7 +55,7 @@ export async function addPivotParts(bytes,workbook,names){
       const values=shared[c],number=values.some(v=>typeof v==='number'),string=values.some(v=>typeof v==='string'&&v!==''),blank=values.some(v=>v===''||v===null),other=values.some(v=>typeof v==='boolean');
       return `<cacheField name="${esc(name)}" numFmtId="0"><sharedItems count="${sharedFields[c]?values.length:0}" containsString="${+string}" containsNumber="${+number}" containsBlank="${+blank}" containsMixedTypes="${+(number&&(string||other))}" containsSemiMixedTypes="${+(string||blank||other)}">${sharedFields[c]?values.map(typed).join(''):''}</sharedItems></cacheField>`;
     }).join('');
-    const definition=`${DECL}<pivotCacheDefinition xmlns="${NS}" xmlns:r="${REL.slice(0,-1)}" r:id="rIdRecords" refreshOnLoad="0" createdVersion="3" refreshedVersion="3" minRefreshableVersion="3" recordCount="${records.length}"><cacheSource type="worksheet"><worksheetSource ref="${esc(spec.sourceRange)}" sheet="${esc(sourceName)}"/></cacheSource><cacheFields count="${headers.length}">${cacheFields}</cacheFields></pivotCacheDefinition>`;
+    const definition=`${DECL}<pivotCacheDefinition xmlns="${NS}" xmlns:r="${REL.slice(0,-1)}" r:id="rIdRecords" refreshOnLoad="0" createdVersion="3" refreshedVersion="3" minRefreshableVersion="3" recordCount="${records.length}"><cacheSource type="worksheet"><worksheetSource ${spec.sourceTableName?`name="${esc(spec.sourceTableName)}"`:`ref="${esc(spec.sourceRange)}" sheet="${esc(sourceName)}"`}/></cacheSource><cacheFields count="${headers.length}">${cacheFields}</cacheFields></pivotCacheDefinition>`;
     const cachePath=`xl/pivotCache/pivotCacheDefinition${n}.xml`,recordPath=`xl/pivotCache/pivotCacheRecords${n}.xml`,tablePath=`xl/pivotTables/pivotTable${n}.xml`;
     zip.file(cachePath,definition);
     zip.file(recordPath,`${DECL}<pivotCacheRecords xmlns="${NS}" count="${records.length}">${records.map(row=>'<r>'+row.map((v,c)=>sharedFields[c]?`<x v="${indexes[c].get(scalarKey(v))}"/>`:typed(v)).join('')+'</r>').join('')}</pivotCacheRecords>`);
@@ -116,6 +117,7 @@ export async function restorePivotParts(bytes,workbook,{refresh=true}={}){
     if(!compatible||extras){target.pivotImportNotice=extras?'피벗 바깥에 추가된 셀과 원본 피벗 결과를 유지합니다. 새로 고침은 Excel에서 진행하세요.':'외부에서 변경된 피벗 설정과 결과를 유지합니다. 필드 편집·새로 고침은 Excel에서 진행하세요.';continue;}
     for(const item of actual)retained.delete(item);
     target.pivot={...entry.spec,sourceSheetId:source?.id||'missing-source'};
+    if(target.pivot.sourceTableId){try{target.pivot=restorePivotTableBinding(workbook,target.pivot);}catch(error){target.pivotError=error.message;}}
     if(refresh&&entry.rowOffset){
       const offset=entry.rowOffset,cells={};
       for(const ref in target.cells){const p=parseAddress(ref);if(p.r>=offset)cells[address(p.r-offset,p.c)]=target.cells[ref];}

@@ -119,7 +119,7 @@ async function handle(type, data) {
     return buildChartPreview(snapshot,data.sheetId,data);
   }
   if(type==='pivot-source'){const {headers,records,source,range}=sourceData(book,data.sheetId,data.range,{evaluate:evaluator(data.sheetId)});return {headers,records,sourceSheetId:source.id,range};}
-  if(type==='pivot-build'){const {matrix,matched,total,rows,columns}=buildPivot(book,data.spec,{evaluate:evaluator(data.spec.sourceSheetId)});return {matrix,matched,total,rows,columns};}
+  if(type==='pivot-build'){const {matrix,matched,total,rows,columns,spec}=buildPivot(book,data.spec,{evaluate:evaluator(data.spec.sourceSheetId)});return {matrix,matched,total,rows,columns,spec};}
   if (type === 'recalculate') { evaluators=new Map();conditionals=new Map();arraysSent=false; }
   if (type === 'calculate' || type === 'recalculate') {const values=data.refs.map(([id, ref]) => {
     const sheet=book.sheets.find(sheet=>sheet.id===id),evaluate=evaluator(id),result=calculationDisplay(evaluate.result(ref)),value=result.value,position=parseAddress(ref);

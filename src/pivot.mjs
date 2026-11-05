@@ -1,3 +1,4 @@
+import {resolvePivotSpec} from './pivot-source.mjs';
 import {cloneData} from './clone.mjs';
 import {MAX_DOCUMENT_CELLS} from './limits.mjs';
 import {address,parseAddress,createEvaluator,transformFormulaReferences} from './engine.mjs';
@@ -34,7 +35,7 @@ function result(s,kind){if(!s)s=state();switch(kind){case 'sum':return s.sum;cas
 const compare=(a,b)=>{for(let i=0;i<a.length;i++){const x=a[i],y=b[i];const d=typeof x==='number'&&typeof y==='number'?x-y:pivotLabel(x).localeCompare(pivotLabel(y),'ko',{numeric:true});if(d)return d;}return 0;};
 
 export function buildPivot(book,spec,options){
-  validatePivot(spec);
+  validatePivot(spec);spec=resolvePivotSpec(book,spec);
   const data=sourceData(book,spec.sourceSheetId,spec.sourceRange,options),{headers,records}=data;
   const index=name=>{const i=headers.indexOf(name);if(i<0)fail(`원본의 “${name}” 필드를 찾을 수 없습니다. 필드 설정을 확인하세요.`);return i;};
   const ri=spec.rows.map(index),ci=spec.columns.map(index),vi=spec.values.map(v=>index(v.field));
@@ -71,7 +72,7 @@ export function buildPivot(book,spec,options){
   }
   if(matrix.length*matrix[0].length>LIMIT||matrix[0].length>16384)fail('피벗 결과가 너무 큽니다. 필드나 원본 범위를 줄이세요.');
   if(matrix.some(row=>row.some(v=>typeof v==='number'&&!Number.isFinite(v))))fail('집계 결과가 숫자 범위를 초과했습니다.');
-  return {matrix,matched,total:records.length,data,rows,columns};
+  return {matrix,matched,total:records.length,data,rows,columns,spec};
 }
 
 export function pivotCells(output,spec){
@@ -84,11 +85,11 @@ export function pivotCells(output,spec){
 }
 
 const rawLabel=cell=>String(cell?.raw||'').replace(/^'/,'');
-function formattingIndex(cells,spec){
+function formattingIndex(cells,spec,renames=new Map()){
   const width=Math.max(1,spec?.rows?.length||0),headers=new Map(),rows=new Map(),formats=new Map(),cols=new Set(),lines=new Set();
   for(const ref in cells){const p=parseAddress(ref);cols.add(p.c);lines.add(p.r);}
   const counts=new Map();
-  for(const c of [...cols].sort((a,b)=>a-b)){const text=rawLabel(cells[address(0,c)]),n=counts.get(text)||0;headers.set(c,JSON.stringify([text,n]));counts.set(text,n+1);}
+  for(const c of [...cols].sort((a,b)=>a-b)){let text=rawLabel(cells[address(0,c)]);if(c<(spec?.rows?.length||0)&&text===spec.rows[c])text=renames.get(text)||text;else for(const value of spec?.values||[]){const from=`${aggregations[value.aggregate]}: ${value.field}`,to=`${aggregations[value.aggregate]}: ${renames.get(value.field)||value.field}`;if(text===from||text.endsWith(' · '+from)){text=text.slice(0,-from.length)+to;break;}}const n=counts.get(text)||0;headers.set(c,JSON.stringify([text,n]));counts.set(text,n+1);}
   counts.clear();let last=0;for(const r of lines)if(rawLabel(cells[address(r,0)]))last=Math.max(last,r);
   for(const r of [...lines].sort((a,b)=>a-b)){
     const text=JSON.stringify(Array.from({length:width},(_,c)=>rawLabel(cells[address(r,c)]))),n=counts.get(text)||0;
@@ -102,8 +103,10 @@ function formattingIndex(cells,spec){
 
 // Calculate before mutation: a bad source must not destroy the last good report.
 export function applyPivot(book,target,spec,output=buildPivot(book,spec)){
+  spec=output.spec||resolvePivotSpec(book,spec);
   const cells=pivotCells(output,spec);
-  const prior=target.cells||{},old=formattingIndex(prior,target.pivot||spec),next=formattingIndex(cells,spec),keep=spec.preserveFormatting!==false;
+  const renames=new Map();if(spec.sourceTableId&&target.pivot?.sourceTableId===spec.sourceTableId)for(const field of target.pivot.sourceFields||[]){const current=spec.sourceFields?.find(c=>c.id===field.id);if(current)renames.set(field.name,current.name);}
+  const prior=target.cells||{},old=formattingIndex(prior,target.pivot||spec,renames),next=formattingIndex(cells,spec),keep=spec.preserveFormatting!==false;
   const notes=new Set();for(const ref in cells){
     const p=parseAddress(ref),previous=old.formats.get(next.key(p.r,p.c));if(!previous)continue;
     if(keep){

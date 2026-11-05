@@ -379,7 +379,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
     return { data: new TextEncoder().encode('\uFEFF' + rows.join('\r\n')), mime: kind === 'csv' ? 'text/csv;charset=utf-8' : 'text/tab-separated-values;charset=utf-8', extension: kind };
   }
   // Export a consistent snapshot: cached result cells and native pivot cache use the same source.
-  if(workbook.sheets.some(s=>s.pivot)){workbook=cloneData(workbook);for(const s of workbook.sheets)if(s.pivot){try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
+  if(workbook.sheets.some(s=>s.pivot)){workbook=cloneData(workbook);for(const s of workbook.sheets)if(s.pivot){if(s.pivot.sourceTableId){applyPivot(workbook,s,s.pivot);continue;}try{sourceData(workbook,s.pivot.sourceSheetId,s.pivot.sourceRange);}catch{delete s.pivot;continue;}applyPivot(workbook,s,s.pivot);}}
   // Check the final record count before ExcelJS allocates a large output
   // model. Spill results remain sparse in the editor but are real XLSX cells.
   const spillsBySheet=new Map(workbook.sheets.map(sheet=>[sheet.id,getSpills(workbook,sheet.id)]));

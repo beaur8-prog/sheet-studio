@@ -63,6 +63,7 @@ export function recordNativeStructure(workbook,sheetId,axis,index,delta){
 
 export function buildNativePlan(workbook){
   const source=workbook.nativeSource;if(source?.format!=='xlsm')throw new Error('먼저 XLSM 통합 문서를 여세요.');
+  if(workbook.sheets.some(s=>s.pivot?.sourceTableId))throw Error('표에 연결된 피벗은 XLSX로 저장하세요. XLSM에서는 Excel에서 피벗 원본을 설정하세요.');
   const baseline=new Map(source.baseline.map(s=>[s.id,s]));
   const resolve=createColorResolver(workbook.chartTheme,workbook.xlsxColors?'<styleSheet>'+workbook.xlsxColors+'</styleSheet>':undefined);
   const chartState=sheet=>({name:sheet.name,state:sheet.state,charts:(sheet.charts||[]).map(c=>Object.fromEntries(['id','title','type','grouping','x','y','width','height','legend','labels','plotVisibleOnly','xTitle','yTitle','rebuilt'].map(key=>[key,c[key]])))});

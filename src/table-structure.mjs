@@ -23,7 +23,7 @@ export function removeTablesForStructure(book,sheet,ids){
   for(const id of ids){const table=sheet.tables.find(t=>t.id===id);if(table)renameTableReferences(book,sheet,table,{name:null});}
   if(ids.length)sheet.tables=sheet.tables.filter(t=>!ids.includes(t.id));
 }
-function newColumns(table,position,count){const used=new Set(table.columns.map(c=>c.name.toLocaleLowerCase()));let id=table.columns.reduce((n,c)=>Math.max(n,c.id||0),0);return Array.from({length:count},(_,i)=>{const base='열'+(position+i+1);let name=base,n=2;while(used.has(name.toLocaleLowerCase()))name=base+n++;used.add(name.toLocaleLowerCase());return {id:++id,name,filterButton:true};});}
+function newColumns(table,position,count){const used=new Set(table.columns.map(c=>c.name.toLocaleLowerCase()));let id=Math.max((table.nextColumnId||1)-1,table.columns.reduce((n,c)=>Math.max(n,c.id||0),0));if(id+count>4294967295)throw Error('표의 고유 열 번호 범위를 초과했습니다.');const columns=Array.from({length:count},(_,i)=>{const base='열'+(position+i+1);let name=base,n=2;while(used.has(name.toLocaleLowerCase()))name=base+n++;used.add(name.toLocaleLowerCase());return {id:++id,name,filterButton:true};});table.nextColumnId=id+1;return columns;}
 function styleCell(sheet,r,c,neighbor){
   const source=sheet.cells[address(neighbor.r,neighbor.c)]||{},cell={raw:'',style:cloneData(source.style||{})};for(const key of ['xlsxStyle','xlsxProtection','xlsxNormal'])if(source[key]!==undefined)cell[key]=cloneData(source[key]);
   return cell;
@@ -53,7 +53,7 @@ export function shiftTables(book,sheetId,axis,index,delta){
       if(!b)throw Error('표 전체를 삭제할 때는 표 정의를 먼저 제거해야 합니다.');
       const removedColumns=local&&axis==='c'&&delta<0?table.columns.filter((_,i)=>old.c1+i>=index&&old.c1+i<=end):[];
       if(removedColumns.length)renameTableReferences(book,owner,table,{columns:Object.fromEntries(removedColumns.map(c=>[c.name,null]))});
-      const next=cloneData(table),origins=next.columns.map((column,i)=>({column,index:i}));
+      const next=cloneData(table);next.nextColumnId=Math.max(next.nextColumnId||1,1+next.columns.reduce((n,c)=>Math.max(n,c.id||0),0));const origins=next.columns.map((column,i)=>({column,index:i}));
       if(local&&axis==='c'&&index>old.c1&&index<=old.c2&&delta>0){const at=index-old.c1;next.columns.splice(at,0,...newColumns(next,at,count));}
       if(removedColumns.length)next.columns.splice(Math.max(0,index-old.c1),removedColumns.length);
       if(local&&axis==='r'&&delta<0&&table.totalsRow&&old.r2>=index&&old.r2<=end)next.totalsRow=false;

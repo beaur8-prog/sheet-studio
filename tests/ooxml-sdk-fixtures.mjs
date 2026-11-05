@@ -6,6 +6,7 @@ import ExcelJS from 'exceljs';
 import {planValidationChange,applyValidationChange} from '../src/data-validation.mjs';
 import {createWorkbook} from '../src/engine.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
+import {bindPivotTable} from '../src/pivot-source.mjs';
 import {applyPivot} from '../src/pivot.mjs';
 import {createTablePlan,prepareTableHeaderEdits,applyTableHeaderEdits} from '../src/tables.mjs';
 import {prepareTableDataEdits} from '../src/table-data-edits.mjs';
@@ -47,4 +48,8 @@ await save('worksheet-formats',worksheetFixture());console.log('Generated synthe
 
 {
  const source=new ExcelJS.Workbook(),s=source.addWorksheet('Advanced');s.getCell('A1').value=-10;s.getCell('A2').value=20;s.addConditionalFormatting({ref:'A1:A2',rules:[{type:'dataBar',priority:1,cfvo:[{type:'min'},{type:'max'}],color:{argb:'FF638EC6'},gradient:false,negativeFillColor:{argb:'FFFF0000'},axisColor:{argb:'FF000000'}}]});await save('preserved-advanced-bar',await readSpreadsheet(await source.xlsx.writeBuffer(),'advanced.xlsx'));
+}
+
+{
+ const book=pivotFixture(),source=book.sheets[0],created=createTablePlan(book,source,{name:'Sales',range:'A1:D6'});source.tables=[created.table];for(const u of created.updates)source.cells[u.key]=u.cell;const target={id:'linked-report',name:'표 피벗',charts:[]};applyPivot(book,target,bindPivotTable(book,spec(),created.table.id));book.sheets.push(target);await save('table-linked-pivot',book);
 }
