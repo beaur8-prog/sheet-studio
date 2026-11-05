@@ -1,6 +1,7 @@
 import {chartSeries,chartColors,parseChartFormula,refFormula,referenceSize} from './chart-model.mjs';
 import {tableBounds} from './table-schema.mjs';
 import {address} from './engine.mjs';
+import {xml,all,C} from './chart-xml.mjs';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const refText=(ref,book)=>ref?.formula||ref?.sheetId&&ref?.range&&refFormula(ref,book)||'';
 const literalName=value=>/^[=']/.test(value)?"'"+value:value;
@@ -32,8 +33,19 @@ export function chartSeriesPlan(rows,type,book,sheetId){
   const range=bounds.length?address(Math.min(...bounds.map(b=>b.r1)),Math.min(...bounds.map(b=>b.c1)))+':'+address(Math.max(...bounds.map(b=>b.r2)),Math.max(...bounds.map(b=>b.c2))):'A1:A1';
   return {series,range};
 }
+export function chartSeriesEditorSeed(chart,sheet,book){
+  let rows=chart.series?.length?chartSeriesRows(chart,sheet,book):null,warning='';
+  if(chart.source){
+    try{
+      const source=chart.source.parts[chart.source.root],bytes=Uint8Array.from(atob(source.data),c=>c.charCodeAt(0)),doc=xml(new TextDecoder().decode(bytes)),count=all(doc,'ser').filter(node=>node.namespaceURI===C).length;
+      if(count>32)warning=`원본에는 ${count}개 계열이 있습니다. 32개를 넘는 원본을 자동으로 일부만 복제하지 않습니다. 사용할 범위를 다시 구성하세요.`;
+      else if(!rows?.length||count>rows.length)warning='원본의 모든 계열을 편집 범위로 읽을 수 없습니다. 사용할 셀 범위에서 다시 구성하세요.';
+    }catch{warning='원본 계열을 확인할 수 없습니다. 사용할 셀 범위에서 다시 구성하세요.';}
+  }else if(rows?.length>32)warning='원본에 32개를 넘는 계열이 있습니다. 자동으로 일부만 복제하지 않습니다. 사용할 범위를 다시 구성하세요.';
+  if(warning)rows=[];return {rows,warning};
+}
 export function installSeriesEditor({el,current,sheet,book,getRangeChart,onChange}){
-  const host=el.querySelector('#chart-series-editor');let rows=current.series?.length?chartSeriesRows(current,sheet,book):null,seedError='';if(rows?.length>32){seedError='원본에 32개를 넘는 계열이 있습니다. 자동으로 일부만 복제하지 않습니다. 사용할 범위를 다시 구성하세요.';rows=[];}
+  const host=el.querySelector('#chart-series-editor'),seed=chartSeriesEditorSeed(current,sheet,book);let rows=seed.rows,seedError=seed.warning;
   const readRows=()=>{for(const field of host.querySelectorAll('[data-series-field]')){const row=rows[+field.closest('[data-series-row]').dataset.seriesRow];row[field.dataset.seriesField]=field.type==='checkbox'?field.checked:field.value;}return rows||[];};
   const render=()=>{
     const type=el.querySelector('#chart-type').value,xy=['scatter','bubble'].includes(type);

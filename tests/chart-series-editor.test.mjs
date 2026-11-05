@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import {createWorkbook,validateWorkbook} from '../src/engine.mjs';
-import {chartSeriesPlan,chartSeriesRows} from '../src/chart-series-editor.mjs';
+import {chartSeriesPlan,chartSeriesRows,chartSeriesEditorSeed} from '../src/chart-series-editor.mjs';
 import {chartData,chartRangeError} from '../src/chart-model.mjs';
 import {buildChartPreview} from '../src/chart-preview.mjs';
 import {writeSpreadsheet,readSpreadsheet} from '../src/io.mjs';
@@ -51,4 +51,11 @@ test('one external scatter group can override its connection style per series wi
 });
 test('explicit vectors and name references follow real structural edits and survive XLSX reopen',async()=>{
   let {book,sheet,row}=fixture();sheet.charts=[{id:'bar',type:'bar',x:100,y:100,width:500,height:300,...chartSeriesPlan([row('B2:B5','=B1')],'bar',book,sheet.id)}];book=structuralWorkbookPlan(book,sheet.id,{axis:'r',index:0,count:1,delta:1});sheet=book.sheets[0];assert.equal(sheet.charts[0].series[0].valRef.range,'B3:B6');assert.equal(sheet.charts[0].series[0].nameRef.range,'B2:B2');book=await readSpreadsheet((await writeSpreadsheet(book)).data,'shifted.xlsx');assert.deepEqual(chartData(book.sheets[0].charts[0],book.sheets[0],book)[0].values,[10,20,30,40]);
+});
+test('original charts with more series than their limited preview cannot silently convert that partial preview',async()=>{
+  let {book,sheet,row}=fixture();const prototype=chartSeriesPlan([row('B2:B5','계열')],'bar',book,sheet.id).series[0];sheet.charts=[{id:'many',type:'bar',x:100,y:100,width:500,height:300,series:Array.from({length:33},(_,i)=>({...structuredClone(prototype),name:'계열 '+(i+1)}))}];
+  for(let round=0;round<3;round++){
+    book=await readSpreadsheet((await writeSpreadsheet(book)).data,'many.xlsx');sheet=book.sheets[0];assert.equal(sheet.charts[0].series.length,32,'existing preview limit');const seed=chartSeriesEditorSeed(sheet.charts[0],sheet,book);assert.deepEqual(seed.rows,[]);assert.match(seed.warning,/33개 계열/);assert.throws(()=>chartSeriesPlan(seed.rows,'bar',book,sheet.id),/1~32/);
+  }
+  const chart=sheet.charts[0];chart.source.parts[chart.source.root].data=btoa('<broken');assert.match(chartSeriesEditorSeed(chart,sheet,book).warning,/확인할 수 없/);
 });

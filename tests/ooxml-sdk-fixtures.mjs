@@ -60,3 +60,7 @@ await save('worksheet-formats',worksheetFixture());console.log('Generated synthe
  addChart(book,{id:'explicit-scatter',type:'scatter',blankCells:'span',...chartSeriesPlan(rows,'scatter',book,sheet.id)});await save('explicit-scatter-groups',book);
  const combo=chartFixture(),s=combo.sheets[0];addChart(combo,{id:'explicit-combo',type:'combo',...chartSeriesPlan(rows.map((row,i)=>({...row,categories:'A2:A5',type:i?'line':'bar',secondary:!!i})),'combo',combo,s.id)});await save('explicit-combo-series',combo);
 }
+
+{
+ const book=chartFixture(),sheet=book.sheets[0];addChart(book,{id:'original-33',type:'bar',series:Array.from({length:33},(_,i)=>({name:'계열 '+(i+1),type:'bar',color:'#4472c4',valRef:{sheetId:sheet.id,range:'B2:B5'},catRef:{sheetId:sheet.id,range:'A2:A5'}}))});await save('preserved-33-series-chart',book);
+}

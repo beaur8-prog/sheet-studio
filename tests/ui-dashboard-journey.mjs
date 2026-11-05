@@ -89,7 +89,7 @@ try{
  await verifyDashboard(400);const originalSeries=(await book()).sheets[1].charts[0].series;
  await page.locator('[data-edit-chart]').click();assert.equal(await page.locator('#chart-range').isVisible(),false);
  assert.match(await page.locator('#chart-source-references').textContent(),/'Sheet2'!\$D\$2:\$D\$5/);
- await page.locator('#chart-convert').check();assert.equal(await page.locator('#chart-range').isVisible(),true);assert.equal(await page.locator('#chart-source-references').isVisible(),false);
+ await page.locator('#chart-convert').check();assert.equal(await page.locator('#chart-series-editor').isVisible(),true);await page.locator('#chart-data-mode').selectOption('range');assert.equal(await page.locator('#chart-range').isVisible(),true);assert.equal(await page.locator('#chart-source-references').isVisible(),false);
  await page.locator('#chart-convert').uncheck();assert.equal(await page.locator('#chart-range').isVisible(),false);await apply();
  assert.deepEqual((await book()).sheets[1].charts[0].series,originalSeries);
  record('reopened chart settings show original per-series references and retain them after conversion is cancelled');
