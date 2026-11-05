@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import {fixture,spec} from './fixtures/pivot.mjs';
 import {applyPivot} from '../src/pivot.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
-import {serializeWorkbook,parseWorkbook} from '../src/engine.mjs';
+import {serializeWorkbook,parseWorkbook,address,parseAddress} from '../src/engine.mjs';
 import {nativePivotIndex,preservedPivots,removePreservedPivots,validateNativePivotArchive} from '../src/native-pivots.mjs';
 import {cellEditError} from '../src/cell-constraints.mjs';
 import {structuralWorkbookPlan} from '../src/workbook-structure.mjs';
@@ -101,4 +101,18 @@ test('custom native captions and legacy report styling are retained rather than 
   const read=await readSpreadsheet(await bytes(zip),'caption.xlsx');assert.equal(read.sheets[1].pivot,undefined);assert.ok(read.xlsxPivotArchive);
   const saved=await JSZip.loadAsync((await writeSpreadsheet(read)).data),[entry]=await nativePivotIndex(saved,read);assert.match(await saved.file(entry.path).async('string'),/name="분기 합산"/);assert.match(await saved.file(entry.path).async('string'),/PivotStyleLight16/);
  }
+});
+
+test('custom pivot style definitions are archived and cannot be silently lost in an XLSX copy',async()=>{
+ const {zip}=await sample();zip.remove('customXml/sheetStudioPivots.xml');const table='xl/pivotTables/pivotTable1.xml';zip.file(table,(await zip.file(table).async('string')).replace('PivotStyleMedium9','MyCustomPivotStyle'));
+ const {xml,stringify,child}=await import('../src/chart-xml.mjs'),styles=xml(await zip.file('xl/styles.xml').async('string')),root=styles.documentElement;let container=child(root,'tableStyles');if(!container){container=styles.createElementNS(root.namespaceURI,'tableStyles');root.appendChild(container);}const definition=xml('<tableStyle xmlns="'+root.namespaceURI+'" name="MyCustomPivotStyle" pivot="1" table="0" count="0"/>').documentElement;container.appendChild(styles.importNode(definition,true));container.setAttribute('count','1');zip.file('xl/styles.xml',stringify(styles));
+ const book=await readSpreadsheet(await bytes(zip),'custom-style.xlsx');
+ if(!book.xlsxPivotArchive.blockReason){const exported=await JSZip.loadAsync((await writeSpreadsheet(book)).data);assert.match(await exported.file('xl/styles.xml').async('string'),/MyCustomPivotStyle/,'a save without a guard must not drop the referenced custom style definition');}
+ assert.match(book.xlsxPivotArchive.blockReason,/고급 서식/);assert.ok(book.xlsxPivotArchive.parts['xl/styles.xml']);assert.match(Buffer.from(book.xlsxPivotArchive.parts['xl/styles.xml'].data,'base64').toString(),/MyCustomPivotStyle/);assert.deepEqual(parseWorkbook(serializeWorkbook(book)).xlsxPivotArchive,book.xlsxPivotArchive);await assert.rejects(writeSpreadsheet(book),/원본 피벗의 XLSX/);
+});
+
+test('legacy metadata cannot move an externally relocated native pivot back to its former origin',async()=>{
+ const {zip,book}=await sample(),{xml,stringify,all,attr,child}=await import('../src/chart-xml.mjs');zip.file('customXml/sheetStudioPivots.xml','<pivots xmlns="urn:sheet-studio:pivots:1">'+JSON.stringify([{sheet:'피벗',source:'원본',spec:book.sheets[1].pivot,rowOffset:0}])+'</pivots>');
+ const path='xl/worksheets/sheet2.xml',doc=xml(await zip.file(path).async('string'));for(const node of all(doc,'row'))node.setAttribute('r',String(Number(attr(node,'r'))+4));for(const node of all(doc,'c')){const p=parseAddress(attr(node,'r'));node.setAttribute('r',address(p.r+4,p.c+5));}child(doc.documentElement,'dimension')?.setAttribute('ref','F5:I8');zip.file(path,stringify(doc));const table='xl/pivotTables/pivotTable1.xml';zip.file(table,(await zip.file(table).async('string')).replace('ref="A1:D4"','ref="F5:I8"'));
+ let read=await readSpreadsheet(await bytes(zip),'relocated.xlsx');assert.equal(read.sheets[1].pivot,undefined);assert.equal(read.sheets[1].cells.I8.raw,'160');assert.equal(read.sheets[1].cells.A1,undefined);assert.equal(read.xlsxPivotArchive.sheets[0].range,'F5:I8');for(let i=0;i<3;i++){read=await readSpreadsheet((await writeSpreadsheet(read)).data,'relocated.xlsx');assert.equal(read.sheets[1].cells.I8.raw,'160');assert.equal(read.xlsxPivotArchive.sheets[0].range,'F5:I8');}
 });

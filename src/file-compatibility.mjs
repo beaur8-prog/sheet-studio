@@ -24,7 +24,7 @@ export async function readCompatibilityRisks(zip,filename){
     }
     if(count)risks.push({kind,count});
   }
-  return risks.length?{version:1,sourceName:String(filename).split(/[\\/]/).at(-1).slice(0,255),risks}:undefined;
+  return risks.length?{version:1,sourceName:String(filename).split(/[\\/]/).at(-1).replace(/[\u0000-\u001f]/g,'_').slice(0,255)||'원본.xlsx',risks}:undefined;
 }
 
 export function validateCompatibilityReview(value){
@@ -42,6 +42,7 @@ export function compatibilitySummary(book){
   const tables=count(s=>s.tables?.length||0);if(tables)rows.push({label:`Excel 표 ${tables}개`,mode:book.nativeSource||book.xlsxPivotArchive?'편집 제한':'편집 가능',detail:'표 범위·계산 열·요약·필터와 지원하는 구조화 참조를 유지합니다.'});
   const charts=count(s=>s.charts?.length||0);if(charts)rows.push({label:`차트 ${charts}개`,mode:'유형별 지원',detail:'지원 유형은 편집하며 다른 유형은 원본 보존과 미리 보기의 범위가 다릅니다.'});
   const pivots=count(s=>s.pivot?1:0);if(pivots)rows.push({label:`앱 피벗 ${pivots}개`,mode:'편집 가능',detail:'필드 편집과 새로 고침을 지원합니다.'});
+  const staticPivots=count(s=>!s.pivot&&s.pivotImportNotice&&!book.xlsxPivotArchive?.sheets.some(p=>p.sheetId===s.id)?1:0);if(staticPivots)rows.push({label:`정적 피벗 결과 ${staticPivots}개`,mode:'셀 유지',detail:'외부에서 변경된 정적 결과를 이전 앱 설정으로 재계산하지 않습니다. 원본 자료에서 새 피벗을 만들 수 있습니다.'});
   const native=book.xlsxPivotArchive?.sheets.length||0;if(native)rows.push({label:`원본 피벗 ${native}개`,mode:book.xlsxPivotArchive.blockReason?'저장 제한':'원본 보존',detail:book.xlsxPivotArchive.blockReason||'저장된 결과와 기본 피벗 정의·캐시를 유지합니다. 새로 고침은 Excel에서 진행하세요.'});
   if(book.xlsxExternalLinks)rows.push({label:'외부 통합 문서 연결',mode:'원본 보존',detail:'연결 정의와 저장값을 보관하며 외부 파일을 열거나 갱신하지 않습니다.'});
   if(book.nativeSource)rows.push({label:'VBA·XLSM',mode:'Excel 연결',detail:'VBA 실행과 매크로 보존 저장에는 Windows 데스크톱 Excel이 필요합니다.'});

@@ -90,3 +90,9 @@ test('table-header replacement updates cross-sheet formulas and preservation met
   assert.equal(plan.book.sheets[1].cells.B1.raw,'=SUM(Sales[Total])');assert.equal(plan.book.sheets[1].cells.A1.cachedFormula,'=SUM(Sales[Total])');assert.equal(JSON.stringify(b),before);
   const h=createHistory(b);h.begin();applyReplacementPatch(h.book,patch);h.commit();assert.equal(h.book.sheets[1].cells.A1.cachedFormula,'=SUM(Sales[Total])');h.undo();assert.equal(h.book.sheets[1].cells.A1.cachedFormula,'=SUM(Sales[Amount])');
 });
+
+test('ordinary table replacements do not duplicate unchanged formula metadata, while header renames stay isolated',async()=>{
+ const {createTablePlan}=await import('../src/tables.mjs'),b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'Value'},B1:{raw:'Flag'},B2:{raw:'marker'}};for(let r=2;r<=1001;r++)s.cells['A'+r]={raw:'=1+1',cachedFormula:'=SUM(LargeTable[Value])',cachedValue:2,xlsxFormula:{raw:'=1+1',formula:'1+1'},style:{}};const p=createTablePlan(b,s,{range:'A1:B1001',name:'LargeTable'});s.tables=[p.table];for(const u of p.updates)s.cells[u.key]=u.cell;const before=JSON.stringify(b);
+ const ordinary=replaceWorkbookPlan(b,{sheetId:s.id,query:'marker',replacement:'new'});assert.equal(ordinary.count,1);assert.equal(ordinary.book.sheets[0].cells.A2,s.cells.A2);assert.equal(JSON.stringify(b),before);
+ const renamed=replaceWorkbookPlan(b,{sheetId:s.id,query:'Value',replacement:'Amount',wholeCell:true});assert.equal(renamed.book.sheets[0].cells.A2.cachedFormula,'=SUM(LargeTable[Amount])');assert.equal(s.cells.A2.cachedFormula,'=SUM(LargeTable[Value])');assert.equal(JSON.stringify(b),before);
+});

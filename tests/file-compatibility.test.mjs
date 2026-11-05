@@ -37,3 +37,7 @@ test('review metadata rejects unknown/duplicate kinds, counts and injected sourc
   const value={version:1,sourceName:'문서.xlsx',risks:[{kind:'ole',count:1}]};validateCompatibilityReview(value);
   for(const bad of [{...value,sourceName:'\0bad'}, {...value,risks:[{kind:'invented',count:1}]},{...value,risks:[{kind:'ole',count:0}]},{...value,risks:[...value.risks,...value.risks]}])assert.throws(()=>validateCompatibilityReview(bad),/호환성/);
 });
+
+test('legal filenames containing line breaks do not make feature-review metadata invalidate a workbook',async()=>{
+ const zip=await base();zip.file('xl/embeddings/object.bin',new Uint8Array([1]));const book=await readSpreadsheet(await zip.generateAsync({type:'uint8array'}),'보고서\n.xlsx');assert.doesNotThrow(()=>serializeWorkbook(book));assert.equal(book.xlsxCompatibility.sourceName,'보고서_.xlsx');
+});

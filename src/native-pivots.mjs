@@ -41,6 +41,8 @@ export function nativePivotLayout(entry){
 export function legacyPivotMatches(entry,stored){
   if(!entry)return false;
   const {table,definition}=entry,spec=stored.spec;
+  const location=child(table,'location'),bounds=tableBounds(attr(location,'ref'));
+  if(!bounds||bounds.c1!==0||bounds.r1!==(stored.rowOffset||0)||attr(location,'firstHeaderRow','1')!=='1'||attr(location,'firstDataRow','1')!=='1'||Number(attr(location,'firstDataCol','1'))!==Math.max(1,spec.rows.length))return false;
   const fields=children(child(definition,'cacheFields'),'cacheField'),names=fields.map(f=>attr(f,'name'));
   const source=child(child(definition,'cacheSource'),'worksheetSource');
   if(attr(source,'sheet')!==stored.source||attr(source,'ref').replace(/\$/g,'')!==spec.sourceRange||attr(source,'name'))return false;
@@ -71,11 +73,14 @@ export function legacyPivotMatches(entry,stored){
 
 export async function preserveNativePivots(zip,book,entries){
   if(!entries.length)return;
-  const roots=[...new Set(entries.map(e=>e.path))],parts=await capturePartTree(zip,roots,{maxBytes:24_000_000,maxFiles:1000});
   const styles=zip.file('xl/styles.xml')?xml(await zip.file('xl/styles.xml').async('string')):null;
+  const customStyles=new Set(all(styles,'tableStyle').map(n=>attr(n,'name'))),advanced=entries.some(e=>attr(child(e.definition,'cacheSource'),'type')!=='worksheet'||all(e.table,'formats').length||all(e.table,'conditionalFormats').length||all(e.table,'extLst').length||all(e.definition,'extLst').length||customStyles.has(attr(child(e.table,'pivotTableStyleInfo'),'name')))||Object.keys(zip.files).some(p=>/^xl\/(?:slicerCaches|slicers|timelineCaches|timelines|model)\//.test(p));
+  // Preserve the original style definitions in blocked app documents as well;
+  // their differential-format IDs cannot yet be safely remapped for XLSX.
+  const roots=[...new Set([...entries.map(e=>e.path),...(advanced&&styles?['xl/styles.xml']:[])])],parts=await capturePartTree(zip,roots,{maxBytes:24_000_000,maxFiles:1000});
   const formats=Object.fromEntries(all(styles,'numFmt').map(n=>[attr(n,'numFmtId'),attr(n,'formatCode')]));
   book.xlsxPivotArchive={version:1,parts,formats,sheets:entries.map(e=>({sheetId:e.sheetId,path:e.path,cache:e.cache,cacheId:e.cacheId,...(attr(child(e.table,'location'),'ref')?{range:attr(child(e.table,'location'),'ref').replace(/\$/g,'')}:{} )})),names:Object.fromEntries(book.sheets.map(s=>[s.id,s.name]))};
-  if(entries.some(e=>attr(child(e.definition,'cacheSource'),'type')!=='worksheet'||all(e.table,'formats').length||all(e.table,'conditionalFormats').length||all(e.table,'extLst').length||all(e.definition,'extLst').length)||Object.keys(zip.files).some(p=>/^xl\/(?:slicerCaches|slicers|timelineCaches|timelines|model)\//.test(p)))book.xlsxPivotArchive.blockReason='외부 데이터·슬라이서·고급 서식이 연결된 원본 피벗의 XLSX 보존 저장은 아직 지원하지 않습니다. Excel에서 저장하거나 일반 범위로 변환한 사본을 저장하세요. 앱 문서는 원본 정보를 유지합니다.';
+  if(advanced)book.xlsxPivotArchive.blockReason='외부 데이터·슬라이서·고급 서식이 연결된 원본 피벗의 XLSX 보존 저장은 아직 지원하지 않습니다. Excel에서 저장하거나 일반 범위로 변환한 사본을 저장하세요. 앱 문서는 보관한 피벗 정의·캐시를 유지합니다. 원본 파일도 별도로 보관하세요.';
 }
 
 export function validateNativePivotArchive(value){
@@ -93,8 +98,8 @@ export function preservedPivotTouches(book,id,selection){
   const b=typeof selection==='string'?tableBounds(selection):selection;
   return preservedPivots(book,id).some(item=>{const a=item.range&&tableBounds(item.range);return !a||!b||a.r1<=b.r2&&a.r2>=b.r1&&a.c1<=b.c2&&a.c2>=b.c1;});
 }
-export function pivotHasExtraCells(target,entry,actual){
-  const b=actual&&tableBounds(attr(child(actual.table,'location'),'ref'));if(!b)return false;
+export function pivotHasExtraCells(target,entry,actual,range){
+  const b=tableBounds(range||actual&&attr(child(actual.table,'location'),'ref'));if(!b)return false;
   if(target.merges?.length||target.tables?.length)return true;
   const pages=entry.rowOffset?entry.rowOffset-1:0;
   const filters=entry.spec.filters.filter(f=>!entry.spec.rows.includes(f.field)&&!entry.spec.columns.includes(f.field));

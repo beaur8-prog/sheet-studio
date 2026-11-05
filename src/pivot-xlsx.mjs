@@ -18,6 +18,16 @@ const META='customXml/sheetStudioPivots.xml';
 const META_NS='urn:sheet-studio:pivots:1';
 const typed=value=>value===''||value===null?'<m/>':typeof value==='number'?`<n v="${value}"/>`:typeof value==='boolean'?`<b v="${value?1:0}"/>`:`<s v="${esc(value)}"/>`;
 
+// Zero-match reports have no native PivotTable to compare. Restore their app
+// settings only while the static zero-result cells and placement still match.
+function unchangedEmptyReport(target,entry){
+  const s=entry.spec,labels=s.values.map(v=>`${aggregations[v.aggregate]}: ${v.field}`),header=s.rows.length?[...s.rows]:['행 레이블'];
+  if(!s.columns.length)header.push(...labels);else if(s.totals)header.push(...labels.map(v=>'총합계 · '+v));
+  const matrix=[header];if(!s.rows.length||s.totals){const row=s.rows.length?['총합계',...Array(s.rows.length-1).fill('')]:['전체'];if(!s.columns.length||s.totals)row.push(...s.values.map(v=>['sum','count','countNumbers'].includes(v.aggregate)?0:''));matrix.push(row);}
+  const offset=entry.rowOffset||0,range=address(offset,0)+':'+address(offset+matrix.length-1,header.length-1);if(pivotHasExtraCells(target,entry,null,range))return false;
+  return matrix.every((row,r)=>row.every((value,c)=>{const raw=target.cells[address(r+offset,c)]?.raw||'';return typeof value==='number'?raw===String(value):!raw.startsWith('=')&&raw.replace(/^'/,'')===value;}));
+}
+
 async function addRel(zip,path,body){const before=zip.file(path)?await zip.file(path).async('string'):rels('');zip.file(path,before.replace('</Relationships>',body+'</Relationships>'));}
 
 /** App definitions are separate custom XML; native Excel PivotTable/cache parts
@@ -101,6 +111,7 @@ export async function restorePivotParts(bytes,workbook,{refresh=true}={}){
     if(entry.rowOffset!==undefined&&(!Number.isInteger(entry.rowOffset)||entry.rowOffset<0||entry.rowOffset>17))throw new Error('피벗 위치 정보가 올바르지 않습니다.');
     const actual=native.filter(n=>n.sheetId===target.id),empty=entry.nativeAbsent===true||!actual.length&&entry.spec.filters.some(f=>!f.values.length);
     const compatible=empty&&!actual.length||actual.length===1&&(typeof entry.nativeLayout==='string'?entry.nativeLayout===nativePivotLayout(actual[0]):legacyPivotMatches(actual[0],entry));
+    if(empty&&!actual.length&&!unchangedEmptyReport(target,entry)){target.pivotImportNotice='외부에서 바꾼 정적 피벗 결과와 추가 셀을 유지했습니다. 필요하면 원본 자료에서 새 피벗을 만드세요.';continue;}
     const extras=actual.length===1&&pivotHasExtraCells(target,entry,actual[0]);
     if(!compatible||extras){target.pivotImportNotice=extras?'피벗 바깥에 추가된 셀과 원본 피벗 결과를 유지합니다. 새로 고침은 Excel에서 진행하세요.':'외부에서 변경된 피벗 설정과 결과를 유지합니다. 필드 편집·새로 고침은 Excel에서 진행하세요.';continue;}
     for(const item of actual)retained.delete(item);

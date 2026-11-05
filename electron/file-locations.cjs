@@ -63,13 +63,18 @@ function createFileLocations({ stateFile, documents }) {
   }
   async function assertCopyTarget(documentId,file,protectedName){
     await load();const source=originals.get(documentId);
+    const requireNew=async()=>{const existing=await fs.lstat(file).catch(error=>{if(error.code==='ENOENT')return null;throw error;});if(existing)throw Error('원본 위치를 확인할 수 없어 기존 파일에 덮어쓸 수 없습니다. 새 사본 이름을 지정하세요.');};
     const normalize=value=>{const full=path.resolve(value).normalize('NFC');return process.platform==='win32'||process.platform==='darwin'?full.toLocaleLowerCase('en-US'):full;};
     if(source){
       const [first,second]=await Promise.all([fs.realpath(source).catch(()=>source),fs.realpath(file).catch(()=>file)]);
       if(normalize(first)===normalize(second))throw Error('원본 파일에는 덮어쓸 수 없습니다. 사본의 이름이나 저장 폴더를 바꾸세요.');
       const [a,b]=await Promise.all([fs.stat(source).catch(()=>null),fs.stat(file).catch(()=>null)]);
       if(a&&b&&a.ino&&a.ino===b.ino&&a.dev===b.dev)throw Error('원본과 같은 파일입니다. 다른 사본 이름으로 저장하세요.');
-    }else if(protectedName&&path.basename(file).normalize('NFC').toLocaleLowerCase('en-US')===path.basename(protectedName).normalize('NFC').toLocaleLowerCase('en-US'))throw Error('원본과 다른 사본 이름으로 저장하세요.');
+      if(!a)await requireNew();
+    }else{
+      if(protectedName&&path.basename(file).normalize('NFC').toLocaleLowerCase('en-US')===path.basename(protectedName).normalize('NFC').toLocaleLowerCase('en-US'))throw Error('원본과 다른 사본 이름으로 저장하세요.');
+      await requireNew();
+    }
   }
   return { directory, remember, stage, confirm, assertCopyTarget };
 }

@@ -79,17 +79,18 @@ export function replaceWorkbookPlan(book,options){
   }
   if(totalText-removedText+addedText>MAX_DOCUMENT_TEXT_CHARS)throw Error('바꾸기 결과가 문서의 100,000,000자 한도를 초과합니다.');
   if(!count)return {book:null,count:0};
-  const touched=new Set(groups.map(g=>g.sheetId)),hasTables=book.sheets.some(s=>s.tables?.length);
+  for(const group of groups)group.headerPlan=prepareTableHeaderEdits(book,book.sheets.find(s=>s.id===group.sheetId),group.updates);
+  const touched=new Set(groups.map(g=>g.sheetId)),renamesTables=groups.some(g=>g.headerPlan.tables.length);
   const next={...book,sheets:book.sheets.map(source=>{
-    const sheet={...source,cells:touched.has(source.id)||hasTables?{...source.cells}:source.cells};
+    const sheet={...source,cells:touched.has(source.id)||renamesTables?{...source.cells}:source.cells};
     for(const field of ['tables','charts','conditionalRules','xlsxFeatures'])if(source[field]!==undefined)sheet[field]=cloneData(source[field]);
     // Table renames can change preservation baselines even when a current raw
     // formula no longer contains the old reference. Never mutate those on the source.
-    if(hasTables)for(const key in sheet.cells){const cell=sheet.cells[key];if(cell.xlsxFormula||cell.cachedFormula||cell.xlsxExternal||cell.xlsxMetadata)sheet.cells[key]=cloneData(cell);}
+    if(renamesTables)for(const key in sheet.cells){const cell=sheet.cells[key];if(cell.xlsxFormula||cell.cachedFormula||cell.xlsxExternal||cell.xlsxMetadata)sheet.cells[key]=cloneData(cell);}
     return sheet;
   }),...(book.chartNames?{chartNames:cloneData(book.chartNames)}:{})};next.referenceCachesValid=false;const applied=[];
-  for(const {sheetId,updates} of groups){
-    const sheet=next.sheets.find(s=>s.id===sheetId),plan=prepareTableHeaderEdits(next,sheet,updates);
+  for(const {sheetId,headerPlan:plan} of groups){
+    const sheet=next.sheets.find(s=>s.id===sheetId);
     assertCellUpdates(next,sheet,plan.updates,{editAnchor:true});assertNativeCellTransfers(next,sheet,plan.updates);
     applied.push({sheet,plan,updates:plan.updates});
   }

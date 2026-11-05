@@ -45,3 +45,11 @@ test('filtered report formatting, notes, sizes and conditional ranges survive re
    book=await readSpreadsheet(out.data,'styled.xlsx');const t=book.sheets[1];assert.ok(t.pivot);assert.equal(t.cells.B2.style.numberFormat,'0.000 "원"');assert.equal(t.cells.B2.style.color.toLowerCase(),'#aa2255');assert.equal(t.cells.B2.note,'첫 상품');assert.equal(t.rowHeights[1],56);assert.equal(Math.round(t.columnWidths[1]),230);assert.equal(t.conditionalRules[0].range,'B2:B3');
  }
 });
+
+test('zero-match reports without a native pivot keep external edits inside or outside their static results',async()=>{
+ for(const change of ['outside','inside']){
+  const b=fixture(),s={...spec(),rows:['상품'],columns:[],filters:[{field:'지역',values:[]}]},target={id:'pivot',name:'피벗',charts:[]};applyPivot(b,target,s);b.sheets.push(target);const zip=await JSZip.loadAsync((await writeSpreadsheet(b)).data),path='xl/worksheets/sheet2.xml';let source=await zip.file(path).async('string');assert.equal(zip.file('xl/pivotTables/pivotTable1.xml'),null);
+  if(change==='outside')source=source.replace('</sheetData>','<row r="10"><c r="F10" t="inlineStr"><is><t>추가 자료</t></is></c></row></sheetData>');else{assert.match(source,/<c r="B4"[^>]*>[\s\S]*?<v>0<\/v>/);source=source.replace(/(<c r="B4"[^>]*>[\s\S]*?<v>)0(<\/v>)/,(_,a,b)=>a+'999'+b);}zip.file(path,source);
+  let read=await readSpreadsheet(await zip.generateAsync({type:'uint8array'}),'static-edited.xlsx');assert.equal(read.sheets[1].pivot,undefined);assert.match(read.sheets[1].pivotImportNotice,/정적/);for(let i=0;i<3;i++){assert.equal(read.sheets[1].cells[change==='outside'?'F10':'B4'].raw,change==='outside'?'추가 자료':'999');read=await readSpreadsheet((await writeSpreadsheet(read)).data,'static-edited.xlsx');}
+ }
+});

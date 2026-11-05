@@ -19,3 +19,10 @@ test('feature-loss copies protect the original path, aliases and restart recover
     assert.equal(await fs.readFile(source,'utf8'),'ORIGINAL');
   }finally{await fs.rm(dir,{recursive:true,force:true});}
 });
+
+test('when the original path is unknown or gone, feature-loss copies require a new file rather than an unverified alias',async()=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'sheet-copy-unknown-'));try{
+  const source=path.join(dir,'original.xlsx'),alias=path.join(dir,'different-name.xlsx'),fresh=path.join(dir,'new-copy.xlsx'),stateFile=path.join(dir,'locations.json'),locations=createFileLocations({stateFile,documents:dir}),id=randomUUID();await fs.writeFile(source,'KEEP');await fs.link(source,alias);
+  await assert.rejects(locations.assertCopyTarget(id,alias,'original.xlsx'),/새 사본 이름/);await locations.assertCopyTarget(id,fresh,'original.xlsx');await locations.confirm({token:locations.stage(source),documentId:id});await fs.unlink(source);await assert.rejects(locations.assertCopyTarget(id,alias,'original.xlsx'),/새 사본 이름/);await locations.assertCopyTarget(id,fresh,'original.xlsx');assert.equal(await fs.readFile(alias,'utf8'),'KEEP');
+ }finally{await fs.rm(dir,{recursive:true,force:true});}
+});
