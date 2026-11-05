@@ -80,6 +80,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 ## 분석과 검증
 
+- [Excel 동작 비교 기반 개선 계획](docs/EXCEL-BEHAVIOR-IMPROVEMENT-PLAN.md): 현재 구현과 남은 차이, 개선 우선순위, 21개 비교 시나리오와 완료 기준
 - [분석 요약](docs/ANALYSIS.md): 네이티브 분석과 화면 관찰의 범위 및 구현과의 구분
 - [검증 기록](VALIDATION.md): 테스트 실행과 실행 파일 확인
 - `node tests/ui-cell-editing.mjs --packaged`: 화면 갱신 중 더블클릭, 셀 안 커서·서식·입력·취소·병합·확대 상태 검사
