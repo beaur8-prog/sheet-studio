@@ -83,6 +83,7 @@ export function validateNativePivotArchive(value){
 }
 
 export const preservedPivots=(book,id)=>book.xlsxPivotArchive?.sheets.filter(s=>s.sheetId===id)||[];
+export function nativePivotNames(book){return new Set((book.xlsxPivotArchive?.sheets||[]).map(item=>attr(xml(new TextDecoder().decode(Uint8Array.from(atob(book.xlsxPivotArchive.parts[item.path].data),c=>c.charCodeAt(0)))).documentElement,'name')));}
 export function removePreservedPivots(book,id){
   if(!book.xlsxPivotArchive)return;
   book.xlsxPivotArchive.sheets=book.xlsxPivotArchive.sheets.filter(s=>s.sheetId!==id);
@@ -99,7 +100,7 @@ export async function addNativePivotParts(bytes,book,names){
   for(const [id,name] of Object.entries(archive.names))if(!book.sheets.some(s=>s.id===id&&s.name===name))throw Error('원본 피벗의 시트 연결을 보존할 수 없습니다. 시트 구성은 Excel에서 변경하세요.');
   const {default:JSZip}=await import('jszip'),zip=await JSZip.loadAsync(bytes),types=xml(await zip.file('[Content_Types].xml').async('string')),content=contentTypeWriter(types);
   const wb=xml(await zip.file('xl/workbook.xml').async('string')),wbRels=xml(await zip.file('xl/_rels/workbook.xml.rels').async('string'));
-  let caches=child(wb.documentElement,'pivotCaches');if(!caches){caches=wb.createElementNS(NS,'pivotCaches');wb.documentElement.insertBefore(caches,child(wb.documentElement,'calcPr')||child(wb.documentElement,'extLst')||null);}
+  let caches=child(wb.documentElement,'pivotCaches');if(!caches){caches=wb.createElementNS(NS,'pivotCaches');wb.documentElement.insertBefore(caches,children(wb.documentElement).find(n=>['smartTagPr','smartTagTypes','webPublishing','fileRecoveryPr','webPublishObjects','extLst'].includes(n.localName))||null);}
   let nextId=Math.max(0,...children(caches,'pivotCache').map(n=>Number(attr(n,'cacheId'))))+1;
   const prefix='xl/sheetStudioPivotArchive/',map=path=>prefix+path.replace(/^(?:xl\/sheetStudioPivotArchive\/)+/,'');
   await writeStoredParts(zip,archive.parts,map,content);

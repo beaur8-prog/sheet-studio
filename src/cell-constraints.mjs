@@ -33,6 +33,7 @@ export function cellEditError(book,sheet,ref){
 }
 export function assertCellUpdates(book,sheet,updates,{editAnchor=false,formatOnly=false}={}){
   if(formatOnly){if(!protectionAllows(sheet,'formatCells'))throw Error('이 시트에서는 셀 서식을 변경할 수 없습니다.');return;}
+  if(updates.length&&preservedPivots(book,sheet.id).length)throw Error('원본 피벗의 결과는 Excel에서 새로 고치거나 일반 범위로 변환하세요.');
   const keys=new Set(updates.map(u=>u.key));
   for(const key of keys)if(cellIsLocked(book,sheet,key))throw Error('선택 범위에 보호된 셀이 있습니다. 변경을 적용하지 않았습니다.');
   for(const a of arrayRegions(sheet)){

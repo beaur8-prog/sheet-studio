@@ -74,3 +74,12 @@ test('advanced native pivot dependencies block lossy XLSX saving while app docum
   await assert.rejects(writeSpreadsheet(book),/원본 피벗의 XLSX/);
   removePreservedPivots(book,book.sheets[1].id);await writeSpreadsheet(book);
 });
+
+test('new app pivots coexist with preserved pivots without renaming their original identities',async()=>{
+  const {zip}=await sample();zip.remove('customXml/sheetStudioPivots.xml');const book=await readSpreadsheet(await bytes(zip),'mixed.xlsx');
+  const target={id:'new-pivot',name:'새 피벗',charts:[]};applyPivot(book,target,{...spec(),sourceSheetId:book.sheets[0].id});book.sheets.push(target);
+  const out=await writeSpreadsheet(book),saved=await JSZip.loadAsync(out.data),entries=await nativePivotIndex(saved,book),{attr}=await import('../src/chart-xml.mjs');
+  assert.equal(entries.length,2);assert.equal(new Set(entries.map(e=>attr(e.table,'name'))).size,2);
+  assert.equal(attr(entries.find(e=>e.sheetId===book.sheets[1].id).table,'name'),'SheetStudioPivot1');
+  const again=await readSpreadsheet(out.data,'mixed-again.xlsx');assert.ok(again.sheets[2].pivot);assert.equal(preservedPivots(again,again.sheets[1].id).length,1);
+});

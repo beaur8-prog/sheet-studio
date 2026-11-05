@@ -53,6 +53,8 @@ import {installChartInteractions} from './chart-interactions.mjs';
 import {installDimensionInteractions} from './dimension-interactions.mjs';
 import {createVbaUI} from './vba-ui.mjs';
 import {createPivotUI} from './pivot-ui.mjs';
+import {createFindUI} from './find-ui.mjs';
+import './find-ui.css';
 import {preservedPivots} from './native-pivots.mjs';
 import {formulaReferences,referenceSlot,cycleReference,rangeReference,referenceColors,completeFormula} from './formula-tools.mjs';
 
@@ -91,7 +93,7 @@ async function afterArrayConstraints(continuation){
  return continuation();
 }
 
-let selection={r:0,c:0,r2:0,c2:0},tab='홈',editing=false,dragging=false,fillStart=null,clipboard=null,dirty=false,zoom=100,showGrid=true,showFormulas=false,searchText='',filteredRows=null,filterEnabled=false,layout,frame=0,menu=null,menuScrollOffsets=new WeakMap(),toastTimer;
+let selection={r:0,c:0,r2:0,c2:0},tab='홈',editing=false,dragging=false,fillStart=null,clipboard=null,dirty=false,zoom=100,showGrid=true,showFormulas=false,filteredRows=null,filterEnabled=false,layout,frame=0,menu=null,menuScrollOffsets=new WeakMap(),toastTimer;
 let editSession=null,editInput=null,referenceDrag=null,keyboardReference=null,pointMode=false,entryRange=null;
 const selectionKey=()=>[sheet().id,selection.r,selection.c,selection.r2,selection.c2].join(':');
 const MAX_ROWS=1048576,MAX_COLS=16384,HEADER_H=25;let HEADER_W=40;
@@ -544,7 +546,7 @@ function sizeCells(axis,mode){
  transformAnchoredObjects(s,beforeDimensions);changed({rebuild:true});
 }
 function visibleCol(c,direction=1){while(c>=0&&c<MAX_COLS&&sheet().columnWidths?.[c]===0)c+=direction;return Math.max(0,Math.min(MAX_COLS-1,c));}
-function findDialog(){modal('찾기 및 바꾸기',`<label>찾을 내용<input id="find-text" value="${esc(searchText)}"></label><label>바꿀 내용<input id="replace-text"></label><p id="find-status">현재 시트의 값과 수식에서 검색합니다.</p>`,[{label:'다음 찾기',primary:true,action:el=>{searchText=el.querySelector('#find-text').value;if(!searchText)return;const keys=Object.keys(sheet().cells).filter(k=>sheet().cells[k].raw.toLowerCase().includes(searchText.toLowerCase())).sort((a,b)=>{const x=parseAddress(a),y=parseAddress(b);return x.r-y.r||x.c-y.c;});if(!keys.length){el.querySelector('#find-status').textContent='검색 결과가 없습니다.';return;}const current=keys.indexOf(address(selection.r,selection.c)),next=keys[(current+1)%keys.length],p=parseAddress(next);select(p.r,p.c,false,true);el.querySelector('#find-status').textContent=`${keys.length}개 발견 · ${next}`;}},{label:'모두 바꾸기',action:el=>{const from=el.querySelector('#find-text').value,to=el.querySelector('#replace-text').value;if(!from||pivotLocked())return;const updates=Object.entries(sheet().cells).filter(([,cell])=>cell.raw.includes(from)).map(([key,cell])=>({key,cell:{...cell,raw:cell.raw.split(from).join(to)}}));const headerPlan=prepareHeaders(updates);if(!headerPlan||!permitUpdates(headerPlan.updates))return;const invalid=validateCellUpdates(book,sheet(),headerPlan.updates);if(invalid)return toast(`${invalid.ref}: ${invalid.message}`);checkpoint();applyTableHeaderEdits(book,sheet(),headerPlan);for(const {key,cell} of headerPlan.updates)sheet().cells[key]=cell;const n=headerPlan.updates.length;changed();el.querySelector('#find-status').textContent=`${n}개 셀을 변경했습니다.`;}}]);}
+function findDialog(){return findUI.open();}
 async function importDesktopFile(file){if(file&&await importFile(new Uint8Array(file.data),file.name,file.originToken))await window.desktop.confirmFile({token:file.locationToken,documentId:documentLocation.id()});}
 function recoverBook(){modal('이전 문서 복구','<p>이전 작업의 복구 문서를 불러옵니다. 현재 편집 중인 문서는 먼저 파일로 저장하세요.</p>',[{label:'복구',primary:true,action:el=>{el.remove();void runBusy('이전 문서를 복구하는 중…',async()=>{const result=await tasks.run('recover');if(!result)return toast('복구할 이전 문서가 없습니다.');checkpoint();book=history.replace(result.book,result.description);if(result.documentId)documentLocation.carry(result.documentId);bindEvaluator();pendingImportToken=result.token;switchSheet(book.activeSheetId||book.sheets[0].id);toast('이전 문서를 복구했습니다. 파일로 저장하세요.');});}}]);}
 async function openFile(){
@@ -650,6 +652,12 @@ function confirmMacroExport(format){modal('매크로를 제외한 사본', '<p>�
 function pivotLocked(){if(sheet().kind==='chart'){toast('차트 전용 시트에서는 셀을 편집할 수 없습니다.');return true;}if(preservedPivots(book,sheet().id).length){toast('원본 피벗의 결과는 Excel에서 새로 고치세요. 직접 편집하려면 일반 범위로 변환하세요.');return true;}if(!sheet().pivot)return false;toast('피벗 결과는 원본을 수정하고 새로 고침하세요. 직접 편집하려면 일반 범위로 변환하세요.');return true;}
 function renderPivotBar(){const bar=$('#pivot-bar');if(!bar)return;const preserved=preservedPivots(book,sheet().id);if(preserved.length){bar.hidden=false;$('#formula').readOnly=true;document.querySelector('.fill-handle').hidden=true;bar.innerHTML='<strong>Excel 피벗 원본 보존</strong><span>'+esc(sheet().pivotImportNotice||'현재 결과와 원본 개체를 유지합니다. 새로 고침은 Excel에서 진행하세요.')+'</span>'+btn('pivot-convert','일반 범위로 변환','grid');return;}bar.hidden=!sheet().pivot;$('#formula').readOnly=!!sheet().pivot;document.querySelector('.fill-handle').hidden=!!sheet().pivot;if(!sheet().pivot){bar.innerHTML='';return;}const spec=sheet().pivot,source=book.sheets.find(s=>s.id===spec.sourceSheetId);bar.innerHTML='<strong>피벗테이블</strong><span>'+esc(source?.name||'원본 없음')+' · '+esc(spec.sourceRange)+'</span>'+btn('pivot','필드 편집','table')+btn('pivot-refresh','새로 고침','redo')+btn('pivot-source','원본 보기','open')+btn('pivot-convert','일반 범위로 변환','grid');}
 const pivotUI=createPivotUI({getWorkbook:()=>book,getSheet:sheet,getRange:()=>{const b=bounds();if(b.r1!==b.r2||b.c1!==b.c2)return rangeLabel();const u=usedBounds();return 'A1:'+address(u.r,u.c);},checkpoint,changed,switchSheet,modal,toast,runBusy,loadSource:(sheetId,range)=>tasks.run('pivot-source',{sheetId,range}),calculate:spec=>tasks.run('pivot-build',{spec})});
+
+const findUI=createFindUI({getWorkbook:()=>book,getSheet:sheet,getRange:bounds,getRevision:()=>tasks.revision,getDocumentId:()=>documentLocation.id(),modal,toast,runBusy,
+ search:options=>tasks.run('find',{options}),
+ navigate:async item=>{if(sheet().id!==item.sheetId&&!switchSheet(item.sheetId))return;const p=parseAddress(item.ref);select(p.r,p.c,false,true);},
+ replace:async(options,isCurrent)=>{const result=await tasks.run('replace-plan',{options});if(!isCurrent())return;if(!result.book)return {count:0};const locationId=documentLocation.id();checkpoint();book=history.replace(result.book,result.description);documentLocation.carry(locationId);bindEvaluator();pendingImportToken=result.token;if(!changed({rebuild:true}))throw Error('바꾸기 결과를 적용하지 못했습니다.');return {count:result.count};}
+});
 const vbaUI=createVbaUI({getWorkbook:()=>book,getDocumentId:documentLocation.id,commitEdit,toast,replaceWorkbook:loaded=>{const id=documentLocation.id();checkpoint();book=history.replace(loaded);documentLocation.carry(id);bindEvaluator();switchSheet(book.activeSheetId);}});
 initialized=true;renderPivotBar();renderRibbon();makeLayout();renderSheets();updateTitle();render();focusGrid();
 globalThis.sheetStudio={getSelection:()=>({...selection,range:bounds()}),evaluateAsync:async addr=>{const result=await tasks.run('calculate',{refs:[[sheet().id,addr]]});return result.values[0][2];},whenIdle:async()=>{do{await tasks.run('calculate',{refs:[]});await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}while(!tasks.calculated);},flushRecovery:()=>tasks.flush(),historyStats:()=>history.stats,getCell:addr=>cloneData(sheet().cells[addr]),getWorkbook:()=>cloneData(history.raw),select:(r,c,r2=r,c2=c)=>{selection={r,c,r2,c2};ensureVisible(r,c);render();},evaluate:(addr)=>evaluateCell(book,sheet().id,addr)};

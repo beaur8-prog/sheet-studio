@@ -4,7 +4,7 @@ import {validatePivot} from './pivot-schema.mjs';
 import {address,transformFormulaReferences} from './engine.mjs';
 import {updateChartReferences} from './chart-model.mjs';
 import {xml} from './chart-xml.mjs';
-import {nativePivotIndex,nativePivotLayout,legacyPivotMatches,preserveNativePivots} from './native-pivots.mjs';
+import {nativePivotIndex,nativePivotLayout,legacyPivotMatches,preserveNativePivots,nativePivotNames} from './native-pivots.mjs';
 
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL='http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
@@ -24,7 +24,7 @@ async function addRel(zip,path,body){const before=zip.file(path)?await zip.file(
 export async function addPivotParts(bytes,workbook,names){
   const pivots=workbook.sheets.filter(s=>s.pivot);
   if(!pivots.length)return bytes;
-  const zip=await JSZip.loadAsync(bytes),definitions=[];
+  const zip=await JSZip.loadAsync(bytes),definitions=[],usedNames=nativePivotNames(workbook);
   let types=await zip.file('[Content_Types].xml').async('string');
   const content=(path,type)=>{const part=`/${path}`;if(!types.includes(`PartName="${part}"`))types=types.replace('</Types>',`<Override PartName="${part}" ContentType="${type}"/></Types>`);};
   let caches='';
@@ -34,6 +34,7 @@ export async function addPivotParts(bytes,workbook,names){
     const entry={sheet:names.get(target.id),source:sourceName||null,spec,rowOffset:pages?pages+1:0};definitions.push(entry);
     const output=buildPivot(workbook,spec),{headers,records}=output.data,n=i+1;
     if(!output.matched){entry.nativeAbsent=true;continue;} // Excel cannot represent an all-items-excluded filter.
+    let pivotName=`SheetStudioPivot${n}`;for(let suffix=2;usedNames.has(pivotName);suffix++)pivotName=`SheetStudioPivot${n}_${suffix}`;usedNames.add(pivotName);
     const fieldIndex=name=>headers.indexOf(name);
     const shared=headers.map((_,c)=>[...new Map(records.map(row=>[scalarKey(row[c]),row[c]])).values()]);
     const sharedFields=headers.map(name=>spec.rows.includes(name)||spec.columns.includes(name)||spec.filters.some(f=>f.field===name));
@@ -65,7 +66,7 @@ export async function addPivotParts(bytes,workbook,names){
       return '<'+tag+' count="'+items.length+'">'+items.join('')+'</'+tag+'>';
     };
     const dataFields=spec.values.map((v,j)=>`<dataField name="${esc(`${aggregations[v.aggregate]}: ${v.field} (${j+1})`)}" fld="${fieldIndex(v.field)}" subtotal="${v.aggregate==='countNumbers'?'countNums':v.aggregate}" baseField="0" baseItem="0"/>`).join('');
-    zip.file(tablePath,`${DECL}<pivotTableDefinition xmlns="${NS}" name="SheetStudioPivot${n}" cacheId="${n}" dataCaption="값" rowGrandTotals="${+spec.totals}" colGrandTotals="${+spec.totals}" compact="0" compactData="0" outline="0" outlineData="0" gridDropZones="0" createdVersion="3" updatedVersion="3" minRefreshableVersion="3"><location ref="A${pageFilters.length?pageFilters.length+2:1}:${address(Math.max(1,output.matrix.length-1)+(pageFilters.length?pageFilters.length+1:0),Math.max(1,output.matrix[0].length-1))}" firstHeaderRow="1" firstDataRow="1" firstDataCol="${Math.max(1,rows.length)}"${pageFilters.length?` rowPageCount="${pageFilters.length}" colPageCount="1"`:''}/><pivotFields count="${headers.length}">${fields}</pivotFields>${axis('rowFields',rows)}${axisItems('rowItems',output.rows,rows)}${axis('colFields',cols)}${axisItems('colItems',output.columns,cols,true)}${pageFilters.length?`<pageFields count="${pageFilters.length}">${pageFilters.map(f=>`<pageField fld="${fieldIndex(f.field)}" hier="-1"/>`).join('')}</pageFields>`:''}<dataFields count="${spec.values.length}">${dataFields}</dataFields><pivotTableStyleInfo name="PivotStyleMedium9" showRowHeaders="1" showColHeaders="1" showRowStripes="1" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>`);
+    zip.file(tablePath,`${DECL}<pivotTableDefinition xmlns="${NS}" name="${esc(pivotName)}" cacheId="${n}" dataCaption="값" rowGrandTotals="${+spec.totals}" colGrandTotals="${+spec.totals}" compact="0" compactData="0" outline="0" outlineData="0" gridDropZones="0" createdVersion="3" updatedVersion="3" minRefreshableVersion="3"><location ref="A${pageFilters.length?pageFilters.length+2:1}:${address(Math.max(1,output.matrix.length-1)+(pageFilters.length?pageFilters.length+1:0),Math.max(1,output.matrix[0].length-1))}" firstHeaderRow="1" firstDataRow="1" firstDataCol="${Math.max(1,rows.length)}"${pageFilters.length?` rowPageCount="${pageFilters.length}" colPageCount="1"`:''}/><pivotFields count="${headers.length}">${fields}</pivotFields>${axis('rowFields',rows)}${axisItems('rowItems',output.rows,rows)}${axis('colFields',cols)}${axisItems('colItems',output.columns,cols,true)}${pageFilters.length?`<pageFields count="${pageFilters.length}">${pageFilters.map(f=>`<pageField fld="${fieldIndex(f.field)}" hier="-1"/>`).join('')}</pageFields>`:''}<dataFields count="${spec.values.length}">${dataFields}</dataFields><pivotTableStyleInfo name="PivotStyleMedium9" showRowHeaders="1" showColHeaders="1" showRowStripes="1" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>`);
     const sheetNumber=workbook.sheets.indexOf(target)+1;
     await addRel(zip,`xl/worksheets/_rels/sheet${sheetNumber}.xml.rels`,rel(`rIdStudioPivot${n}`,'pivotTable',`../pivotTables/pivotTable${n}.xml`));
     await addRel(zip,'xl/_rels/workbook.xml.rels',rel(`rIdStudioCache${n}`,'pivotCacheDefinition',`pivotCache/pivotCacheDefinition${n}.xml`));
