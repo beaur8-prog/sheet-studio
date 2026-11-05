@@ -1,5 +1,15 @@
 # 검증 기록
 
+## 2026-11-05 · Excel 비교 계획의 4시간 후속 개선 (0.7.38 개발, 미배포)
+
+[재현·수정·검증과 21개 시나리오의 남은 범위](docs/EXCEL-FOUR-HOUR-20261105.md), [변경·검토용 산출물](docs/releases/v0.7.38.md). 외부 피벗·정적 결과 보존, 파일 손실 안내·원본 보호, 찾기·바꾸기 범위·미리 보기·일괄 실행 취소, 표 오른쪽 열 확장, 차트 미리 보기·빈 셀 정책, 피벗 서식 유지를 보강했다. 백분율·빈 날짜 왕복, 배열 계산 중 입력 경합, XLSX 글꼴 요소 순서와 작은 창에서 알림의 클릭 차단을 수정했다.
+
+공통 기능 소스 `f7043f7`의 [전체 편집 CI](https://github.com/beaur8-prog/sheet-studio/actions/runs/41969864297)는 Windows·Mac·Ubuntu에서 통과했다. 마지막 알림 CSS 소스 `e6c5f35`의 [세 OS 집중 검사](https://github.com/beaur8-prog/sheet-studio/actions/runs/41973038531)와 [Windows 전체 빌드·설치·업데이트](https://github.com/beaur8-prog/sheet-studio/actions/runs/41973042288)도 통과했다. 최종 단위는 Windows 473개, Mac·Ubuntu 472개 통과·Windows 전용1개 제외, 업데이트 엔진은 각29개 통과다. 마지막 CSS 수정 전/후 계산·입출력 JS 자산은 같고 시작 로더는 CSS 참조만 달라짐을 확인했다.
+
+Mac 완성 앱의 입력·배열·차트·표·피벗·파일 보호·실행 취소·복구와 100만 셀의 가로/세로 저장·재열기, 10만 혼합 셀 문서20회 전환을 통과했다. 100만 숫자/한글 셀의 찾기·바꾸기 각100회와 25만 수식 메타데이터5회 관측도 별도 조건으로 기록했다. 고정 난수 120문서/240회 XLSX 왕복, [Open XML SDK36파일](https://github.com/beaur8-prog/sheet-studio/actions/runs/41969871153), LibreOffice7사례와 [격리 CI의 OS 클립보드](https://github.com/beaur8-prog/sheet-studio/actions/runs/41969998870)를 통과했다. 실제 Microsoft Excel/VBA·OS IME·화면 읽기 검증은 아니며 큰 파일 열기 중 약1.3초의 응답 지연은 남아 있다.
+
+화면이 잠겨 있어 실행 중인 사용자 설치 앱0.7.36·문서·프로필·복구 자료를 유지했다. 최종 Mac 앱과 Windows Setup·체크섬은 `release/0.7.38/`, 상세 증거는 `.verification/excel-four-hour-20261105/`에 보관했다. 사용자 클립보드는 시험에 사용하지 않았고 공개 릴리스·리토스는 갱신하지 않았다.
+
 ## 2026-11-01 · Word 후속 Windows 설치·업데이트 반영 (0.7.37 개발, 미배포)
 
 [Word 변경 검토·수정·검증 범위](docs/releases/v0.7.37.md). 실행 중인 앱의 설치 범위·사용자 지정 폴더 확인, 앱 이름이 없는 폴더 유지, 중복 설치 보수, 한 번만 재실행, 강제 언어 선택 제거, PowerShell 설치 종료 코드·실패 안내를 보강했다. 기존 업데이트 UI·수동 옵션·진행률·문서 저장/복구/종료 및 Mac 파일 선택 동작은 유지했다.
