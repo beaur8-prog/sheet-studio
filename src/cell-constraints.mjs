@@ -1,5 +1,5 @@
 import {unwrap} from './clone.mjs';
-import {address,parseAddress,evaluateCell,evaluateFormula,evaluateFormulaArray,shiftFormula,formulaHasDynamicArrays,formulaHasExternalReferences} from './engine.mjs';
+import {address,parseAddress,evaluateCell,createEvaluator,evaluateFormula,evaluateFormulaArray,shiftFormula,formulaHasDynamicArrays,formulaHasExternalReferences} from './engine.mjs';
 import {calculatedArrayRegions} from './calculated-arrays.mjs';
 import {xml,all,attr} from './chart-xml.mjs';
 import {preservedPivotTouches} from './native-pivots.mjs';
@@ -62,6 +62,7 @@ export function assertSortAllowed(book,sheet,b){
 }
 export function validationRules(sheet){return parsed(sheet.xlsxFeatures?.dataValidations,doc=>all(doc,'dataValidation').map(node=>({
   ranges:attr(node,'sqref').split(/\s+/).map(range).filter(Boolean),anchor:parseAddress(attr(node,'sqref').split(/\s+/)[0]?.split(':')[0]),
+  showInput:['1','true'].includes(attr(node,'showInputMessage')),promptTitle:attr(node,'promptTitle'),prompt:attr(node,'prompt'),
   type:attr(node,'type','any'),operator:attr(node,'operator','between'),allowBlank:['1','true'].includes(attr(node,'allowBlank')),showError:['1','true'].includes(attr(node,'showErrorMessage')),showList:!['1','true'].includes(attr(node,'showDropDown')),
   severity:attr(node,'errorStyle','stop'),title:attr(node,'errorTitle','입력 제한'),message:attr(node,'error','입력한 값이 이 셀의 입력 제한 조건과 일치하지 않습니다.'),
   formulae:['formula1','formula2'].map(name=>all(node,name)[0]?.textContent).filter(v=>v!==undefined),
@@ -76,6 +77,29 @@ function choices(book,sheet,ref,rule){
   return result.values.filter(v=>v!=='');
 }
 export function validationChoices(book,sheet,ref){const rule=forCell(sheet,ref).find(r=>r.type==='list'&&r.showList);if(!rule)return null;return {values:choices(book,sheet,ref,rule),rule};}
+function validationIssue(book,sheet,ref,value,rule,{checkSilent=false,formulaCache,choiceCache}={}){
+  if(rule.type==='any'||!rule.showError&&!checkSilent||value===''&&rule.allowBlank)return null;
+  const position=parseAddress(ref),formula=text=>{
+    const expression=relativeFormula(rule,text,position),cacheKey=/^=[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(expression)?expression:expression+'\0'+ref;
+    if(formulaCache?.has(cacheKey))return formulaCache.get(cacheKey);
+    const value=evaluateFormula(book,sheet.id,expression,{position});
+    if(formulaCache){if(formulaCache.size>=512)formulaCache.delete(formulaCache.keys().next().value);formulaCache.set(cacheKey,value);}return value;
+  };
+  let valid=true,unsupported=false;
+  if(rule.type==='list'){
+    const expression=relativeFormula(rule,rule.formulae[0]||'',position),key=/^="(?:[^"]|"")*"$/.test(expression)?expression:expression+'\0'+ref;
+    let list=choiceCache?.get(key);if(list===undefined){list=choices(book,sheet,ref,rule);if(choiceCache){if(choiceCache.size>=512)choiceCache.delete(choiceCache.keys().next().value);choiceCache.set(key,list);}}
+    if(list)valid=list.some(v=>String(v).toLocaleLowerCase()===String(value).toLocaleLowerCase());else unsupported=true;
+  }else if(rule.type==='custom'){const result=formula(rule.formulae[0]||'');if(result==='#NAME?')unsupported=true;else valid=result===true||typeof result==='number'&&result!==0;}
+  else if(['whole','decimal','date','time','textLength'].includes(rule.type)){
+    const bounds=rule.formulae.map(formula);let n=rule.type==='textLength'?String(value).length:value;
+    if(bounds.some(b=>b==='#NAME?'))unsupported=true;
+    else if(typeof n!=='number'||!Number.isFinite(n)||rule.type==='whole'&&!Number.isInteger(n))valid=false;
+    else{if(rule.type==='date')n=Math.floor(n);if(rule.type==='time')n=((n%1)+1)%1;const [a,b]=bounds;valid=({between:()=>n>=a&&n<=b,notBetween:()=>n<a||n>b,equal:()=>n===a,notEqual:()=>n!==a,lessThan:()=>n<a,lessThanOrEqual:()=>n<=a,greaterThan:()=>n>a,greaterThanOrEqual:()=>n>=a})[rule.operator]?.()??false;}
+  }else unsupported=true;
+  if(unsupported)return {ref,severity:'unsupported',title:'입력 제한 확인',message:'이 셀의 입력 제한 수식은 아직 확인할 수 없습니다. Excel에서 조건을 확인하세요.'};
+  return valid?null:{ref,severity:rule.severity,title:rule.title,message:rule.message};
+}
 export function validateCellUpdates(book,sheet,updates){
   if(!sheet.xlsxFeatures?.dataValidations)return null;
   // A prototype can be a history Proxy: assigning through it would invoke its
@@ -84,22 +108,23 @@ export function validateCellUpdates(book,sheet,updates){
   const cells=new Proxy(sheet.cells,{get:(source,key)=>overrides.has(key)?overrides.get(key):Reflect.get(source,key),ownKeys:source=>[...new Set([...Reflect.ownKeys(source),...overrides.keys()])],getOwnPropertyDescriptor:(source,key)=>overrides.has(key)?{value:overrides.get(key),enumerable:true,configurable:true,writable:true}:Reflect.getOwnPropertyDescriptor(source,key)});
   const snapshot={...book,sheets:book.sheets.map(s=>s.id===sheet.id?{...s,cells}:s)},target=snapshot.sheets.find(s=>s.id===sheet.id);
   for(const update of updates){
-    const ref=update.key,position=parseAddress(ref),value=evaluateCell(snapshot,sheet.id,ref);
-    for(const rule of forCell(sheet,ref)){
-      if(rule.type==='any'||!rule.showError||value===''&&rule.allowBlank)continue;
-      let valid=true,unsupported=false;
-      if(rule.type==='list'){const list=choices(snapshot,target,ref,rule);if(list)valid=list.some(v=>String(v).toLocaleLowerCase()===String(value).toLocaleLowerCase());else unsupported=true;}
-      else if(rule.type==='custom'){const result=evaluateFormula(snapshot,sheet.id,relativeFormula(rule,rule.formulae[0]||'',position),{position});if(result==='#NAME?')unsupported=true;else valid=result===true||typeof result==='number'&&result!==0;}
-      else if(['whole','decimal','date','time','textLength'].includes(rule.type)){
-        const bounds=rule.formulae.map(f=>evaluateFormula(snapshot,sheet.id,relativeFormula(rule,f,position),{position}));
-        let n=rule.type==='textLength'?String(value).length:value;
-        if(bounds.some(b=>b==='#NAME?'))unsupported=true;
-        else if(typeof n!=='number'||!Number.isFinite(n)||rule.type==='whole'&&!Number.isInteger(n))valid=false;
-        else{if(rule.type==='date')n=Math.floor(n);if(rule.type==='time')n=((n%1)+1)%1;const [a,b]=bounds;valid=({between:()=>n>=a&&n<=b,notBetween:()=>n<a||n>b,equal:()=>n===a,notEqual:()=>n!==a,lessThan:()=>n<a,lessThanOrEqual:()=>n<=a,greaterThan:()=>n>a,greaterThanOrEqual:()=>n>=a})[rule.operator]?.()??false;}
-      }else unsupported=true;
-      if(unsupported)return {ref,severity:'unsupported',title:'입력 제한 확인',message:'이 셀의 입력 제한 수식은 아직 확인할 수 없습니다. Excel에서 조건을 확인하세요.'};
-      if(!valid)return {ref,severity:rule.severity,title:rule.title,message:rule.message};
-    }
+    const ref=update.key,value=evaluateCell(snapshot,sheet.id,ref);
+    for(const rule of forCell(sheet,ref)){const issue=validationIssue(snapshot,target,ref,value,rule);if(issue)return issue;}
   }
   return null;
+}
+// Review stored, nonempty inputs separately from entry-time error alerts. This
+// includes imported/pasted/formula values and silent rules, without editing or
+// materializing empty cells in large validation ranges.
+export function reviewValidation(book,sheet,b,{evaluate=createEvaluator(book,sheet.id),limit=100,maxCells=100000}={}){
+  const rules=validationRules(sheet).filter(rule=>rule.type!=='any'&&rule.ranges.some(r=>r.r1<=b.r2&&r.r2>=b.r1&&r.c1<=b.c2&&r.c2>=b.c1));
+  const context={checkSilent:true,formulaCache:new Map(),choiceCache:new Map()},results=[];let checked=0,invalid=0,unsupported=0,truncated=false;
+  if(!rules.length)return {checked,invalid,unsupported,truncated,results};
+  for(const ref in sheet.cells){
+    const p=parseAddress(ref);if(!p||!inside(b,p)||!sheet.cells[ref]?.raw)continue;
+    const applicable=rules.filter(rule=>rule.ranges.some(r=>inside(r,p)));if(!applicable.length)continue;
+    if(checked>=maxCells){truncated=true;break;}checked++;const value=evaluate(ref);
+    for(const rule of applicable){const issue=validationIssue(book,sheet,ref,value,rule,context);if(!issue)continue;if(issue.severity==='unsupported')unsupported++;else invalid++;if(results.length<limit)results.push({...issue,value:String(value).slice(0,200)});break;}
+  }
+  return {checked,invalid,unsupported,truncated,results};
 }

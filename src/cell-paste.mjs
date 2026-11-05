@@ -1,3 +1,4 @@
+import {calendarEntry} from './calendar-entry.mjs';
 import {createEditTextBudget} from './edit-text-budget.mjs';
 import {stripRichTextFormat} from './cell-format-reset.mjs';
 import {cloneData} from './clone.mjs';
@@ -47,7 +48,8 @@ export function pastePlan(sheet, clip, start, options={}) {
     if(mode==='formats')cell=formatCellRecord(old,source);
     else {
       let raw=mode==='values'?scalarRaw(clip.values?.[sr]?.[sc]??source.raw,{error:clip.errors?.[sr]?.[sc]}):source.raw;
-      if(clip.plainText)raw=entryRaw(raw,options.styleAt?.(targetRows[r],targetCols[c])||old.style);
+      let calendar;
+      if(clip.plainText){const style=options.styleAt?.(targetRows[r],targetCols[c])||old.style;raw=entryRaw(raw,style);calendar=calendarEntry(raw,style,{date1904:options.date1904===true,kind:options.calendarKindAt?.(targetRows[r],targetCols[c])});if(calendar)raw=calendar.raw;}
       const dateStyle=source.style?.format==='date'||numberFormatKind(source.style?.numberFormat)==='date';
       if(operation==='none'&&typeof clip.date1904==='boolean'&&clip.date1904!==(options.date1904===true)&&dateStyle&&!raw.startsWith("'")&&raw.trim()!==''&&Number.isFinite(Number(raw)))raw=String(Number(raw)+(clip.date1904?1462:-1462));
       if(mode!=='values'&&!clip.cut&&raw.startsWith('=')){const origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]};raw=transpose?transposeFormula(raw,origin,dest):shiftFormula(raw,dest.r-origin.r,dest.c-origin.c);}
@@ -58,7 +60,7 @@ export function pastePlan(sheet, clip, start, options={}) {
       }
       checkText(raw);cell=mode==='all'&&!clip.plainText?cloneData(source):cloneData(old);
       cell.raw=raw;delete cell.cachedValue;delete cell.cachedFormula;delete cell.cachedError;
-      if(clip.plainText){const inferred=entryNumberStyle(raw,options.styleAt?.(targetRows[r],targetCols[c])||old.style);if(inferred)cell.style={...cell.style,...inferred};}
+      if(clip.plainText){const inferred=calendar?.style||entryNumberStyle(raw,options.styleAt?.(targetRows[r],targetCols[c])||old.style);if(inferred)cell.style={...cell.style,...inferred};}
       if(formulaHasExternalReferences(raw))cell.xlsxExternal={raw};else delete cell.xlsxExternal;
       if(source.xlsxFormula?.shareType==='array'&&arrays){const range=tableBounds(source.xlsxFormula.ref||address(clip.r+sr,clip.c+sc)),origin={r:clip.sourceRows?.[sr]??clip.r+sr,c:clip.sourceCols?.[sc]??clip.c+sc},dest={r:targetRows[r],c:targetCols[c]},rows=range.r2-range.r1+1,cols=range.c2-range.c1+1,b={r1:dest.r,c1:dest.c,r2:dest.r+(transpose?cols:rows)-1,c2:dest.c+(transpose?rows:cols)-1};if((sheet.tables||[]).some(t=>overlaps(tableBounds(t.range),b)))throw Error('표 안에는 배열 수식을 붙여넣을 수 없습니다.');cell.xlsxFormula=cloneData(source.xlsxFormula);cell.xlsxFormula.ref=address(b.r1,b.c1)+':'+address(b.r2,b.c2);cell.xlsxFormula.raw=raw;cell.xlsxFormula.formula=formulaForXlsx(raw,source.xlsxFormula.formula).slice(1);}
       else if(source.xlsxFormula&&mode!=='values'&&operation==='none'&&raw.startsWith('='))cell.xlsxFormula={...cloneData(source.xlsxFormula),raw,formula:formulaForXlsx(raw,source.xlsxFormula.formula).slice(1)};

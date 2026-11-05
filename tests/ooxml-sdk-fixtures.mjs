@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
+import {planValidationChange,applyValidationChange} from '../src/data-validation.mjs';
 import {createWorkbook} from '../src/engine.mjs';
 import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
 import {applyPivot} from '../src/pivot.mjs';
@@ -32,3 +33,9 @@ for(const policy of ['gap','zero','span']){
  const book=chartFixture();delete book.sheets[0].cells.B3;book.sheets[0].cells.B4={raw:'=NA()'};addChart(book,{type:'line',blankCells:policy});await save('chart-blanks-'+policy,book);
 }
 await save('worksheet-formats',worksheetFixture());console.log('Generated synthetic OOXML validation fixtures: '+output);
+
+{
+ const book=createWorkbook(),sheet=book.sheets[0];sheet.cells={H1:{raw:'5'}};
+ const definitions=[['A1:A10',{type:'list',source:'예,아니오',showInput:true,promptTitle:'승인 여부',prompt:'목록에서 선택하세요.',severity:'warning'}],['B1:B10',{type:'whole',formulae:['1','10']}],['C1:C10',{type:'decimal',operator:'greaterThan',formulae:['=$H$1']}],['D1:D10',{type:'date',formulae:['2026-01-01','2026-12-31']}],['E1:E10',{type:'time',formulae:['09:00','18:00']}],['F1:F10',{type:'textLength',operator:'lessThanOrEqual',formulae:['10']}],['G1:G10',{type:'custom',formulae:['G1>$H$1'],severity:'information'}]];
+ for(const [range,input] of definitions)applyValidationChange(sheet,planValidationChange(book,sheet,range,input));applyValidationChange(sheet,planValidationChange(book,sheet,'B2:B3',null));await save('authored-validation',book);
+}

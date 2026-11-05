@@ -6,7 +6,7 @@ import {assertNativeCellTransfers} from './native-cell-features.mjs';
 import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} from './tables.mjs';
 import {tableConversionPlan} from './table-conversion.mjs';
 import {tableAt,tableBounds,filteredRowsForSheet} from './table-schema.mjs';
-import {assertSortAllowed,validationChoices,resetConstraintIndexes} from './cell-constraints.mjs';
+import {assertSortAllowed,validationChoices,reviewValidation,resetConstraintIndexes} from './cell-constraints.mjs';
 import {autoSumPlan} from './formula-tools.mjs';
 import {dataEdge} from './cell-navigation.mjs';
 import {currentRegion,inferSortPlan} from './data-region.mjs';
@@ -156,6 +156,7 @@ async function handle(type, data) {
   if(type==='table-plan'){const table=sheet.tables?.find(t=>t.id===data.tableId);if(data.operation!=='create'&&!table)throw Error('표를 찾을 수 없습니다.');if(data.operation==='convert')return tableConversionPlan(book,sheet,table);const plan=data.operation==='create'?createTablePlan(book,sheet,data.values):data.operation==='calculate'?calculatedColumnPlan(book,sheet,table,data.values):updateTablePlan(book,sheet,table,data.values);return finalizeTablePlan(book,sheet,plan,data.values);}
   if(type==='auto-sum')return autoSumPlan(sheet,data.selection,evaluator(sheet.id));
   if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
+  if (type === 'validation-review') return reviewValidation(book,sheet,data.range,{evaluate:evaluator(sheet.id)});
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);
   if(type==='data-edge'){const hidden=filteredRowsForSheet(sheet);return dataEdge(sheet,data.point,data.axis,data.direction,{hiddenRow:r=>hidden.has(r)||sheet.rowHeights?.[r]===0,hiddenCol:c=>sheet.columnWidths?.[c]===0});}
   if (type === 'infer-region'){const table=tableAt(sheet,data.selection.r1,data.selection.c1);if(table){const b=tableBounds(table.range);return {...b,r2:b.r2-(table.totalsRow?1:0)};}return currentRegion(sheet,data.selection);}

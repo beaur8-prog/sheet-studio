@@ -5,7 +5,7 @@ on:
       scope:
         description: Regression scope
         type: choice
-        options: [all, excel-parity, full, find-replace, print-layout, file-dialogs, file-associations, studio-clipboard, native-clipboard, updates, startup]
+        options: [all, excel-parity, full, data-validation, find-replace, print-layout, file-dialogs, file-associations, studio-clipboard, native-clipboard, updates, startup]
         default: all
       operating_system:
         description: Operating system to validate
@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           specs="user-journeys autofill ime-entry chart-audit bar-style chart-legend chart-selection entry-navigation cell-editing formulas functions dimensions worksheet filters filter-colors pivot pivot-arrays sheet-lifecycle colors cell-format studio-clipboard parity-audit file-dialogs file-associations recovery capacity"
-          core_specs="entry-formats chart-preview chart-blanks table-growth native-pivots pivot-format find-replace file-compatibility dialog-focus chart-parity recalculation data-region xlsx-preservation external-links cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays array-races array-metadata array-views dashboard-journey result-types number-formats style-defaults worksheet-extras sheet-print print-layout print-settings print-objects virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text large-spills"
+          core_specs="data-validation calendar-entry entry-formats chart-preview chart-blanks table-growth native-pivots pivot-format find-replace file-compatibility dialog-focus chart-parity recalculation data-region xlsx-preservation external-links cell-constraints named-ranges excel-tables table-editing table-structure bulk-structure drawing-sheets whole-references stored-arrays dynamic-arrays array-races array-metadata array-views dashboard-journey result-types number-formats style-defaults worksheet-extras sheet-print print-layout print-settings print-objects virtual-scroll clipboard-types let anchor-position chart-axis cell-navigation format-reset bulk-text large-spills"
           if [ "${{ inputs.scope }}" = full ]; then
             specs="$specs $core_specs"
           elif [ "${{ inputs.scope }}" = excel-parity ]; then
@@ -60,6 +60,8 @@ jobs:
             specs="updates recovery"
           elif [ "${{ inputs.scope }}" = native-clipboard ]; then
             specs="native-clipboard"
+          elif [ "${{ inputs.scope }}" = data-validation ]; then
+            specs="data-validation calendar-entry cell-constraints entry-formats dialog-focus file-dialogs recovery"
           elif [ "${{ inputs.scope }}" = find-replace ]; then
             specs="find-replace dialog-focus"
           elif [ "${{ inputs.scope }}" = studio-clipboard ]; then
@@ -110,6 +112,7 @@ jobs:
             test-results/native-clipboard.json
             test-results/updates-*.json
             test-results/startup.json
+            test-results/data-validation.json
             test-results/array-races.json
             test-results/array-views.json
             test-results/pivot-arrays.json
