@@ -3,7 +3,7 @@ import {tableBounds} from './table-schema.mjs';
 import {restoreSheetKinds,addSheetKindParts} from './sheet-kinds.mjs';
 import {storedArrayIndex} from './stored-arrays.mjs';
 import {isErrorText,EXCEL_ERROR_VALUES} from './cell-values.mjs';
-import {readDefaultStyleModel,applyDefaultStyleProbe,normalDigitWidth} from './xlsx-default-style.mjs';
+import {readDefaultStyleModel,applyDefaultStyleProbe,normalDigitWidth,normalizeXlsxFontOrder} from './xlsx-default-style.mjs';
 import {inheritedStyles,worksheetCellStyle} from './cell-style.mjs';
 import {readRelationships,resolvePart} from './chart-xml.mjs';
 import {documentProperties,DOCUMENT_PROPERTY_FIELDS} from './worksheet-extra.mjs';
@@ -484,5 +484,5 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
   const metadataResult=(sheet,ref,array)=>{const cell=sheet.cells[ref],result=detailed?.(workbook,sheet.id,ref),output=array?.cached?originalCachedResult(cell):cell?.raw?.startsWith('=')?cachedResult(evaluate,workbook,sheet,ref,cell,detailed,true):result?.error?{error:result.error}:result?result.value:evaluate(workbook,sheet.id,ref);return {value:output&&typeof output==='object'?output.error:output??'',error:!!(output&&typeof output==='object'&&output.error)};};
   const withMetadata=await addArrayMetadata(await addExternalLinks(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook),workbook,exportNames,dynamicArrays,metadataResult);
-  return {data:await addNativePivotParts(withMetadata,workbook,exportNames),mime:XLSX_MIME,extension:'xlsx'};
+  return {data:await normalizeXlsxFontOrder(await addNativePivotParts(withMetadata,workbook,exportNames)),mime:XLSX_MIME,extension:'xlsx'};
 }

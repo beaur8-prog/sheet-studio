@@ -2,6 +2,18 @@ import JSZip from 'jszip';
 import {xml,stringify,children,child,all,attr,resolvePart,relPath,relationships,relationship,R} from './chart-xml.mjs';
 const S='http://schemas.openxmlformats.org/spreadsheetml/2006/main',P='http://schemas.openxmlformats.org/package/2006/content-types';
 export const normalDigitWidth=font=>Math.max(5,Math.round((/맑은 고딕|Malgun|Arial|Aptos/i.test(font?.name||'')?8:7)*(Number(font?.size)||11)/11));
+// CT_Font is a sequence. ExcelJS 4.4 emits several properties alphabetically,
+// placing size/name after family/scheme; SDK validation rejects those fonts.
+// Reorder elements without changing values, IDs, namespaces or unknown content.
+const fontOrder=['b','i','strike','condense','extend','outline','shadow','u','vertAlign','sz','color','name','family','charset','scheme'];
+export async function normalizeXlsxFontOrder(bytes){
+  const zip=await JSZip.loadAsync(bytes),file=zip.file('xl/styles.xml');if(!file)return bytes;const styles=xml(await file.async('string'));let changed=false;
+  for(const font of all(styles,'font').filter(n=>n.namespaceURI===S)){
+    const before=children(font),rank=node=>node.namespaceURI===S&&fontOrder.includes(node.localName)?fontOrder.indexOf(node.localName):fontOrder.length,after=[...before].sort((a,b)=>rank(a)-rank(b));
+    if(after.some((node,i)=>node!==before[i])){for(const node of after)font.appendChild(node);changed=true;}
+  }
+  if(!changed)return bytes;zip.file('xl/styles.xml',stringify(styles));return zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
+}
 /** ExcelJS skips cell style 0. Read it through a tiny public-API workbook whose
  * one cell refers to a duplicate XF. Never add a fake cell to the user's sheet.
  */
