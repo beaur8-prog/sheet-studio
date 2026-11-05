@@ -1,0 +1,28 @@
+name: OOXML SDK structure validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ooxml:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: npm ci
+      - run: node tests/ooxml-sdk-fixtures.mjs
+      - run: dotnet run --project tests/ooxml-sdk/Validator.csproj -- test-results/ooxml-sdk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ooxml-sdk-validation
+          path: test-results/ooxml-sdk/
+          if-no-files-found: error
+          retention-days: 30

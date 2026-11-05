@@ -8,6 +8,8 @@ analysis/
 artifacts/
 .verification/
 .cache/
+tests/ooxml-sdk/bin/
+tests/ooxml-sdk/obj/
 .env
 .env.*
 !.env.example
