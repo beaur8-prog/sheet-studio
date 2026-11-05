@@ -11,3 +11,8 @@ export function entryRaw(value,style){
   if(!textEntryStyle(style)||!raw||raw.startsWith("'"))return raw;
   return /^[=]/.test(raw)||!Number.isNaN(Number(raw))||/^(TRUE|FALSE)$/i.test(raw)||isErrorText(raw)||/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?%$/i.test(raw.trim())?"'"+raw:raw;
 }
+export function entryNumberStyle(raw,style={}){
+  if(typeof raw!=='string'||!raw.trim().endsWith('%')||style.format&&style.format!=='general'||style.numberFormat&&!/^General$/i.test(style.numberFormat))return null;
+  const match=/^[+-]?(?:\d+(?:\.(\d*))?|\.(\d+))%$/.exec(raw.trim());if(!match)return null;
+  return {format:'percent',numberFormat:undefined,decimals:Math.min(12,(match[1]??match[2]??'').length)};
+}

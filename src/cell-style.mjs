@@ -1,4 +1,6 @@
 import {tableCellStyle} from './table-style.mjs';
+import {entryNumberStyle} from './cell-values.mjs';
+import {protectionAllows} from './cell-constraints.mjs';
 const fontFields=['fontFamily','fontSize','bold','italic','underline','color'],alignFields=['align','verticalAlign','wrap'];
 export const normalCellStyle=book=>book.xlsxStyles?.[book.xlsxDefaultStyle]?.baseline||{};
 export function inheritedStyles(book,sheet,r,c){if(sheet.cells?.[cellRef(r,c)]?.xlsxNormal)return [];return [sheet.xlsxStyleDefaults?.columns?.[c],sheet.xlsxStyleDefaults?.rows?.[r]].map(i=>book.xlsxStyles?.[i]).filter(Boolean);}
@@ -18,7 +20,11 @@ export function worksheetCellStyle(book,sheet,r,c,{table=true,cell=true}={}){
   let style={...base,...(table?tableCellStyle(book,sheet,r,c):{})};
   // An explicit cell XF already contains its resolved font/fill/border model.
   if(!cell||record?.xlsxStyle===undefined&&!record?.xlsxNormal)for(const entry of inheritedStyles(book,sheet,r,c))style=templateStyle(style,entry,normal);
-  return {...style,...(cell?record?.style:{})};
+  style={...style,...(cell?record?.style:{})};
+  // Older app documents can retain a percent entry with no explicit cell
+  // format. Honor an explicitly selected General/Normal and protected styles.
+  const inferred=cell&&record&&!record.xlsxNormal&&record.style?.format===undefined?entryNumberStyle(record.raw,style):null;
+  return inferred&&protectionAllows(sheet,'formatCells')?{...style,...inferred,...(Number.isInteger(record.style?.decimals)?{decimals:record.style.decimals}:{})}:style;
 }
 // Excel's "Automatic" font filter is distinct from explicitly painted black.
 export function worksheetFilterStyle(book,sheet,r,c){

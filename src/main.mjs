@@ -9,7 +9,7 @@ import {prepareTableDataEdits} from './table-data-edits.mjs';
 import {worksheetCellStyle} from './cell-style.mjs';
 import {resetCellFormat} from './cell-format-reset.mjs';
 import {selectionStep} from './cell-navigation.mjs';
-import {entryRaw,textEntryStyle} from './cell-values.mjs';
+import {entryRaw,textEntryStyle,entryNumberStyle} from './cell-values.mjs';
 import {captureClipboardStyles,adoptClipboardStyles} from './cell-clipboard.mjs';
 import {printOrientation,setPrintOrientation} from './worksheet-extra.mjs';
 import {openPrintSettingsUI} from './print-settings-ui.mjs';
@@ -270,7 +270,7 @@ function commitEdit(move,fillSelection=false,allowInvalid=false){
  if(!editing)return true;if(arrayConstraintsPending){afterArrayConstraints(()=>commitEdit(move,fillSelection,allowInvalid));return false;}const input=$('#editor').value;restoreEditView();const rawFor=(r,c)=>entryRaw(textEntryStyle(effectiveCellStyle(r,c))?input:completeFormula(input),effectiveCellStyle(r,c)),raw=rawFor(editSession.r,editSession.c),edits=[{r:editSession.r,c:editSession.c,raw},...editSession.pending];
  if(fillSelection){const b=bounds();if((b.r2-b.r1+1)*(b.c2-b.c1+1)>100000){toast('한 번에 최대 100,000개 셀을 편집할 수 있습니다.');return;}edits.length=0;for(let r=b.r1;r<=b.r2;r++)for(let c=b.c1;c<=b.c2;c++)if(editableCell(r,c)){const value=rawFor(r,c);edits.push({r,c,raw:value.startsWith('=')?shiftFormula(value,r-editSession.r,c-editSession.c):value});}}
  const updates=edits.filter(e=>e.raw!==rawAt(e.r,e.c));
- if(updates.length){const headerPlan=prepareHeaders(updates.map(e=>({key:address(e.r,e.c),cell:{...sheet().cells[address(e.r,e.c)],raw:e.raw}})),{auto:true});if(!headerPlan)return false;const candidates=headerPlan.updates;if(!permitUpdates(candidates,{editAnchor:true}))return false;
+ if(updates.length){const headerPlan=prepareHeaders(updates.map(e=>{const key=address(e.r,e.c),cell={...sheet().cells[key],raw:e.raw},inferred=protectionAllows(sheet(),'formatCells')?entryNumberStyle(e.raw,effectiveCellStyle(e.r,e.c)):null;if(inferred)cell.style={...cell.style,...inferred};return {key,cell};}),{auto:true});if(!headerPlan)return false;const candidates=headerPlan.updates;if(!permitUpdates(candidates,{editAnchor:true}))return false;
   const invalid=!allowInvalid&&validateCellUpdates(book,sheet(),candidates);if(invalid){if(['warning','information'].includes(invalid.severity))modal(esc(invalid.title),`<p>${esc(invalid.ref)}: ${esc(invalid.message)}</p>`,[{label:'계속 입력',primary:true,action:el=>{el.remove();commitEdit(move,fillSelection,true);}}]);else{toast(`${invalid.ref}: ${invalid.message}`);editInput?.focus();}return false;}
   checkpoint();applyTableHeaderEdits(book,sheet(),headerPlan);for(const {key,cell} of candidates)sheet().cells[key]=cell;}
  finishEditing();if(updates.length)changed();if(move?.startsWith('step:')){const [,axis,direction]=move.split(':');advanceSelection(axis,+direction);return true;}if(move){

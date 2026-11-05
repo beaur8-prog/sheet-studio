@@ -19,6 +19,8 @@ test('plain text paste retains destination styles and notes, Text entry is disti
  const plain=pastePlan(s,{r:0,c:0,plainText:true,data:[[{raw:'0012'}]]},{r:0,c:0});assert.equal(plain.updates[0].cell.raw,"'0012");assert.equal(plain.updates[0].cell.style.bold,true);assert.equal(plain.updates[0].cell.note,'keep');assert.equal(plain.updates[0].cell.xlsxStyle,0);
  const values=pastePlan(s,{r:0,c:0,data:[[{raw:'12'}]],values:[[12]]},{r:0,c:0},{mode:'values'});assert.equal(values.updates[0].cell.raw,'12');assert.equal(values.updates[0].cell.style.format,'text');
  const inherited=pastePlan(s,{r:0,c:0,plainText:true,data:[[{raw:'=A1'}]]},{r:1,c:0},{styleAt:()=>({format:'text'})});assert.equal(inherited.updates[0].cell.raw,"'=A1");
+ s.cells.B1={raw:'old',style:{format:'general',bold:true},note:'유지'};const percent=pastePlan(s,{r:0,c:0,plainText:true,data:[[{raw:'12.5%'}]]},{r:0,c:1},{styleAt:()=>({format:'general'})});assert.equal(percent.updates[0].cell.style.format,'percent');assert.equal(percent.updates[0].cell.style.decimals,1);assert.equal(percent.updates[0].cell.style.bold,true);assert.equal(percent.updates[0].cell.note,'유지');
+ const numericPercent=pastePlan(s,{r:0,c:0,data:[[{raw:'12.5%'}]],values:[[.125]]},{r:0,c:1},{mode:'values'});assert.equal(numericPercent.updates[0].cell.raw,'0.125');assert.equal(numericPercent.updates[0].cell.style.format,'general');
 });
 test('clipboard owns portable Normal, axis, table and advanced style definitions across workbooks and XLSX reopen',async()=>{
  const source=await readSpreadsheet(await styleDefaultsFixture(),'source.xlsx'),s=source.sheets[0];s.cells.B3={raw:'12'};s.cells.C5={raw:'.25'};

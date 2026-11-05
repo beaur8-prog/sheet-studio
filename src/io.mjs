@@ -438,8 +438,8 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
       }
       const tableStyled=!!contextTable;
       const defaults=sheet.xlsxStyleDefaults,inheritKey=cell.xlsxStyle!==undefined||cell.xlsxNormal?'':String(defaults?.columns?.[pos.col]??'')+'/'+String(defaults?.rows?.[pos.row]??''),visible=worksheetCellStyle(workbook,sheet,pos.row,pos.col,{table:false});
-      const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&(!visible.format||visible.format==='general');
-      const key=(tableStyled?'T:':'N:')+String(cell.xlsxStyle??'')+':'+inheritKey+':'+!!cell.xlsxNormal+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+(autoPercent?'%':''),cachedStyle=styleCache.get(key);
+      const autoPercent=typeof cell.raw==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(cell.raw.trim())&&cell.style?.format===undefined&&visible.format==='percent'?effectiveNumberFormat(visible):'';
+      const key=(tableStyled?'T:':'N:')+String(cell.xlsxStyle??'')+':'+inheritKey+':'+!!cell.xlsxNormal+':'+JSON.stringify(targetCell.protection||{})+':'+JSON.stringify(cell.style||{})+autoPercent,cachedStyle=styleCache.get(key);
       if(cachedStyle)targetCell.style=cachedStyle;
       else{
         let original=workbook.xlsxStyles?.[cell.xlsxStyle],exportStyle=cell.style||{},templates=original||cell.xlsxNormal?[]:inheritedStyles(workbook,sheet,pos.row,pos.col);
@@ -448,7 +448,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
         const implicit=!!workbook.xlsxStyles?.[workbook.xlsxDefaultStyle]&&cell.xlsxStyle===undefined&&!cell.xlsxNormal&&!templates.length&&!Object.keys(cell.style||{}).length;
         if(implicit)targetCell.style={};else {applyStyle(targetCell,exportStyle,tableStyled);restoreCellStyle(targetCell,{...cell,style:exportStyle},original);}
         if(cell.xlsxNormal)targetCell.style={...targetCell.style,alignment:{...targetCell.alignment,vertical:targetCell.alignment?.vertical||'bottom'}};
-        if(autoPercent)targetCell.numFmt='0.00%';if(styleCache.size<10000)styleCache.set(key,targetCell.style);
+        if(autoPercent)targetCell.numFmt=autoPercent;if(styleCache.size<10000)styleCache.set(key,targetCell.style);
       }
       if(cell.xlsxProtection)targetCell.style={...targetCell.style,protection:plainCopy(cell.xlsxProtection)};
       if(cell.xlsxValue?.value?.richText&&cell.xlsxValue.raw===cell.raw){const original=workbook.xlsxStyles?.[cell.xlsxStyle],delta=fontChanges(cell.style||{},original?.baseline||{},targetCell.font);if(Object.keys(delta).length)targetCell.value={richText:targetCell.value.richText.map(run=>({...run,font:{...run.font,...delta}}))};}

@@ -6,6 +6,8 @@ import {readSpreadsheet,writeSpreadsheet} from '../src/io.mjs';
 import {applyFilters,filterOptions,filterValue} from '../src/filters.mjs';
 import {createEvaluator} from '../src/engine.mjs';
 import {effectiveNumberFormat,validateNumberFormat} from '../src/number-formats.mjs';
+import {worksheetCellStyle} from '../src/cell-style.mjs';
+import {entryNumberStyle} from '../src/cell-values.mjs';
 
 test('documented custom numeric codes preserve digits, optional places, scaling and scientific notation',()=>{
   const cases=[
@@ -40,6 +42,21 @@ test('elapsed and fractional seconds, single-letter months and decimal edits kee
   assert.equal(formatValue(61+86399.9999/86400,{numberFormat:'yyyy-mm-dd'}),'1900-03-01');
   assert.equal(effectiveNumberFormat({format:'number',numberFormat:'0.0,,"M";(0.0,,"M")',decimals:3}),'0.000,,"M";(0.000,,"M")');
   for(const code of ['0"x','0[Red','0;0;0;@;0','0\\'])assert.throws(()=>validateNumberFormat(code));
+});
+
+test('percent entries keep typed precision while explicit General, text and protected formats stay authoritative',async()=>{
+ const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'12.5%',style:{}},A2:{raw:'12.50%',style:{}},A3:{raw:'12%',style:{}},B1:{raw:'12.5%',style:{format:'general'}},B2:{raw:"'12.5%",style:{}},B3:{raw:'12.5%',xlsxNormal:true,style:{}}};
+ assert.equal(entryNumberStyle('12.5%',{format:'general'}).decimals,1);assert.equal(entryNumberStyle('12.5%',{format:'text'}),null);assert.equal(entryNumberStyle("'12.5%",{}),null);
+ const rendered=book=>['A1','A2','A3','B1','B2','B3'].map(ref=>{const r=Number(ref.slice(1))-1,c=ref.charCodeAt(0)-65;return formatValue(createEvaluator(book,book.sheets[0].id)(ref),worksheetCellStyle(book,book.sheets[0],r,c));});assert.deepEqual(rendered(b),['12.5%','12.50%','12%','0.125','12.5%','0.125']);
+ let book=b;for(let i=0;i<3;i++){book=await readSpreadsheet((await writeSpreadsheet(book)).data,'percent.xlsx');assert.deepEqual(rendered(book),rendered(b));}
+ const p=createWorkbook(),ps=p.sheets[0];ps.cells.A1={raw:'12.5%',style:{decimals:3}};assert.equal(formatValue(.125,worksheetCellStyle(p,ps,0,0)),'12.500%');ps.xlsxFeatures={sheetProtection:'<sheetProtection sheet="1" formatCells="1"/>'};assert.equal(worksheetCellStyle(p,ps,0,0).format,undefined);assert.equal(createEvaluator(p,ps.id)('A1'),.125);
+});
+
+test('date formatting on empty cells does not invent numeric zero during XLSX restoration',async()=>{
+ for(const date1904 of [false,true]){
+  const b=createWorkbook(),s=b.sheets[0];b.date1904=date1904;s.cells={A1:{raw:'',style:{format:'date',numberFormat:'yyyy-mm-dd'},note:'빈 날짜'},A2:{raw:'0',style:{format:'date',numberFormat:'yyyy-mm-dd'}},A3:{raw:"'",style:{format:'date'}},B1:{raw:'=ISBLANK(A1)'},B2:{raw:'=COUNT(A1:A3)'}};let book=b;
+  for(let i=0;i<3;i++){book=await readSpreadsheet((await writeSpreadsheet(book)).data,'empty-date.xlsx');const t=book.sheets[0],e=createEvaluator(book,t.id);assert.equal(t.cells.A1.raw,'');assert.equal(t.cells.A1.note,'빈 날짜');assert.equal(t.cells.A2.raw,'0');assert.equal(t.cells.A3.raw,"'");assert.equal(e('B1'),true);assert.equal(e('B2'),1);}
+ }
 });
 test('number-code colors participate in filters and absent array followers are not treated as empty',()=>{
   const book=createWorkbook(),s=book.sheets[0],code='0;[Red](0)';
