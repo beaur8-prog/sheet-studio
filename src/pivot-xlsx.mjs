@@ -3,6 +3,8 @@ import {buildPivot,applyPivot,aggregations,scalarKey} from './pivot.mjs';
 import {validatePivot} from './pivot-schema.mjs';
 import {address,transformFormulaReferences} from './engine.mjs';
 import {updateChartReferences} from './chart-model.mjs';
+import {xml} from './chart-xml.mjs';
+import {nativePivotIndex,nativePivotLayout,legacyPivotMatches,preserveNativePivots} from './native-pivots.mjs';
 
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL='http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
@@ -29,9 +31,9 @@ export async function addPivotParts(bytes,workbook,names){
   for(let i=0;i<pivots.length;i++){
     const target=pivots[i],spec=target.pivot,sourceName=names.get(spec.sourceSheetId);
     const pages=spec.filters.filter(f=>!spec.rows.includes(f.field)&&!spec.columns.includes(f.field)).length;
-    definitions.push({sheet:names.get(target.id),source:sourceName||null,spec,rowOffset:pages?pages+1:0});
+    const entry={sheet:names.get(target.id),source:sourceName||null,spec,rowOffset:pages?pages+1:0};definitions.push(entry);
     const output=buildPivot(workbook,spec),{headers,records}=output.data,n=i+1;
-    if(!output.matched)continue; // Excel cannot represent an all-items-excluded filter; retain the empty result and app settings.
+    if(!output.matched){entry.nativeAbsent=true;continue;} // Excel cannot represent an all-items-excluded filter.
     const fieldIndex=name=>headers.indexOf(name);
     const shared=headers.map((_,c)=>[...new Map(records.map(row=>[scalarKey(row[c]),row[c]])).values()]);
     const sharedFields=headers.map(name=>spec.rows.includes(name)||spec.columns.includes(name)||spec.filters.some(f=>f.field===name));
@@ -69,6 +71,7 @@ export async function addPivotParts(bytes,workbook,names){
     await addRel(zip,'xl/_rels/workbook.xml.rels',rel(`rIdStudioCache${n}`,'pivotCacheDefinition',`pivotCache/pivotCacheDefinition${n}.xml`));
     caches+=`<pivotCache cacheId="${n}" r:id="rIdStudioCache${n}"/>`;
     content(cachePath,'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml');content(recordPath,'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml');content(tablePath,'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml');
+    entry.nativeLayout=nativePivotLayout({table:xml(await zip.file(tablePath).async('string')).documentElement,definition:xml(definition).documentElement});
   }
   if(caches){const xml=await zip.file('xl/workbook.xml').async('string');zip.file('xl/workbook.xml',xml.replace('</workbook>',`<pivotCaches>${caches}</pivotCaches></workbook>`));}
   zip.file(META,`${DECL}<pivots xmlns="${META_NS}">${esc(JSON.stringify(definitions))}</pivots>`);
@@ -79,13 +82,13 @@ export async function addPivotParts(bytes,workbook,names){
 }
 
 export async function restorePivotParts(bytes,workbook,{refresh=true}={}){
-  const zip=await JSZip.loadAsync(bytes);
-  let xml='';
+  const zip=await JSZip.loadAsync(bytes),native=await nativePivotIndex(zip,workbook),retained=new Set(native);
+  let sourceXML='';
   // Excel renames custom XML parts when saving. Identify our namespace, not its filename.
-  for(const part of zip.file(/^customXml\/[^/]+\.xml$/).slice(0,100)){const text=await part.async('string');if(text.includes(META_NS)){xml=text;break;}}
-  if(!xml)return;
-  if(xml.length>2_000_000)throw new Error('피벗 설정의 크기 제한을 초과했습니다.');
-  const match=xml.match(/<pivots\b[^>]*>([\s\S]*?)<\/pivots>/);if(!match||!xml.includes(META_NS))throw new Error('피벗 설정을 읽을 수 없습니다.');
+  for(const part of zip.file(/^customXml\/[^/]+\.xml$/).slice(0,100)){const text=await part.async('string');if(text.includes(META_NS)){sourceXML=text;break;}}
+  if(!sourceXML){await preserveNativePivots(zip,workbook,native);return;}
+  if(sourceXML.length>2_000_000)throw new Error('피벗 설정의 크기 제한을 초과했습니다.');
+  const match=sourceXML.match(/<pivots\b[^>]*>([\s\S]*?)<\/pivots>/);if(!match||!sourceXML.includes(META_NS))throw new Error('피벗 설정을 읽을 수 없습니다.');
   const definitions=JSON.parse(unesc(match[1]),(key,value)=>{if(['__proto__','prototype','constructor'].includes(key))throw new Error('피벗 설정 키가 올바르지 않습니다.');return value;});
   if(!Array.isArray(definitions)||definitions.length>100)throw new Error('피벗 설정 개수가 올바르지 않습니다.');
   const restored=[];
@@ -93,10 +96,15 @@ export async function restorePivotParts(bytes,workbook,{refresh=true}={}){
     const target=workbook.sheets.find(s=>s.name===entry.sheet),source=workbook.sheets.find(s=>s.name===entry.source);
     if(!target)continue;
     validatePivot(entry.spec);if(target===source)throw new Error('피벗 원본은 다른 시트여야 합니다.');
+    const actual=native.filter(n=>n.sheetId===target.id),empty=entry.nativeAbsent===true||!actual.length&&entry.spec.filters.some(f=>!f.values.length);
+    const compatible=empty&&!actual.length||actual.length===1&&(typeof entry.nativeLayout==='string'?entry.nativeLayout===nativePivotLayout(actual[0]):legacyPivotMatches(actual[0],entry));
+    if(!compatible){target.pivotImportNotice='외부에서 변경된 피벗 설정과 결과를 유지합니다. 필드 편집·새로 고침은 Excel에서 진행하세요.';continue;}
+    for(const item of actual)retained.delete(item);
     target.pivot={...entry.spec,sourceSheetId:source?.id||'missing-source'};
     if(entry.rowOffset!==undefined&&(!Number.isInteger(entry.rowOffset)||entry.rowOffset<0||entry.rowOffset>17))throw new Error('피벗 위치 정보가 올바르지 않습니다.');
     if(refresh&&entry.rowOffset){for(const owner of workbook.sheets)for(const cell of Object.values(owner.cells))if(cell.raw?.startsWith('='))for(let i=0;i<entry.rowOffset;i++)cell.raw=transformFormulaReferences(cell.raw,{axis:'r',index:0,delta:-1,targetSheet:target.name,ownerSheet:owner.name});for(let i=0;i<entry.rowOffset;i++)updateChartReferences(workbook,target.id,'r',0,-1);}
     restored.push(target);
   }
+  await preserveNativePivots(zip,workbook,[...retained]);
   if(refresh)for(const target of restored)try{applyPivot(workbook,target,target.pivot);}catch(error){target.pivotError=error.message;}
 }

@@ -1,5 +1,6 @@
 import {cloneData} from './clone.mjs';
 import {sourceData,buildPivot,applyPivot,aggregations,scalarKey,pivotLabel} from './pivot.mjs';
+import {preservedPivots,removePreservedPivots} from './native-pivots.mjs';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,switchSheet,modal,toast,loadSource,calculate,runBusy=(_label,operation)=>operation()}){
@@ -7,6 +8,7 @@ export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,
   calculate||=async spec=>buildPivot(getWorkbook(),spec);
   function open(){
     const book=getWorkbook(),target=getSheet().pivot?getSheet():null;
+    if(preservedPivots(book,getSheet().id).length)return toast('원본 피벗의 필드 편집과 새로 고침은 Excel에서 진행하세요.');
     const sources=book.sheets.filter(s=>!s.pivot);
     if(!sources.length)return toast('먼저 원본 데이터 시트를 만드세요.');
     let draft=target?cloneData(target.pivot):{version:1,sourceSheetId:getSheet().id,sourceRange:getRange(),rows:[],columns:[],values:[],filters:[],totals:true,sort:'asc'};
@@ -97,6 +99,6 @@ export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,
       });
     }catch(error){toast(`새로 고침 실패: ${error.message}`);}
   }
-  function convert(){if(!getSheet().pivot)return;modal('일반 범위로 변환','<p>현재 결과 값을 유지하고 피벗 설정을 제거합니다. 변환 후 셀을 직접 편집할 수 있습니다.</p>',[{label:'변환',primary:true,action:el=>{checkpoint();delete getSheet().pivot;changed();el.remove();}}]);}
+  function convert(){const preserved=preservedPivots(getWorkbook(),getSheet().id).length;if(!getSheet().pivot&&!preserved)return;modal('일반 범위로 변환','<p>현재 결과 값을 유지하고 피벗 설정'+(preserved?'과 원본 피벗 개체':'')+'를 제거합니다. 변환 후 셀을 직접 편집할 수 있습니다. 실행 취소할 수 있습니다.</p>',[{label:'변환',primary:true,action:el=>{checkpoint();delete getSheet().pivot;removePreservedPivots(getWorkbook(),getSheet().id);changed();el.remove();}}]);}
   return {open,refresh,convert,source(){const source=getWorkbook().sheets.find(s=>s.id===getSheet().pivot?.sourceSheetId);if(source)switchSheet(source.id);else toast('원본 시트가 없습니다. 피벗 설정에서 다시 선택하세요.');}};
 }

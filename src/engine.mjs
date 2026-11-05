@@ -21,6 +21,7 @@ import {validateFreeze,validateConditionalRules} from './worksheet-schema.mjs';
 import {validateAutoFilter} from './filter-schema.mjs';
 import {validateChart} from './chart-schema.mjs';
 import {validatePivot} from './pivot-schema.mjs';
+import {validateNativePivotArchive} from './native-pivots.mjs';
 import {createFunctionRuntime} from './function-runtime.mjs';
 import {normalizeFunctionName,XLSX_FUTURE_FUNCTIONS} from './function-catalog.mjs';
 import {numberFormatKind,effectiveNumberFormat,selectNumberSection,formatTextSection,formatNumericSection} from './number-formats.mjs';
@@ -1507,6 +1508,7 @@ export function validateWorkbook(data) {
     if(sheet.unsupportedConditionalCount!==undefined&&(!Number.isInteger(sheet.unsupportedConditionalCount)||sheet.unsupportedConditionalCount<0||sheet.unsupportedConditionalCount>10000))throw Error('조건부 서식 개수가 올바르지 않습니다.');
     if (sheet.autoFilter !== undefined) validateAutoFilter(sheet.autoFilter);
     if (sheet.pivot !== undefined) { validatePivot(sheet.pivot); if (sheet.pivot.sourceSheetId === sheet.id) throw new Error('피벗 원본은 다른 시트여야 합니다.'); }
+    if(sheet.pivotImportNotice!==undefined&&(typeof sheet.pivotImportNotice!=='string'||sheet.pivotImportNotice.length>1000))throw Error('피벗 가져오기 안내가 올바르지 않습니다.');
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
     validateSheetKind(sheet);
     if(sheet.xlsxDrawings!==undefined)validateDrawings(sheet.xlsxDrawings);
@@ -1539,6 +1541,7 @@ export function validateWorkbook(data) {
   if(!data.sheets.some(s=>!s.state||s.state==='visible'))throw Error('통합 문서에는 표시되는 시트가 하나 이상 있어야 합니다.');
   const tableNames=new Set();for(const sheet of data.sheets)for(const table of sheet.tables||[]){const name=table.name.toLocaleLowerCase();if(tableNames.has(name))throw Error('통합 문서의 표 이름은 중복될 수 없습니다.');tableNames.add(name);}
   if(data.xlsxConnections!==undefined){const c=data.xlsxConnections;if(!object(c)||typeof c.root!=='string'||typeof c.type!=='string'||!c.type.endsWith('/connections')||!c.parts?.[c.root])throw Error('원래 데이터 연결 정보가 올바르지 않습니다.');validateStoredParts(c.parts);}
+  if(data.xlsxPivotArchive!==undefined)validateNativePivotArchive(data.xlsxPivotArchive);
   if(data.xlsxTableStyles!==undefined){if(!Array.isArray(data.xlsxTableStyles)||data.xlsxTableStyles.length>10000)throw Error('원래 표 스타일이 올바르지 않습니다.');for(const style of data.xlsxTableStyles)validatePreservedXML(style,'tableStyle');}
   if(data.xlsxColors!==undefined)validatePreservedXML(data.xlsxColors,'colors');
   if(data.xlsxMetadata!==undefined)validateArrayMetadata(data.xlsxMetadata);

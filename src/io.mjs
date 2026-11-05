@@ -25,6 +25,7 @@ import { createEvaluator,transformFormulaReferences,formulaForXlsx,formulaForEdi
 import { attachNativeSource } from './native-plan.mjs';
 import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
 import {applyPivot,sourceData} from './pivot.mjs';
+import {addNativePivotParts} from './native-pivots.mjs';
 import {restoreChartParts,addChartParts} from './chart-xlsx.mjs';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -478,5 +479,6 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   const baseBytes=await applyDefaultStyleProbe(new Uint8Array(await book.xlsx.writeBuffer()),normalProbe),pivotBytes = await addPivotParts(baseBytes,workbook,exportNames);
   const data = await addWorksheetParts(await addFilterParts(await addChartParts(pivotBytes,workbook,exportNames),workbook,exportNames),workbook,exportNames);
   const metadataResult=(sheet,ref,array)=>{const cell=sheet.cells[ref],result=detailed?.(workbook,sheet.id,ref),output=array?.cached?originalCachedResult(cell):cell?.raw?.startsWith('=')?cachedResult(evaluate,workbook,sheet,ref,cell,detailed,true):result?.error?{error:result.error}:result?result.value:evaluate(workbook,sheet.id,ref);return {value:output&&typeof output==='object'?output.error:output??'',error:!!(output&&typeof output==='object'&&output.error)};};
-  return { data:await addArrayMetadata(await addExternalLinks(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook),workbook,exportNames,dynamicArrays,metadataResult), mime: XLSX_MIME, extension: 'xlsx' };
+  const withMetadata=await addArrayMetadata(await addExternalLinks(await addSheetKindParts(await addTableParts(await addPreservedFeatures(data,workbook,exportNames),workbook,exportNames),workbook,exportNames),workbook),workbook,exportNames,dynamicArrays,metadataResult);
+  return {data:await addNativePivotParts(withMetadata,workbook,exportNames),mime:XLSX_MIME,extension:'xlsx'};
 }

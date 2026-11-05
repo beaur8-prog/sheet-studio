@@ -10,6 +10,7 @@ import {arrayRegions,sheetIsProtected} from './cell-constraints.mjs';
 import {transformPreservedFeatures} from './xlsx-feature-transforms.mjs';
 const label=b=>address(b.r1,b.c1)+':'+address(b.r2,b.c2),inside=(b,p)=>p.r>=b.r1&&p.r<=b.r2&&p.c>=b.c1&&p.c<=b.c2;
 export function editableTableDefinition(book,sheet,table){
+  if(book.xlsxPivotArchive)throw Error('원본 피벗의 표 연결을 보존하기 위해 표 구성은 Excel에서 변경하세요. 일반 셀 값은 편집할 수 있습니다.');
   if(book.nativeSource)throw Error('XLSM의 표 구성 편집은 현재 지원하지 않습니다. Excel에서 편집하거나 XLSX 사본을 사용하세요.');
   if(sheetIsProtected(sheet))throw Error('보호된 시트에서는 표 구성을 변경할 수 없습니다.');
   if(table?.sourceRels?.some(r=>r.type.endsWith('/queryTable'))||/tableType=["']queryTable["']/.test(table?.sourceXML||''))throw Error('외부 데이터에 연결된 표의 구성은 Excel에서 편집하세요. 표의 셀 값은 편집할 수 있습니다.');

@@ -9,11 +9,13 @@ import {shiftWorksheetFeatures} from './conditional.mjs';
 import {updateChartReferences} from './chart-model.mjs';
 import {shiftPivotSources} from './pivot.mjs';
 import {recordNativeStructure} from './native-plan.mjs';
+import {assertPreservedPivotStructure} from './native-pivots.mjs';
 
 /** Build a complete, validated replacement without mutating the current book.
  * Cells and A1 formulas are each visited once, independent of the row count.
  */
 export function structuralWorkbookPlan(book,sheetId,{axis,index,count=1,delta}){
+  assertPreservedPivotStructure(book);
   const original=book.sheets.find(s=>s.id===sheetId);if(!original)throw Error('시트를 찾을 수 없습니다.');
   if(original.pivot)throw Error('피벗 결과에서는 행·열을 변경할 수 없습니다.');
   assertStructureAllowed(original,axis,index,count,delta);
