@@ -1,14 +1,15 @@
 import {chartAxesHTML,syncChartAxes,readChartAxes,installChartAxes} from './chart-axis-ui.mjs';
 import {chartTypes,chartLayout,chartRangeError,chartSeriesBy,chartSeries,chartSourceFormulas} from './chart-model.mjs';
-import {escapeChartHTML as esc} from './chart-render.mjs';
+import {escapeChartHTML as esc,layoutChartLegends,layoutChartCategories} from './chart-render.mjs';
+import {chartBlankPolicy} from './chart-blanks.mjs';
 
-export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
+export function chartDialog({chart,range,sheet,workbook,onApply,modal,preview}){
   const normalize=value=>value.includes(':')?value:value+':'+value;
   const current=chart||{type:'bar',grouping:'clustered',title:'차트 제목',range:normalize(range),legend:true,labels:false,placement:'move-size'};
   const initial=chartLayout(current,sheet,workbook);
   const sourceFormulas=current.source?chartSourceFormulas(current,workbook):[];
   const el=modal(chart?'차트 설정':'차트 삽입',`
-    <div class="chart-form">
+    <div class="chart-settings-controls"><div class="chart-form">
     <label>차트 유형<select id="chart-type">${!chartTypes[current.type]?'<option value="'+esc(current.type)+'">Excel 원본 유형 유지</option>':''}${Object.entries(chartTypes).map(([value,label])=>`<option value="${value}" ${current.type===value?'selected':''}>${label}</option>`).join('')}</select></label>
     <label>데이터 계열 방향<select id="chart-series-by"><option value="auto">자동 (한 줄은 행 기준)</option><option value="rows">행 기준 (가로로 이어진 값)</option><option value="columns">열 기준 (세로로 이어진 값)</option></select></label>
     <label>배치<select id="chart-grouping">${Object.entries({clustered:'묶은형 / 일반',stacked:'누적',percentStacked:'100% 누적'}).map(([value,label])=>`<option value="${value}" ${current.grouping===value||value==='clustered'&&current.grouping==='standard'?'selected':''}>${label}</option>`).join('')}</select></label>
@@ -20,6 +21,7 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
     <label class="chart-check"><input id="chart-legend" type="checkbox" ${current.legend!==false?'checked':''}>범례 표시</label>
     <label class="chart-check"><input id="chart-labels" type="checkbox" ${current.labels?'checked':''}>데이터 레이블</label>
     <label class="chart-check"><input id="chart-hidden-data" type="checkbox" ${current.plotVisibleOnly===false?'checked':''}>숨겨진 행·열의 데이터도 표시</label>
+    <label id="chart-blank-option">빈 셀 표시<select id="chart-blanks"><option value="gap">간격으로 표시</option><option value="zero">0으로 표시</option><option value="span">선으로 연결</option></select></label>
     <label>가로축 제목<input id="chart-x-title" value="${esc(current.xTitle||'')}"></label>
     <label>세로축 제목<input id="chart-y-title" value="${esc(current.yTitle||'')}"></label>
     <label class="chart-check"><input id="chart-secondary" type="checkbox" ${current.secondaryAxis!==false?'checked':''}>혼합 차트의 마지막 계열에 보조축 사용</label>
@@ -28,23 +30,47 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
     ${current.source?'<p class="chart-help">Excel의 원래 계열과 고급 서식을 유지합니다. 유형·배치·데이터 범위·보조축을 바꾸려면 아래 변환을 선택하세요.</p><label class="chart-check"><input id="chart-convert" type="checkbox">새 차트로 변환 (원본 고급 서식은 제거됨)</label>':''}
     ${chartAxesHTML(current)}
     <p class="chart-help" id="chart-data-help"></p>
-    <div id="chart-error" role="status"></div>`,[{label:chart?'적용':'삽입',primary:true,action:el=>{
+    <div id="chart-error" role="status"></div></div>
+    <section class="chart-preview-panel" aria-label="차트 미리 보기"><h3>미리 보기와 데이터 구성</h3><p id="chart-preview-status" role="status" aria-live="polite">미리 보기를 준비합니다.</p><div id="chart-preview-image"></div><details open><summary>항목·계열·값 확인</summary><div id="chart-preview-data" class="chart-preview-data"></div><div id="chart-preview-refs" class="chart-preview-refs"></div></details></section>`,[{label:chart?'적용':'삽입',primary:true,action:el=>{
+      try{onApply(readDraft().patch);el.remove();}catch(error){el.querySelector('#chart-error').textContent=error.message;}
+    }}]);
+  function readDraft(){
       const get=id=>el.querySelector('#'+id),convert=get('chart-convert')?.checked,type=get('chart-type').value,grouping=get('chart-grouping').value;
       const retained=current.source&&!convert;
-      if(retained&&(type!==current.type||grouping!==(current.grouping==='standard'?'clustered':current.grouping||'clustered'))){get('chart-error').textContent='유형이나 배치를 바꾸려면 새 차트로 변환을 선택하세요.';return;}
+      if(retained&&(type!==current.type||grouping!==(current.grouping==='standard'?'clustered':current.grouping||'clustered'))){throw Error('유형이나 배치를 바꾸려면 새 차트로 변환을 선택하세요.');}
       const selected=normalize(get('chart-range').value.toUpperCase().replace(/\$/g,'').trim());
       const direction=get('chart-series-by').value,layout={seriesBy:direction==='auto'?chartSeriesBy({type,range:selected},sheet,workbook):direction,firstRowAsHeader:get('chart-first-row').checked,firstColumnAsLabels:get('chart-first-column').checked};
       const error=!retained&&chartRangeError({type,range:selected,...layout},sheet,workbook);
-      if(error){get('chart-error').textContent=error;return;}
-      if(!retained&&type==='unsupported'){get('chart-error').textContent='새 차트 유형을 선택하세요.';return;}
-      let axes;try{axes=readChartAxes(el);}catch(error){get('chart-error').textContent=error.message;return;}
-      const patch={...axes,type,...(workbook?.nativeSource?{}:{placement:get('chart-placement').value}),grouping:retained?current.grouping:grouping,title:get('chart-title').value,legend:get('chart-legend').checked,labels:get('chart-labels').checked,plotVisibleOnly:!get('chart-hidden-data').checked,xTitle:get('chart-x-title').value,yTitle:get('chart-y-title').value,secondaryAxis:get('chart-secondary').checked};
+      if(error)throw Error(error);
+      if(!retained&&type==='unsupported'){throw Error('새 차트 유형을 선택하세요.');}
+      const axes=readChartAxes(el);
+      const patch={...axes,type,...(workbook?.nativeSource?{}:{placement:get('chart-placement').value}),grouping:retained?current.grouping:grouping,title:get('chart-title').value,legend:get('chart-legend').checked,labels:get('chart-labels').checked,plotVisibleOnly:!get('chart-hidden-data').checked,...(workbook?.nativeSource?{}:{blankCells:get('chart-blanks').value}),xTitle:get('chart-x-title').value,yTitle:get('chart-y-title').value,secondaryAxis:get('chart-secondary').checked};
       if(!retained)Object.assign(patch,{range:selected,...layout,series:undefined,source:undefined,rebuilt:true,previewNote:undefined,unsupportedReason:undefined});
-      onApply(patch);el.remove();
-    }}]);
-  el.querySelector('.modal').classList.add('chart-modal');installChartAxes(el);
+      return {patch,retained};
+  }
+  el.querySelector('.modal').classList.add('chart-modal');if(preview)el.querySelector('.modal').classList.add('chart-preview-modal');installChartAxes(el);
   el.querySelector('#chart-series-by').value=current.seriesBy||'auto';
+  el.querySelector('#chart-blanks').value=chartBlankPolicy(current);
   const candidate=()=>{const type=el.querySelector('#chart-type').value,range=normalize(el.querySelector('#chart-range').value.toUpperCase().replace(/\$/g,'').trim()),direction=el.querySelector('#chart-series-by').value;return {type,range,...(direction==='auto'?{}:{seriesBy:direction})};};
+  let previewTimer,previewSequence=0;
+  function schedulePreview(){
+    clearTimeout(previewTimer);const sequence=++previewSequence;
+    if(!preview){el.querySelector('.chart-preview-panel').hidden=true;return;}
+    const status=el.querySelector('#chart-preview-status');status.textContent='미리 보기를 계산하는 중…';
+    previewTimer=setTimeout(async()=>{
+      try{
+        const {patch,retained}=readDraft(),result=await preview({chartId:chart?.id,retain:!!retained,patch});if(!el.isConnected||sequence!==previewSequence)return;
+        const visible=result.type==='pie'?Math.min(1,result.seriesCount):result.seriesCount;
+        status.textContent=`${result.seriesCount}개 계열 · 차트에 ${visible}개 계열 사용`+(result.truncated?' · 화면 차트와 미리 보기는 계열당 처음 1,000개 값입니다. XLSX에는 전체 참조를 저장합니다.':'')+(result.usesCachedValues?' · 미지원 수식의 파일 저장값이 포함되어 있습니다. Excel에서 다시 계산하세요.':'')+(result.note?' · '+result.note:'');
+        el.querySelector('#chart-preview-image').innerHTML='<h4>'+esc(result.title)+'</h4><svg role="img" aria-label="차트 미리 보기" viewBox="'+esc(result.viewBox)+'">'+result.svg+'</svg>';
+        const xy=['scatter','bubble'].includes(result.type),bubble=result.type==='bubble';
+        el.querySelector('#chart-preview-data').innerHTML='<p>처음 8개 계열·계열당 8개 값의 구성입니다. '+result.points.map(s=>esc(s.series)+': '+s.total.toLocaleString()+'개').join(' · ')+'</p><table><thead><tr><th>계열</th><th>'+(xy?'X값':'항목 이름')+'</th><th>'+(xy?'Y값':'값')+'</th>'+(bubble?'<th>크기</th>':'')+'</tr></thead><tbody>'+result.rows.map(row=>'<tr'+(!row.used?' class="chart-unused-series"':'')+'><td>'+esc(row.series)+(!row.used?' (원형에 미사용)':'')+'</td><td>'+esc(xy?row.x:row.item)+'</td><td>'+esc(row.value)+'</td>'+(bubble?'<td>'+esc(row.size)+'</td>':'')+'</tr>').join('')+'</tbody></table>';
+        el.querySelector('#chart-preview-refs').innerHTML=result.references.map(ref=>'<p><strong>'+esc(ref.series)+'</strong> · 값 <code>'+esc(ref.values)+'</code> · '+(xy?'X값':'항목')+' <code>'+esc(ref.x||ref.items)+'</code>'+(ref.size?' · 크기 <code>'+esc(ref.size)+'</code>':'')+'</p>').join('');
+        layoutChartLegends(el);layoutChartCategories(el);
+      }catch(error){if(el.isConnected&&sequence===previewSequence){status.textContent=error.message;el.querySelector('#chart-preview-image').textContent='';el.querySelector('#chart-preview-data').textContent='';el.querySelector('#chart-preview-refs').textContent='';}}
+    },180);
+  }
+  const observer=new MutationObserver(()=>{if(!el.isConnected){clearTimeout(previewTimer);++previewSequence;observer.disconnect();}});observer.observe(el.parentNode,{childList:true});
   let requestedLegend=current.legend!==false;
   const syncControls=()=>{
     const retained=current.source&&!el.querySelector('#chart-convert')?.checked;
@@ -62,6 +88,7 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
     syncChartAxes(el,{type:source.type,secondary:source.type==='combo'||series?.some(s=>s.secondary),native:workbook?.nativeSource});
     for(const id of ['chart-title','chart-legend','chart-labels','chart-hidden-data','chart-x-title','chart-y-title'])el.querySelector('#'+id).disabled=!!retained&&current.type==='unsupported';
     const simpleColumn=!retained&&source.type==='bar'&&count===1;el.querySelector('#chart-legend').checked=requestedLegend&&!simpleColumn;el.querySelector('#chart-legend').disabled=!!retained&&current.type==='unsupported'||simpleColumn;
+    const blanks=['line','scatter','radar','combo'].includes(source.type);el.querySelector('#chart-blank-option').hidden=!blanks;el.querySelector('#chart-blanks').disabled=!blanks||!!workbook?.nativeSource;el.querySelector('#chart-blanks [value="span"]').disabled=source.type==='scatter'&&!series?.some(s=>s.lines);
     el.querySelector('#chart-secondary').disabled=!!retained||el.querySelector('#chart-type').value!=='combo';
   };
   const manual={firstRowAsHeader:current.firstRowAsHeader!==undefined,firstColumnAsLabels:current.firstColumnAsLabels!==undefined};
@@ -72,6 +99,8 @@ export function chartDialog({chart,range,sheet,workbook,onApply,modal}){
   el.querySelector('#chart-convert')?.addEventListener('change',event=>{if(event.target.checked)el.querySelector('#chart-range').value=normalize(range);infer();syncControls();});
   el.querySelector('#chart-type').addEventListener('change',()=>{infer();syncControls();});
   el.querySelector('#chart-legend').addEventListener('change',()=>{requestedLegend=el.querySelector('#chart-legend').checked;});
-  syncControls();
+  for(const type of ['input','change'])el.addEventListener(type,event=>{if(event.target.matches('input,select')){el.querySelector('#chart-error').textContent='';schedulePreview();}});
+  el.addEventListener('click',event=>{if(event.target.closest('[data-axis-reset]'))schedulePreview();});
+  syncControls();schedulePreview();
   return el;
 }

@@ -6,6 +6,7 @@ import {conditionalFormula,shiftWorksheetFeatures} from './conditional.mjs';
 import {nativeFilterPlan} from './filter-native.mjs';
 import {shiftAutoFilter} from './filters.mjs';
 import {chartSeries} from './chart-model.mjs';
+import {chartBlankPolicy} from './chart-blanks.mjs';
 import {address, parseAddress, transformFormulaReferences} from './engine.mjs';
 
 const clone=value=>cloneData(value);
@@ -15,6 +16,7 @@ function chartPlan(sheet,before,workbook){
   const oldCharts=before?.charts||[],charts=[];
   for(const chart of sheet.charts||[]){
     const old=oldCharts.find(c=>c.id===chart.id),patch={name:old?.nativeName||null};
+    if(chartBlankPolicy(chart)!==(old?chartBlankPolicy(old):'gap'))throw Error('XLSM의 빈 셀 표시 설정은 Excel에서 변경하거나 XLSX 사본으로 저장하세요.');
     if(old&&['valueAxis','xAxis','secondaryValueAxis','placement'].some(key=>!equal(chart[key],old[key])))throw Error('XLSM의 축 범위와 개체 배치는 Excel에서 편집하거나 XLSX 사본으로 저장하세요.');
     const rebuild=!old||chart.rebuilt&&!old.rebuilt||chart.type!==old.type||chart.grouping!==old.grouping||!chart.source&&chart.range!==old.range||!chart.source&&['firstRowAsHeader','firstColumnAsLabels','seriesBy'].some(key=>!equal(chart[key],old[key]));
     if(rebuild){

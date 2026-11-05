@@ -1,4 +1,5 @@
 import {calculationDisplay} from './calculation-display.mjs';
+import {buildChartPreview} from './chart-preview.mjs';
 import {findWorkbook,replaceWorkbookPlan,replacementPatch} from './find-replace.mjs';
 import {sourceData,buildPivot} from './pivot.mjs';
 import {assertNativeCellTransfers} from './native-cell-features.mjs';
@@ -113,6 +114,10 @@ async function handle(type, data) {
     return {...result, revision};
   }
   if (data.revision !== revision) throw Error('문서가 변경되었습니다. 작업을 다시 실행하세요.');
+  if(type==='chart-preview'){
+    const snapshot={...book},shared=(id,ref)=>evaluator(id)(ref);shared.result=(id,ref)=>evaluator(id).result(ref);shared.isComputed=(id,ref)=>evaluator(id).isComputed(ref);setExternalEvaluator(snapshot,shared);
+    return buildChartPreview(snapshot,data.sheetId,data);
+  }
   if(type==='pivot-source'){const {headers,records,source,range}=sourceData(book,data.sheetId,data.range,{evaluate:evaluator(data.sheetId)});return {headers,records,sourceSheetId:source.id,range};}
   if(type==='pivot-build'){const {matrix,matched,total,rows,columns}=buildPivot(book,data.spec,{evaluate:evaluator(data.spec.sourceSheetId)});return {matrix,matched,total,rows,columns};}
   if (type === 'recalculate') { evaluators=new Map();conditionals=new Map();arraysSent=false; }

@@ -5,6 +5,7 @@ const part=v=>typeof v==='string'&&v.length<2000&&!v.startsWith('/')&&!v.split('
 const string=(v,max=4000)=>typeof v==='string'&&v.length<=max;
 const fail=()=>{throw Error('차트 설정 또는 보존 데이터가 올바르지 않습니다.');};
 export function validateChart(chart){
+  if(chart.blankCells!==undefined&&!['gap','zero','span'].includes(chart.blankCells))fail();
   for(const key of ['valueAxis','xAxis','secondaryValueAxis'])if(chart[key]!==undefined&&axisOptionsError(chart[key]))fail();
   for(const key of ['title','nativeName','previewNote','unsupportedReason','xTitle','yTitle'])if(chart[key]!==undefined&&!string(chart[key]))fail();
   for(const key of ['legend','labels','plotVisibleOnly','secondaryAxis','rebuilt','radarFilled','firstRowAsHeader','firstColumnAsLabels'])if(chart[key]!==undefined&&typeof chart[key]!=='boolean')fail();

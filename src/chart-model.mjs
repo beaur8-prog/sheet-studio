@@ -1,4 +1,5 @@
 import {calculationDisplay} from './calculation-display.mjs';
+import {chartBlankPolicy} from './chart-blanks.mjs';
 import {worksheetCellStyle} from './cell-style.mjs';
 import {filteredRowsForSheet} from './table-schema.mjs';
 import {address,parseAddress,createEvaluator,transformFormulaReferences,formatValue,numberFormatKind,formulaReference} from './engine.mjs';
@@ -90,7 +91,7 @@ function filterChartData(data,chart,workbook){
   return included.map(({s,mask})=>{
     const keep=['scatter','bubble'].includes(chart.type)?indices.filter(i=>mask[i]):indices;
     const pointColors=Object.fromEntries(keep.flatMap((old,i)=>s.pointColors?.[old]?[[i,s.pointColors[old]]]:[]));
-    return {...s,values:keep.map(i=>mask[i]?s.values[i]??null:null),labels:keep.map(i=>s.labels[i]??String(i+1)),categories:keep.map(i=>s.categories[i]),xs:keep.map(i=>s.xs[i]),sizes:keep.map(i=>s.sizes[i]),pointColors};
+    return {...s,values:keep.map(i=>mask[i]?s.values[i]??null:null),blankPoints:keep.map(i=>mask[i]&&s.blankPoints[i]),blankValues:keep.map(i=>mask[i]&&s.blankValues[i]),labels:keep.map(i=>s.labels[i]??String(i+1)),categories:keep.map(i=>s.categories[i]),xs:keep.map(i=>s.xs[i]),sizes:keep.map(i=>s.sizes[i]),pointColors};
   });
 }
 export function referenceSize(ref){const [a,b]=ref?.range?.split(':').map(parseAddress)||[];return a&&b?(Math.abs(a.r-b.r)+1)*(Math.abs(a.c-b.c)+1):ref?.cache?.length||0;}
@@ -165,19 +166,22 @@ function arrangeDateCategories(data,chart){
   const source=data.find(s=>s.dateCategories);
   if(!source||source.categories.length<2||!source.categories.every(v=>typeof v==='number'&&Number.isFinite(v)))return data;
   const order=source.categories.map((_,i)=>i).sort((a,b)=>source.categories[a]-source.categories[b]);
-  return data.map(s=>({...s,...Object.fromEntries(['values','labels','categories','xs','sizes'].map(key=>[key,order.map(i=>s[key][i])])),pointColors:Object.fromEntries(order.flatMap((old,i)=>s.pointColors?.[old]?[[i,s.pointColors[old]]]:[]))}));
+  return data.map(s=>({...s,...Object.fromEntries(['values','blankPoints','blankValues','labels','categories','xs','sizes'].map(key=>[key,order.map(i=>s[key][i])])),pointColors:Object.fromEntries(order.flatMap((old,i)=>s.pointColors?.[old]?[[i,s.pointColors[old]]]:[]))}));
 }
 export function chartData(chart,sheet,workbook){
+  const blankCells=chartBlankPolicy(chart);
   const data=chartSeries(chart,sheet,workbook).map((s,i)=>{
     let usesCachedValues=false;
     const preview=ref=>refValues(ref,workbook,{limit:1000,onCached:()=>{usesCachedValues=true;}});
-    const categoryFormat=refFormat(s.catRef||s.xRef,workbook);
+    const categoryFormat=refFormat(s.catRef||s.xRef,workbook),sourceValues=preview(s.valRef),sourceX=preview(s.xRef);
     return {
     ...s,name:String(refValues(s.nameRef,workbook)[0]??s.name??`계열 ${i+1}`),
     categories:preview(s.catRef||s.xRef),dateCategories:categoryFormat.format==='date'||numberFormatKind(categoryFormat.numberFormat||'General')==='date',
     labels:preview(s.catRef||s.xRef).map(v=>v===null?'':formatValue(v,categoryFormat,workbook)),
-    values:preview(s.valRef).map(v=>v===null||v===''||typeof v==='boolean'||!Number.isFinite(Number(v))?null:Number(v)),
-    xs:preview(s.xRef).map(v=>v===null?null:Number(v)),
+    values:sourceValues.map(v=>v===null&&blankCells==='zero'?0:v===null||v===''||typeof v==='boolean'||!Number.isFinite(Number(v))?null:Number(v)),
+    blankPoints:sourceValues.map((v,i)=>v===null||!!s.xRef&&sourceX[i]===null),
+    blankValues:sourceValues.map(v=>v===null),
+    xs:sourceX.map(v=>v===null?blankCells==='zero'?0:null:Number(v)),
     sizes:preview(s.sizeRef).map(v=>Math.max(0,Number(v)||0)),
     color:/^#[0-9a-f]{6}$/i.test(s.color||'')?s.color:chartColors[i%chartColors.length],
     type:s.type||chart.type,

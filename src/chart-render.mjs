@@ -1,5 +1,6 @@
 import {chartData,chartColors} from './chart-model.mjs';
 import {chartRect} from './chart-geometry.mjs';
+import {chartBlankPolicy,chartLineSegments} from './chart-blanks.mjs';
 import {axisScale,axisLabelStyle} from './chart-axis.mjs';
 let plotSequence=0;
 import {formatValue} from './engine.mjs';
@@ -40,7 +41,7 @@ export function layoutChartCategories(root){
 
 export function renderChartSVG(chart,sheet,workbook){
   const fmt=(value,style)=>formatChartValue(value,style,workbook);
-  const {width,height}=chartRect(chart),w=width-36,h=height-70,data=chartData(chart,sheet,workbook);
+  const {width,height}=chartRect(chart),w=width-36,h=height-70,data=chartData(chart,sheet,workbook),spanBlanks=chartBlankPolicy(chart)==='span';
   if(chart.type==='unsupported')return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'Excel 원본 차트 보존','text-anchor="middle"')+text(w/2,h/2+20,chart.unsupportedReason||'이 유형의 미리 보기는 아직 지원하지 않습니다.','text-anchor="middle"')};
   if(!data.length||!data.some(s=>s.values.some(Number.isFinite)))return {viewBox:`0 0 ${w} ${h}`,svg:text(w/2,h/2,'표시할 숫자 데이터가 없습니다.','text-anchor="middle"')+text(w/2,h/2+20,'범위와 첫 행·첫 열 설정을 확인하세요.','text-anchor="middle"')};
   const circular=['pie','doughnut'].includes(chart.type),legend=chart.legend!==false&&(chart.type!=='bar'||data.length>1),legendCols=Math.max(1,Math.floor(w/(circular?95:130))),legendCount=circular?data[0].values.length:data.length,legendRows=legend?Math.min(3,Math.ceil(legendCount/legendCols)):0;
@@ -63,7 +64,7 @@ export function renderChartSVG(chart,sheet,workbook){
     const cx=(left+right)/2,cy=(top+bottom)/2,r=Math.min(pw,ph)/2-16,scale=axisScale(data.flatMap(s=>s.values),chart.valueAxis),radius=v=>scale.ratio(v)??0,n=Math.max(3,count),pos=(i,v)=>[cx+Math.sin(i/n*2*Math.PI)*r*v,cy-Math.cos(i/n*2*Math.PI)*r*v];
     for(const tick of scale.ticks){const ratio=radius(tick);if(chart.valueAxis?.gridlines!==false)svg.push(poly(Array.from({length:n+1},(_,i)=>pos(i%n,ratio)),'#ddd'));svg.push(text(cx+4,cy-r*ratio+4,fmt(tick,axisLabelStyle(chart.valueAxis,data[0].valueFormat)),'class="chart-axis-value"'));}
     labels.forEach((label,i)=>{const [x,y]=pos(i,1.15);svg.push(line(cx,cy,...pos(i,1)));svg.push(text(x,y,label.slice(0,12),'text-anchor="middle"'));});
-    svg.push(`<defs><clipPath id="${plotId}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs><g class="chart-data" clip-path="url(#${plotId})">`);data.forEach((s,si)=>{svg.push(poly([...s.values,s.values[0]].map((v,i)=>pos(i%n,radius(v||0))),s.color,chart.radarFilled?s.color:'none',chart.radarFilled?'fill-opacity=".16"':''));s.values.forEach((v,i)=>{if(!Number.isFinite(v)||!scale.contains(v))return;const [x,y]=pos(i%n,radius(v));svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${x}" cy="${y}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`);pointLabel(x,y-7,v,s.valueFormat);});});endPlot();
+    svg.push(`<defs><clipPath id="${plotId}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs><g class="chart-data" clip-path="url(#${plotId})">`);data.forEach((s,si)=>{const points=s.values.map((v,i)=>Number.isFinite(v)&&scale.ratio(v)!==null?pos(i%n,radius(v)):null);for(const segment of chartLineSegments(points,{skip:spanBlanks?s.blankPoints:[],closed:true}))svg.push(poly(segment.map(i=>points[i]),s.color,chart.radarFilled?s.color:'none',chart.radarFilled?'fill-opacity=".16"':''));s.values.forEach((v,i)=>{if(!Number.isFinite(v)||!scale.contains(v))return;const [x,y]=pos(i%n,radius(v));svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${x}" cy="${y}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`);pointLabel(x,y-7,v,s.valueFormat);});});endPlot();
   }else if(['scatter','bubble'].includes(chart.type)){
     const valueX=(s,i)=>s.xRef?s.xs[i]:i+1,xs=data.flatMap(s=>s.values.map((v,i)=>valueX(s,i))).filter(Number.isFinite),ys=data.flatMap(s=>s.values).filter(Number.isFinite);
     const sx=axisScale(xs,chart.xAxis),sy=axisScale(ys,chart.valueAxis),x=v=>left+sx.ratio(v)*pw,y=v=>bottom-sy.ratio(v)*ph;
@@ -72,7 +73,7 @@ export function renderChartSVG(chart,sheet,workbook){
     beginPlot();
     const maxSize=data.flatMap(s=>s.sizes).reduce((max,value)=>Math.max(max,value),1);
     data.forEach((s,si)=>{const points=s.values.map((v,i)=>Number.isFinite(v)&&Number.isFinite(valueX(s,i))&&sx.ratio(valueX(s,i))!==null&&sy.ratio(v)!==null&&(chart.type!=='bubble'||s.sizes[i]>0)?[x(valueX(s,i)),y(v)]:null);
-      if(s.lines){let segment=[];for(const p of [...points,null]){if(p)segment.push(p);else if(segment.length){svg.push(poly(segment,s.color));segment=[];}}}points.forEach((p,i)=>{if(!p)return;const radius=chart.type==='bubble'?Math.max(2,Math.sqrt((s.sizes[i]||0)/maxSize)*Math.min(pw,ph)*.09):4;svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${p[0]}" cy="${p[1]}" r="${radius}" fill="${s.color}" fill-opacity=".65"><title>${esc(s.name)}: ${valueX(s,i)}, ${s.values[i]}</title></circle>`);if(sx.contains(valueX(s,i))&&sy.contains(s.values[i]))pointLabel(p[0],p[1]-radius-3,s.values[i],s.valueFormat);});});endPlot();
+      if(s.lines)for(const segment of chartLineSegments(points,{skip:spanBlanks?s.blankPoints:[]}))svg.push(poly(segment.map(i=>points[i]),s.color));points.forEach((p,i)=>{if(!p)return;const radius=chart.type==='bubble'?Math.max(2,Math.sqrt((s.sizes[i]||0)/maxSize)*Math.min(pw,ph)*.09):4;svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${p[0]}" cy="${p[1]}" r="${radius}" fill="${s.color}" fill-opacity=".65"><title>${esc(s.name)}: ${valueX(s,i)}, ${s.values[i]}</title></circle>`);if(sx.contains(valueX(s,i))&&sy.contains(s.values[i]))pointLabel(p[0],p[1]-radius-3,s.values[i],s.valueFormat);});});endPlot();
   }else{
     const horizontal=chart.type==='bar-horizontal',stack=chart.grouping==='stacked'||chart.grouping==='percentStacked',percent=chart.grouping==='percentStacked';
     // Excel stacks series within the same chart type and axis group. A line
@@ -111,7 +112,7 @@ export function renderChartSVG(chart,sheet,workbook){
           svg.push(`<rect class="chart-point" data-series="${si}" data-point="${i}" x="${horizontal?Math.min(p,baseP):offset}" y="${horizontal?offset:Math.min(p,baseP)}" width="${horizontal?Math.max(.5,Math.abs(p-baseP)):thickness}" height="${horizontal?thickness:Math.max(.5,Math.abs(p-baseP))}" ${simple?'rx="3"':''} fill="${s.pointColors?.[i]||s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></rect>`);if(visible)pointLabel(horizontal?p+(v<0?-10:10):offset+thickness/2,horizontal?offset+thickness/2:p+(v<0?14:-4),percent?v/100:v,percent?{format:'percent'}:s.valueFormat);
         }else{points.push([mid,p]);basePoints.push([mid,baseP]);svg.push(`<circle class="chart-point" data-series="${si}" data-point="${i}" cx="${mid}" cy="${p}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`);if(visible)pointLabel(mid,p-7,percent?v/100:v,percent?{format:'percent'}:s.valueFormat);}
       });
-      if(points.length){let segment=[],base=[];const flush=()=>{if(!segment.length)return;if(s.type==='area')svg.push(`<polygon points="${[...segment,...base.reverse()].map(p=>p.join(',')).join(' ')}" fill="${s.color}" fill-opacity=".5"/>`);svg.push(poly(segment,s.color));segment=[];base=[];};points.forEach((p,i)=>{if(!p){flush();return;}segment.push(p);base.push(basePoints[i]);});flush();}
+      if(points.length)for(const indices of chartLineSegments(points,{skip:spanBlanks?s.blankPoints:[]})){const segment=indices.map(i=>points[i]),base=indices.map(i=>basePoints[i]);if(s.type==='area')svg.push(`<polygon points="${[...segment,...base.reverse()].map(p=>p.join(',')).join(' ')}" fill="${s.color}" fill-opacity=".5"/>`);svg.push(poly(segment,s.color));}
     });endPlot();
   }
   svg.push(...labelSVG);
