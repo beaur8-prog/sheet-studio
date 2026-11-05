@@ -64,3 +64,7 @@ await save('worksheet-formats',worksheetFixture());console.log('Generated synthe
 {
  const book=chartFixture(),sheet=book.sheets[0];addChart(book,{id:'original-33',type:'bar',series:Array.from({length:33},(_,i)=>({name:'계열 '+(i+1),type:'bar',color:'#4472c4',valRef:{sheetId:sheet.id,range:'B2:B5'},catRef:{sheetId:sheet.id,range:'A2:A5'}}))});await save('preserved-33-series-chart',book);
 }
+
+{
+ const book=createWorkbook(),sheet=book.sheets[0];sheet.cells.A1={raw:'자유 메모'};applyValidationChange(sheet,planValidationChange(book,sheet,'A1:A10',{type:'any',showInput:true,promptTitle:'입력 안내',prompt:'형식 제한 없이 입력하세요.'}));sheet.xlsxFeatures.dataValidations=sheet.xlsxFeatures.dataValidations.replace('type="none"','type="any"');await save('prompt-only-validation',book);
+}

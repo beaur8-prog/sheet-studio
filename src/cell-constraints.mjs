@@ -63,7 +63,7 @@ export function assertSortAllowed(book,sheet,b){
 export function validationRules(sheet){return parsed(sheet.xlsxFeatures?.dataValidations,doc=>all(doc,'dataValidation').map(node=>({
   ranges:attr(node,'sqref').split(/\s+/).map(range).filter(Boolean),anchor:parseAddress(attr(node,'sqref').split(/\s+/)[0]?.split(':')[0]),
   showInput:['1','true'].includes(attr(node,'showInputMessage')),promptTitle:attr(node,'promptTitle'),prompt:attr(node,'prompt'),
-  type:attr(node,'type','any'),operator:attr(node,'operator','between'),allowBlank:['1','true'].includes(attr(node,'allowBlank')),showError:['1','true'].includes(attr(node,'showErrorMessage')),showList:!['1','true'].includes(attr(node,'showDropDown')),
+  type:attr(node,'type','none')==='none'?'any':attr(node,'type'),operator:attr(node,'operator','between'),allowBlank:['1','true'].includes(attr(node,'allowBlank')),showError:['1','true'].includes(attr(node,'showErrorMessage')),showList:!['1','true'].includes(attr(node,'showDropDown')),
   severity:attr(node,'errorStyle','stop'),title:attr(node,'errorTitle','입력 제한'),message:attr(node,'error','입력한 값이 이 셀의 입력 제한 조건과 일치하지 않습니다.'),
   formulae:['formula1','formula2'].map(name=>all(node,name)[0]?.textContent).filter(v=>v!==undefined),
 })))||[];}

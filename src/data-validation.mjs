@@ -84,7 +84,7 @@ export function createValidationRule(input){
 }
 function ruleNode(doc,b,rule){
   const node=doc.createElementNS(NS,'dataValidation');
-  for(const [key,value] of Object.entries({type:rule.type,operator:!['list','custom','any'].includes(rule.type)?rule.operator:undefined,allowBlank:+rule.allowBlank,showDropDown:rule.type==='list'?+!rule.showList:undefined,showInputMessage:+rule.showInput,promptTitle:rule.promptTitle||undefined,prompt:rule.prompt||undefined,showErrorMessage:+rule.showError,errorStyle:rule.severity,errorTitle:rule.title||undefined,error:rule.message||undefined,sqref:validationRange(b)}))if(value!==undefined)node.setAttribute(key,String(value));
+  for(const [key,value] of Object.entries({type:rule.type==='any'?'none':rule.type,operator:!['list','custom','any'].includes(rule.type)?rule.operator:undefined,allowBlank:+rule.allowBlank,showDropDown:rule.type==='list'?+!rule.showList:undefined,showInputMessage:+rule.showInput,promptTitle:rule.promptTitle||undefined,prompt:rule.prompt||undefined,showErrorMessage:+rule.showError,errorStyle:rule.severity,errorTitle:rule.title||undefined,error:rule.message||undefined,sqref:validationRange(b)}))if(value!==undefined)node.setAttribute(key,String(value));
   rule.formulae.forEach((formula,i)=>{const child=doc.createElementNS(NS,'formula'+(i+1));child.appendChild(doc.createTextNode(formula));node.appendChild(child);});return node;
 }
 // Work only on a private XML tree. Existing cells and unrelated/opaque rules are

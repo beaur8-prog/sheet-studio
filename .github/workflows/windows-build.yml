@@ -47,6 +47,7 @@ jobs:
           node tests/ui-import-cancel.mjs --packaged
           node tests/ui-import-cancel-large.mjs --packaged
           node tests/ui-open-hidden-active.mjs --packaged
+          node tests/ui-validation-any.mjs --packaged
           node tests/ui-data-validation.mjs --packaged
           node tests/ui-calendar-entry.mjs --packaged
           node tests/ui-conditional-visual.mjs --packaged

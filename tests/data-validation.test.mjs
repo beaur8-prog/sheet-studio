@@ -31,6 +31,11 @@ test('authored list, whole, decimal, date, time, text length and custom rules en
   set(book,sheet,'F1:F5',{type:'textLength',operator:'lessThanOrEqual',formulae:['3'],severity:'information'});assert.equal(issue(book,sheet,'F1','가나다'),null);assert.equal(issue(book,sheet,'F1','가나다라').severity,'information');
   set(book,sheet,'G1:G5',{type:'custom',formulae:['=AND(ISNUMBER(G1),G1>$H$1)']});assert.equal(issue(book,sheet,'G3','6'),null);assert.equal(issue(book,sheet,'G3','4').severity,'stop');
 });
+test('prompt-only validation maps standard none to unrestricted input and exports none, repairing the old any alias without changing the live document',async()=>{
+  let {book,sheet}=fixture();set(book,sheet,'A1:A5',{type:'any',showInput:true,promptTitle:'자유 메모',prompt:'형식 제한 없이 입력하세요.'});assert.match(sheet.xlsxFeatures.dataValidations,/type="none"/);
+  for(const type of ['none','any']){sheet.xlsxFeatures.dataValidations=sheet.xlsxFeatures.dataValidations.replace(/type="(?:none|any)"/,`type="${type}"`);assert.equal(validationRules(sheet)[0].type,'any');for(const raw of ['메모','123','TRUE',''])assert.equal(issue(book,sheet,'A1',raw),null);const before=JSON.stringify(book),data=(await writeSpreadsheet(book)).data;assert.equal(JSON.stringify(book),before);const zip=await JSZip.loadAsync(data);assert.match(await zip.file('xl/worksheets/sheet1.xml').async('string'),/type="none"/);assert.doesNotMatch(await zip.file('xl/worksheets/sheet1.xml').async('string'),/type="any"/);book=await readSpreadsheet(data,'prompt.xlsx');sheet=book.sheets[0];assert.equal(validationRules(sheet)[0].promptTitle,'자유 메모');assert.equal(validationRules(sheet)[0].type,'any');}
+  delete sheet.xlsxFeatures;set(book,sheet,'A1',{type:'any'});assert.equal(sheet.xlsxFeatures,undefined,'unrestricted rule without guidance remains absent');
+});
 test('clearing or replacing part of a rule retains other rectangles and rebases relative formulas',()=>{
   const {book,sheet}=fixture();set(book,sheet,'B2:D5',{type:'custom',formulae:['B2>A2'],promptTitle:'유지',showInput:true,prompt:'안내'});
   const source=sheet.xlsxFeatures.dataValidations,plan=planValidationChange(book,sheet,'B2:C3',{type:'list',source:'x,y'});

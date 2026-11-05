@@ -59,7 +59,7 @@ export async function addPreservedFeatures(bytes,book,names){
     const split=splitWorksheetXML(await zip.file(part.path).async('string')),doc=xml(split.metadata);
     const ids=await writeExtraSheetRelationships(zip,part.path,feature,index,content);
     for(const name of EXTRA_SHEET_TAGS)if(feature[name]){for(const node of children(doc.documentElement,name))doc.documentElement.removeChild(node);const node=extraSheetNode(feature,name,ids);if(name==='sheetPr'){const filters=[sheet.autoFilter,...(sheet.tables||[]).map(t=>t.filter)].filter(Boolean);node.setAttribute('filterMode',filters.some(f=>Object.keys(f.columns||{}).length||f.unsupported?.length)?'1':'0');}insert(doc,node);}
-    for(const name of ['sheetProtection','dataValidations'])if(feature[name]){for(const node of children(doc.documentElement,name))doc.documentElement.removeChild(node);insert(doc,validatePreservedXML(feature[name],name).documentElement);}
+    for(const name of ['sheetProtection','dataValidations'])if(feature[name]){for(const node of children(doc.documentElement,name))doc.documentElement.removeChild(node);const element=validatePreservedXML(feature[name],name).documentElement;if(name==='dataValidations')for(const rule of children(element,'dataValidation'))if(attr(rule,'type')==='any')rule.setAttribute('type','none');insert(doc,element);}
     if(sheet.unsupportedConditionalCount&&feature.conditionalFormatting?.length){
       for(const node of children(doc.documentElement,'conditionalFormatting'))doc.documentElement.removeChild(node);
       for(const source of feature.conditionalFormatting){const node=validatePreservedXML(source,'conditionalFormatting').documentElement;remapDxfIds(node,dxfMap);insert(doc,node);}
