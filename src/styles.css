@@ -39,3 +39,5 @@ button.color-input{border-bottom:4px solid;width:28px;height:26px;font-weight:70
 .toast button,.toast a{pointer-events:auto}
 
 .workbook-busy [data-busy-cancel]{padding:8px 14px;margin-left:10px;border:1px solid #ffffff88;background:#ffffff14;color:#fff;border-radius:5px}.workbook-busy [data-busy-cancel]:hover{background:#ffffff2b}.workbook-busy [data-busy-cancel]:disabled{opacity:.6}
+
+.chart-series-editor{margin:12px 0;padding:10px;border:1px solid #dce3dd;border-radius:5px;background:#f9fbfa}.chart-series-list{display:grid;gap:10px}.chart-series-list fieldset{min-width:0;margin:0;padding:10px;border:1px solid #cdd7d0;border-radius:4px}.chart-series-list legend{font-weight:600;padding:0 5px}.chart-series-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 10px}.chart-series-fields label{min-width:0}.chart-series-fields input,.chart-series-fields select{min-width:0}.chart-series-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.chart-series-actions button{padding:5px 9px;font-size:11px}@media(max-width:500px){.chart-series-fields{grid-template-columns:1fr}}

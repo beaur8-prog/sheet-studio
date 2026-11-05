@@ -138,6 +138,7 @@ function seriesShape(chart,sheet,workbook){
   return {...axes,names,categories,startLane:lane1+Number(xy?!implicitX:categories),startPoint:point1+Number(names)};
 }
 export function chartRangeError(chart,sheet,workbook){
+  if(chart.series?.length&&!chart.source)return null;
   if(!sourceBounds(chart))return '올바른 셀 범위를 입력하세요. 예: A1:C5';
   const limit='차트에는 계열당 최대 10,000개 값과 32개 값 행·열을 사용하세요.',shape=seriesShape(chart,sheet,workbook);
   if(!shape)return limit;

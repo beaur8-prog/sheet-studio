@@ -12,6 +12,7 @@ import {createTablePlan,prepareTableHeaderEdits,applyTableHeaderEdits} from '../
 import {prepareTableDataEdits} from '../src/table-data-edits.mjs';
 import {fixture as pivotFixture,spec} from './fixtures/pivot.mjs';
 import {chartFixture,addChart,chartCases} from './fixtures/charts.mjs';
+import {chartSeriesPlan} from '../src/chart-series-editor.mjs';
 import {worksheetFixture} from './fixtures/worksheet.mjs';
 
 const output=path.resolve(process.argv[2]||'test-results/ooxml-sdk');await fs.mkdir(output,{recursive:true});
@@ -52,4 +53,10 @@ await save('worksheet-formats',worksheetFixture());console.log('Generated synthe
 
 {
  const book=pivotFixture(),source=book.sheets[0],created=createTablePlan(book,source,{name:'Sales',range:'A1:D6'});source.tables=[created.table];for(const u of created.updates)source.cells[u.key]=u.cell;const target={id:'linked-report',name:'표 피벗',charts:[]};applyPivot(book,target,bindPivotTable(book,spec(),created.table.id));book.sheets.push(target);await save('table-linked-pivot',book);
+}
+
+{
+ const book=chartFixture(),sheet=book.sheets[0],rows=[{name:'=B1',values:'B2:B5',categories:'',color:'#4472c4',lines:true},{name:'점 계열',values:'C2:C5',categories:'',color:'#e15759',lines:false}];
+ addChart(book,{id:'explicit-scatter',type:'scatter',blankCells:'span',...chartSeriesPlan(rows,'scatter',book,sheet.id)});await save('explicit-scatter-groups',book);
+ const combo=chartFixture(),s=combo.sheets[0];addChart(combo,{id:'explicit-combo',type:'combo',...chartSeriesPlan(rows.map((row,i)=>({...row,categories:'A2:A5',type:i?'line':'bar',secondary:!!i})),'combo',combo,s.id)});await save('explicit-combo-series',combo);
 }
