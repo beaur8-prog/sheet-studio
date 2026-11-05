@@ -5,7 +5,7 @@ on:
       scope:
         description: Regression scope
         type: choice
-        options: [all, excel-parity, full, print-layout, file-dialogs, file-associations, studio-clipboard, native-clipboard, updates, startup]
+        options: [all, excel-parity, full, find-replace, print-layout, file-dialogs, file-associations, studio-clipboard, native-clipboard, updates, startup]
         default: all
       operating_system:
         description: Operating system to validate
@@ -60,6 +60,8 @@ jobs:
             specs="updates recovery"
           elif [ "${{ inputs.scope }}" = native-clipboard ]; then
             specs="native-clipboard"
+          elif [ "${{ inputs.scope }}" = find-replace ]; then
+            specs="find-replace dialog-focus"
           elif [ "${{ inputs.scope }}" = studio-clipboard ]; then
             specs="studio-clipboard"
           elif [ "${{ inputs.scope }}" = print-layout ]; then

@@ -17,7 +17,7 @@ const close=async()=>page.getByRole('dialog').getByRole('button',{name:'닫기',
 const book=()=>page.evaluate(()=>sheetStudio.getWorkbook());
 async function load(b,name){b.name=name;await page.locator('#file-input').setInputFiles({name:name+'.sheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(b))});await page.waitForFunction(name=>sheetStudio.getWorkbook().name===name,name);await settle();}
 try{
-  await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.locator('.cell').first().waitFor();
+  await fs.mkdir(path.join(root,'test-results'),{recursive:true});await page.setViewportSize({width:1000,height:680});await page.locator('.cell').first().waitFor();
   const input=createWorkbook();input.sheets[0].name='매출';input.sheets[0].cells={A1:{raw:'ALPHA',style:{bold:true}},A2:{raw:'Alpha Beta',style:{}},A3:{raw:'alpha',style:{}},B1:{raw:'=SUM(1,2)',style:{}},C1:{raw:'0.5',style:{numberFormat:'0%',format:'percent'}}};
   input.sheets.push({id:'second',name:'재고',cells:{A1:{raw:'alpha',style:{}}},charts:[],merges:[],rowHeights:{},columnWidths:{}});await load(input,'find-journey');
   await open();await page.locator('#find-text').fill('alpha');await page.locator('#replace-text').fill('한글');await page.locator('#find-scope').selectOption('workbook');
@@ -27,7 +27,10 @@ try{
   await page.getByRole('dialog').getByRole('button',{name:'모두 바꾸기',exact:true}).click();await settle();assert.match(await page.locator('#find-status').innerText(),/4개 셀을 변경/);assert.equal((await book()).sheets[0].cells.A1.raw,'한글');assert.equal((await book()).sheets[1].cells.A1.raw,'한글');
   // Keep using the same dialog after a document replacement transaction.
   await page.locator('#find-text').fill('한글');await scan();assert.match(await page.locator('#find-status').innerText(),/4개 발견/);
-  await page.screenshot({path:path.join(root,'test-results/find-replace-preview.png')});await close();
+  await page.screenshot({path:path.join(root,'test-results/find-replace-preview.png')});await page.getByRole('dialog').getByRole('button',{name:'닫기',exact:true}).click({timeout:500});
+  // Noninteractive notices must pass clicks through, but their save/action
+  // buttons must remain usable (e.g. an undo-memory-limit warning).
+  await page.evaluate(()=>{document.querySelector('.toast')?.remove();const notice=document.createElement('div');notice.className='toast';notice.innerHTML='<button type="button" id="toast-action-check">알림 작업</button>';notice.querySelector('button').onclick=()=>window.__toastActionClicked=true;document.body.append(notice);});await page.locator('#toast-action-check').click({timeout:500});assert.equal(await page.evaluate(()=>window.__toastActionClicked),true);await page.evaluate(()=>document.querySelector('.toast')?.remove());
   await page.keyboard.press('ControlOrMeta+z');await settle();assert.equal((await book()).sheets[0].cells.A1.raw,'ALPHA');assert.equal((await book()).sheets[1].cells.A1.raw,'alpha');
   await page.keyboard.press('ControlOrMeta+y');await settle();assert.equal((await book()).sheets[0].cells.A2.raw,'한글 Beta');
   await page.locator('[data-sheet]').filter({hasText:'매출'}).click();await settle();await go('A1:A2');await open();await page.locator('#find-scope').selectOption('selection');await page.locator('#find-text').fill('한글');await page.locator('#find-whole').check();await scan();assert.match(await page.locator('#find-status').innerText(),/1개 발견/);await close();
