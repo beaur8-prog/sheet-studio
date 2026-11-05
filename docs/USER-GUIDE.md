@@ -5,11 +5,11 @@
 
 > **다운로드·설치 전 안내:** 현재 Mac 앱은 Apple Developer ID 서명·공증을 받지 않았고, Windows 설치 파일은 코드 서명(Authenticode)이 되어 있지 않습니다. 따라서 다운로드 후 설치하거나 처음 실행할 때 운영체제의 보안 경고가 표시되거나 실행이 차단될 수 있습니다. 경고 표시 여부는 OS 버전과 보안 설정에 따라 다릅니다. 다운로드 출처를 확인하고, 회사·기관 PC에서는 관리자 정책을 따르세요.
 
-0.7.31 개발 기능 안내 · 2026년 10월 31일 · 현재 공개 버전 0.7.29
+2026년 11월 5일 확인 · 공개 Windows 0.7.37 / Mac 0.7.36 · 개발 0.7.38 미배포
 
-**개발·배포 구분:** 아래 편집 안내는 0.7.31 개발 기능을 포함합니다. 이번 개선은 아직 공개하지 않았으며 [상세 내역](releases/v0.7.31.md)을 먼저 확인하세요. 현재 공개 0.7.29은 Windows x64 설치 파일과 Mac Apple Silicon ZIP을 제공합니다. 최신 공개본에는 Linux DEB가 없습니다.
+공개 설치 파일에는 동적 배열·페이지 설정·빈 문서 시작·명시적 복구·업데이트 메뉴가 포함됩니다. **0.7.38의 찾기·바꾸기 확장, 파일 호환성 안내, 표 열 확장·차트 미리 보기와 피벗 보존 개선은 아직 공개 설치 파일에 포함되지 않습니다.** [0.7.38 변경·검증](releases/v0.7.38.md)을 확인하세요. 현재 Linux DEB 공개 파일은 없습니다.
 
-[현재 공개본 다운로드](https://github.com/beaur8-prog/sheet-studio/releases/latest) · [버전별 변경 내역](CHANGELOG.md) · [대용량 한도](CAPACITY.md)
+[Windows 공개본](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.37) · [Mac 공개본](https://github.com/beaur8-prog/sheet-studio/releases/tag/v0.7.36) · [버전별 변경 내역](CHANGELOG.md) · [대용량 한도](CAPACITY.md)
 
 ## 1. 어떤 앱인가요?
 
@@ -26,18 +26,18 @@ Sheet Studio는 한국어 리본 UI를 갖춘 로컬 스프레드시트 앱입�
 
 ## 2. 다운로드와 설치
 
-[릴리즈의 Assets](https://github.com/beaur8-prog/sheet-studio/releases/latest)에서 운영체제에 맞는 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
+아래 운영체제별 링크에서 설치 파일을 받으세요. 아래 배포 패키지에는 실행 환경이 포함되어 **Node.js를 따로 설치할 필요가 없습니다.** GitHub가 자동 생성하는 `Source code` ZIP은 실행 앱이 아닙니다.
 
 | 컴퓨터 | 다운로드 파일 |
 | --- | --- |
-| Windows 64비트 x64 | `Sheet-Studio-0.7.28-Windows-x64-Setup.exe` |
-| Mac Apple Silicon (M1/M2/M3/M4 등) | `Sheet-Studio-0.7.28-macOS-arm64.zip` |
+| Windows 64비트 x64 | [Sheet-Studio-0.7.37-Windows-x64-Setup.exe](https://github.com/beaur8-prog/sheet-studio/releases/download/v0.7.37/Sheet-Studio-0.7.37-Windows-x64-Setup.exe) |
+| Mac Apple Silicon (M1/M2/M3/M4 등) | [Sheet-Studio-0.7.36-macOS-arm64.zip](https://github.com/beaur8-prog/sheet-studio/releases/download/v0.7.36/Sheet-Studio-0.7.36-macOS-arm64.zip) |
 | Linux Ubuntu·Debian 계열 x64 | 현재 공개본에 없음. 소스에서 `npm ci`, `npm run runtime:install`, `npm run package:linux`로 빌드 |
 
 ### Windows
 
-1. `Sheet-Studio-0.7.28-Windows-x64-Setup.exe`를 다운로드합니다.
-2. Setup EXE를 실행하고 한국어 또는 영어를 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 기본 경로는 `%LOCALAPPDATA%\Programs\Sheet Studio`입니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
+1. [Sheet-Studio-0.7.37-Windows-x64-Setup.exe](https://github.com/beaur8-prog/sheet-studio/releases/download/v0.7.37/Sheet-Studio-0.7.37-Windows-x64-Setup.exe)를 다운로드합니다.
+2. Setup EXE를 실행합니다. 0.7.37은 Windows UI 언어에 따라 한국어/영어를 자동 선택합니다. 설치 마법사에서 경로를 확인하거나 변경한 뒤 설치합니다. 기본 경로는 `%LOCALAPPDATA%\Programs\Sheet Studio`입니다. 시작 메뉴와 바탕화면에 **Sheet Studio** 바로가기가 생성됩니다.
 3. 시작 메뉴에서 Sheet Studio를 실행한 뒤 작업표시줄 아이콘을 우클릭해 **작업 표시줄에 고정**을 선택합니다.
 4. 이전 포터블 버전의 고정 아이콘은 먼저 고정 해제하세요. 설치 파일(Setup EXE) 자체를 고정하지 마세요.
 
@@ -60,7 +60,7 @@ Windows 패키지는 Authenticode 서명되지 않았습니다. SmartScreen이�
 
 ### Linux (Ubuntu·Debian 계열 x64)
 
-현재 공개 0.7.29에는 Linux DEB가 없습니다. Linux에서 소스의 `npm run package:linux`로 빌드한 DEB를 사용하거나 다음 Linux 배포 파일을 받으세요. 아래 `VERSION`은 실제 파일의 버전으로 바꿉니다.
+2026-11-05 기준 현재 공개 릴리스에는 Linux DEB가 없습니다. Linux에서 소스의 `npm run package:linux`로 빌드한 DEB를 사용하거나 다음 Linux 배포 파일을 받으세요. 아래 `VERSION`은 실제 파일의 버전으로 바꿉니다.
 
 ```sh
 sudo apt install ./Sheet-Studio-VERSION-Linux-amd64.deb
@@ -77,13 +77,13 @@ Ubuntu 22.04 x64 CI의 가상 화면에서 설치 및 앱 UI를 검증합니다.
 
 ### 빈 문서로 시작하기와 이전 작업 복구
 
-0.7.34 개발본부터 앱을 일반 실행하면 이전 파일 대신 새 빈 **통합 문서1**이 보입니다. 연결된 파일을 더블클릭하거나 파일 경로로 실행하면 해당 파일을 엽니다.
+0.7.34부터 앱을 일반 실행하면 이전 파일 대신 새 빈 **통합 문서1**이 보입니다. 연결된 파일을 더블클릭하거나 파일 경로로 실행하면 해당 파일을 엽니다.
 
 이전 작업이 필요하면 **파일 → 이전 문서 복구 → 복구**를 선택하세요. 빈 화면을 편집하지 않고 닫아도 이전 복구 자료는 유지됩니다. 새 문서를 편집하면 현재 문서와 직전 작업의 복구 자료를 보관하며, 오래된 복구 세대는 정리합니다. 복구 자료는 모든 작업의 무제한 이력이 아니므로 필요한 문서는 파일로 저장하세요. 같은 실행 중의 화면 새로 고침은 현재 편집 내용을 유지합니다.
 
 ### 업데이트
 
-0.7.33 개발본부터 **도움말 → 업데이트 확인**으로 업데이트 창을 엽니다. 운영체제 도움말 메뉴에서도 **업데이트 확인… / 수동 업데이트… / 업데이트 진행 상황…**을 선택할 수 있습니다.
+0.7.33부터 **도움말 → 업데이트 확인**으로 업데이트 창을 엽니다. 운영체제 도움말 메뉴에서도 **업데이트 확인… / 수동 업데이트… / 업데이트 진행 상황…**을 선택할 수 있습니다.
 
 - **수동으로만 확인:** 자동 확인·다운로드를 끄고 필요할 때 직접 확인합니다. 설정은 재실행해도 유지됩니다.
 - **업데이트 확인 → 새 버전 다운로드:** 새 공개 버전을 찾은 뒤 다운로드 버튼을 누릅니다. 확인 단계에서는 파일을 받거나 앱을 종료하지 않습니다.
