@@ -83,6 +83,7 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 ## 분석과 검증
 
 - [Excel 동작 비교 기반 개선 계획](docs/EXCEL-BEHAVIOR-IMPROVEMENT-PLAN.md): 현재 구현과 남은 차이, 개선 우선순위, 21개 비교 시나리오와 완료 기준
+- [찾기·바꾸기 사용법](docs/FIND-REPLACE.md): 0.7.38 개발본의 범위·표시 값 검색·변경 미리 보기·실행 취소와 한도
 - [분석 요약](docs/ANALYSIS.md): 네이티브 분석과 화면 관찰의 범위 및 구현과의 구분
 - [검증 기록](VALIDATION.md): 테스트 실행과 실행 파일 확인
 - `node tests/ui-cell-editing.mjs --packaged`: 화면 갱신 중 더블클릭, 셀 안 커서·서식·입력·취소·병합·확대 상태 검사
@@ -92,6 +93,8 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 - `node tests/ui-functions.mjs --packaged`: 함수 검색·범주·삽입·자동 완성·인수 안내·수식 저장 검사
 - `node scripts/functions-native-smoke.mjs`: 설치된 Windows Excel과 계산 결과 및 XLSX 실제 열기 대조
 - `npm test`: 계산, 파일 왕복, 차트 유형·참조·원본 보존·크기 및 플랫폼 설정 테스트
+- `node tests/generated-roundtrip.mjs`: 고정 난수 합성 문서 120개·XLSX 240회 왕복, 표시·오류 종류·메모·차트·일괄 바꾸기 실행 취소 검사. 실제 Excel 대조와는 별도
+- [Open XML SDK 구조 검사](tests/ooxml-sdk/README.md): 검증용 .NET 도구로 합성 XLSX의 스키마·SDK 제약을 읽기 전용 확인
 - `node tests/ui-excel-charts.mjs --packaged`: 10종 차트의 생성·설정·XLSX 저장/열기·변환 검사
 - `node scripts/chart-native-smoke.mjs`: 설치된 Windows Excel에서 18개 새 차트 조합과 기존 차트 왕복 검사
 - `node tests/ui-charts.mjs --desktop`: 실제 Electron에서 차트 조절·저장·복원 검사 (`--packaged`로 배포 앱 검사)
