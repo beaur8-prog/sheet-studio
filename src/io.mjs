@@ -124,45 +124,45 @@ function parseDelimited(text, delimiter) {
   }
   return rows;
 }
-function readDelimited(data, filename) {
+function readDelimited(data, filename, {onProgress=()=>{}}={}) {
   const text = decodeText(data);
   const delimiter = /\.tsv$/i.test(filename) ? '\t' : ',';
   const sheet = newSheet(fileName(filename).slice(0, 31) || 'Sheet1');
   const rows = parseDelimited(text, delimiter);
-  rows.forEach((row, r) => row.forEach((value, c) => {
+  rows.forEach((row,r)=>{if(r%10000===0)onProgress({phase:'rows',completed:r,total:rows.length});row.forEach((value,c)=>{
     if (!value) return;
     if (c >= 16384 || r >= 1048576) throw new Error('Excel의 최대 행 또는 열 수를 초과했습니다.');
     // CSV has no type metadata. Keep leading-zero IDs as text, ordinary numbers as numbers.
     const raw = value.startsWith("'") ? value : /^[=+@\t\r]/.test(value)||/^-/.test(value)&&!numeric.test(value)||/^0\d+/.test(value) ? "'"+value : value;
     sheet.cells[address(c, r)] = { raw, style: {} };
-  }));
+  });});
   return { name: fileName(filename), activeSheetId: sheet.id, sheets: [sheet] };
 }
 
 /** Read XLSX/CSV/TSV bytes into the app's sparse workbook model. */
-export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xlsx') {
+export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xlsx', {onProgress=()=>{}}={}) {
   const data = bytes(arrayBuffer);
   if (data.byteLength > 100 * 1024 * 1024) throw new Error('100 MB 이하의 파일을 선택하세요.');
-  if (/\.(csv|tsv)$/i.test(filename)) return readDelimited(data, filename);
+  if (/\.(csv|tsv)$/i.test(filename)) return readDelimited(data, filename,{onProgress});
   if (!/\.xls[xm]$/i.test(filename)) throw new Error('XLSX, XLSM, CSV 또는 TSV 파일을 선택하세요.');
-  let colorZip;
+  onProgress({phase:'inspect'});let colorZip;
   try{colorZip=await JSZip.loadAsync(data);}catch(error){throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.',{cause:error});}
   let expanded=0;
   // JSZip 3.10.2 exposes the central-directory size on its pinned compressed
   // entry. Check before ExcelJS inflates cell XML into its in-memory model.
   for(const file of Object.values(colorZip.files))if(!file.dir){const size=file._data?.uncompressedSize;if(!Number.isSafeInteger(size)||size<0)throw Error('XLSX 압축 정보를 읽을 수 없습니다.');expanded+=size;if(expanded>512*1024*1024)throw Error('압축 해제 후 512 MB 이하인 XLSX 파일을 선택하세요.');}
-  const externalLinks=await readExternalLinks(colorZip),arrayMetadata=await readArrayMetadata(colorZip),preserved=await prepareWorksheetFeatures(colorZip,{onMetadataCell:arrayMetadata.collect});
+  onProgress({phase:'metadata'});const externalLinks=await readExternalLinks(colorZip),arrayMetadata=await readArrayMetadata(colorZip),preserved=await prepareWorksheetFeatures(colorZip,{onMetadataCell:arrayMetadata.collect});
   const styleModels=[],styleIndexes=new Map(),styleObjects=new WeakMap();
   const rememberStyle=(cell,baseline)=>{if(!Object.keys(cell.style||{}).length)return undefined;let index=styleObjects.get(cell.style);if(index!==undefined)return index;const key=JSON.stringify(cell.style);index=styleIndexes.get(key);if(index===undefined){index=styleModels.length;styleIndexes.set(key,index);styleModels.push({style:plainCopy(cell.style),baseline:plainCopy(baseline)});}styleObjects.set(cell.style,index);return index;};
   const book = new ExcelJS.Workbook();
-  try { await book.xlsx.load(preserved.data||data); }
+  onProgress({phase:'decode'});try { await book.xlsx.load(preserved.data||data); }
   catch (error) { throw new Error('XLSX 파일을 읽을 수 없습니다. 암호화되었거나 손상된 파일인지 확인하세요.', { cause: error }); }
   const themeRel=(await readRelationships(colorZip,'xl/workbook.xml')).find(r=>r.type.endsWith('/theme')&&r.mode!=='External'),themeXML=await colorZip.file(themeRel?resolvePart('xl/workbook.xml',themeRel.target):'xl/theme/theme1.xml')?.async('string'),stylesXML=await colorZip.file('xl/styles.xml')?.async('string'),resolveColor=createColorResolver(themeXML,stylesXML);
   const normalStyle=await readDefaultStyleModel(ExcelJS.Workbook,stylesXML,themeXML),normalVisible={verticalAlign:'bottom',...readStyle(normalStyle,resolveColor)},normalIndex=rememberStyle({style:normalStyle},normalVisible);
   const digitWidth=normalDigitWidth(normalStyle.font);
   const dateOffset=book.properties.date1904?1462:0;
   let cellCount = 0;
-  const sheets = book.worksheets.map(source => {
+  const sheets = book.worksheets.map((source,sheetIndex)=>{onProgress({phase:'cells',completed:sheetIndex,total:book.worksheets.length});
     const sheet = newSheet(source.name);
     const defaultHeight=source.properties?.defaultRowHeight*4/3;
     if(Number.isFinite(defaultHeight)&&defaultHeight>=1&&defaultHeight<=10000)sheet.defaultRowHeight=defaultHeight;
@@ -240,7 +240,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
   if(externalLinks)result.xlsxExternalLinks=externalLinks;
   if(arrayMetadata.stale)result.referenceCachesValid=false;
   if(sheets.some(s=>s.unsupportedConditionalCount)&&preserved.dxfs.length)result.xlsxDxfs=preserved.dxfs;
-  await restoreSheetKinds(colorZip,result,newSheet);
+  onProgress({phase:'features'});await restoreSheetKinds(colorZip,result,newSheet);
   await restoreWorksheetParts(data,result);
   await restoreTables(colorZip,result);
   await restoreFilterParts(data,result);

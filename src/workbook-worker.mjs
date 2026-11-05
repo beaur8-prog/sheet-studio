@@ -1,3 +1,4 @@
+import {openingSheetId} from './opening-sheet.mjs';
 import {calculationDisplay} from './calculation-display.mjs';
 import {buildChartPreview} from './chart-preview.mjs';
 import {findWorkbook,replaceWorkbookPlan,replacementPatch} from './find-replace.mjs';
@@ -14,33 +15,27 @@ import {createWorkbook, parseWorkbook, serializeWorkbook, validateWorkbook, vali
 import {buildSheetPrintDocument} from './sheet-print.mjs';
 import {structuralWorkbookPlan} from './workbook-structure.mjs';
 import {createConditionalEvaluator} from './conditional.mjs';
-import {estimateDataBytes} from './data-size.mjs';
-import {MAX_HISTORY_BYTES} from './limits.mjs';
+import {cellDescription,describeWorkbook as describe} from './workbook-description.mjs';
 import {readSpreadsheet, writeSpreadsheet} from './io.mjs';
 import {openRecoveryStore, workbookMetadata} from './recovery-store.mjs';
 import {applyFilters, filterOptions, filterPredicates, valueKey, sortFilterRange, sortRange, inferFilterRange} from './filters.mjs';
 
 let book = createWorkbook(), revision = 0, store, prepared = null, evaluators = new Map(), conditionals = new Map(), arraysSent=false;
-let documentId;
+let documentId;const importPorts=new Map();
 let dirty = new Map(), replacements = new Set(), needsSave = false, metadataDirty = false;
 function changed() { resetConstraintIndexes();evaluators = new Map(); conditionals = new Map(); arraysSent=false; needsSave = true; }
 const evaluator = id => {
   if (!evaluators.has(id)) evaluators.set(id, evaluators.size?evaluators.values().next().value.forSheet(id):createEvaluator(book,id));
   return evaluators.get(id);
 };
-const cellDescription = cells => {
-  let textLength=0,count=0,bytes=4;
-  for(const ref in cells){
-    count++;textLength+=cells[ref].raw.length;
-    if(bytes<=MAX_HISTORY_BYTES)bytes+=estimateDataBytes(cells[ref],MAX_HISTORY_BYTES-bytes)+(ref.length+4)*2;
-  }
-  return {count,textLength,bytes:Math.min(bytes,MAX_HISTORY_BYTES+1)};
-};
-const describe = book => {
-  const sheets=book.sheets.map(sheet=>({id:sheet.id,...cellDescription(sheet.cells)}));
-  return {bytes:Math.min(MAX_HISTORY_BYTES+1,estimateDataBytes(workbookMetadata(book),MAX_HISTORY_BYTES)+sheets.reduce((n,s)=>n+s.bytes+32,0)),sheets};
-};
 async function handle(type, data) {
+  if(type==='import-port'){
+    const {token,port}=data;importPorts.set(token,port);
+    port.onmessage=({data:candidate})=>{if(importPorts.get(token)!==port||candidate.token!==token)return;prepared={token,book:candidate.book,description:candidate.description};importPorts.delete(token);port.postMessage({token,staged:true});port.close();};return true;
+  }
+  if(type==='import-discard'){const port=importPorts.get(data.token);if(port){port.close();importPorts.delete(data.token);}if(prepared?.token===data.token)prepared=null;return true;}
+  if(type==='import-preview'){if(prepared?.token!==data.token)throw Error('파일 열기 작업이 만료되었습니다. 다시 여세요.');return {token:data.token,book:prepared.book,description:prepared.description};}
+
   if (type === 'load') {
     store = await openRecoveryStore();
     let recoveryAvailable, migrated = false;
@@ -63,12 +58,13 @@ async function handle(type, data) {
       recoveryAvailable = !!(recovered || migrated);
     }
     documentId = data.fresh ? undefined : store.documentId || previousId;
+    book.activeSheetId=openingSheetId(book);
     return {book, description: describe(book), migrated, recoveryAvailable, revision};
   }
   if (type === 'recover') {
     const recovered = await store.recover();
     if (!recovered) return null;
-    const loaded = validateWorkbook(recovered.book), token = crypto.randomUUID(); prepared = {token, book: loaded};
+    const loaded = validateWorkbook(recovered.book);loaded.activeSheetId=openingSheetId(loaded);const token = crypto.randomUUID(); prepared = {token, book: loaded};
     return {book: loaded, description: describe(loaded), token, documentId: recovered.documentId};
   }
   if (type === 'import') {

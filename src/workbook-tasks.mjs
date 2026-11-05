@@ -1,3 +1,4 @@
+import {importTask} from './import-task.mjs';
 import {workbookMetadata} from './recovery-store.mjs';
 
 export function createWorkbookTasks({onSave, onCalculated, onError}) {
@@ -89,7 +90,8 @@ export function createWorkbookTasks({onSave, onCalculated, onError}) {
     get calculated() { return !calculateScheduled&&!pendingRefs.size&&!calculating; },
     get saving() { return saveRevision !== revision; },
     async load(legacy, options = {}) { const result = await call('load', {legacy, ...options}); adopt(result.book); return result; },
-    async import(bytes, name) { return call('import', {bytes, name}, [bytes.buffer]); },
+    async import(bytes,name,options={}){await synced;return importTask(bytes,name,{...options,createWorker:()=>new Worker(new URL('./workbook-import-worker.mjs',import.meta.url),{type:'module'}),prepare:(token,port)=>call('import-port',{token,port},[port]),read:token=>call('import-preview',{token}),discard:token=>call('import-discard',{token}).catch(()=>{})});},
+    discardImport:token=>call('import-discard',{token}).catch(()=>{}),
     sync, flush, value, recalculate,
     result(sheetId,ref){return {value:value(sheetId,ref),error:calculationErrors.get(sheetId+'!'+ref)||null,...provenance.get(sheetId+'!'+ref)};},
     style(sheetId,ref) { const key=sheetId+'!'+ref;if(styles.has(key))return styles.get(key);value(sheetId,ref);return {}; },
