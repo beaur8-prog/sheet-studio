@@ -83,3 +83,22 @@ test('new app pivots coexist with preserved pivots without renaming their origin
   assert.equal(attr(entries.find(e=>e.sheetId===book.sheets[1].id).table,'name'),'SheetStudioPivot1');
   const again=await readSpreadsheet(out.data,'mixed-again.xlsx');assert.ok(again.sheets[2].pivot);assert.equal(preservedPivots(again,again.sheets[1].id).length,1);
 });
+
+test('cells added outside an app pivot are not erased and stay editable through filtered-report roundtrips',async()=>{
+  const b=fixture(),target={id:'pivot',name:'피벗',charts:[]},p={...spec(),rows:['상품'],columns:[],filters:[{field:'지역',values:['동부']}]};applyPivot(b,target,p);b.sheets.push(target);b.sheets[0].cells.F1={raw:"='피벗'!B4",style:{}};
+  const zip=await JSZip.loadAsync((await writeSpreadsheet(b)).data),path='xl/worksheets/sheet2.xml';zip.file(path,(await zip.file(path).async('string')).replace('</sheetData>','<row r="10"><c r="F10" t="inlineStr"><is><t>추가 메모</t></is></c></row></sheetData>'));
+  let book=await readSpreadsheet(await bytes(zip),'notes.xlsx');
+  assert.equal(book.sheets[1].cells.F10.raw,'추가 메모');assert.equal(book.sheets[1].pivot,undefined);assert.equal(cellEditError(book,book.sheets[1],'F10'),null);assert.match(cellEditError(book,book.sheets[1],'B6'),/원본 피벗/);
+  assert.equal(book.sheets[0].cells.F1.raw,"='피벗'!B6");
+  book.sheets[1].cells.F10.raw='편집한 메모';
+  for(let i=0;i<3;i++){book=await readSpreadsheet((await writeSpreadsheet(book)).data,'notes.xlsx');assert.equal(book.sheets[1].cells.F10.raw,'편집한 메모');assert.equal(book.sheets[0].cells.F1.raw,"='피벗'!B6");assert.equal(book.sheets[1].cells.B6.raw,'60');}
+});
+
+test('custom native captions and legacy report styling are retained rather than restored from stale app metadata',async()=>{
+ for(const legacy of [false,true]){
+  const {zip,book}=await sample();if(legacy)zip.file('customXml/sheetStudioPivots.xml','<pivots xmlns="urn:sheet-studio:pivots:1">'+JSON.stringify([{sheet:'피벗',source:'원본',spec:book.sheets[1].pivot,rowOffset:0}]).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pivots>');
+  const path='xl/pivotTables/pivotTable1.xml';zip.file(path,(await zip.file(path).async('string')).replace(/name="합계: 매출 \(1\)"/,'name="분기 합산"').replace('PivotStyleMedium9','PivotStyleLight16'));
+  const read=await readSpreadsheet(await bytes(zip),'caption.xlsx');assert.equal(read.sheets[1].pivot,undefined);assert.ok(read.xlsxPivotArchive);
+  const saved=await JSZip.loadAsync((await writeSpreadsheet(read)).data),[entry]=await nativePivotIndex(saved,read);assert.match(await saved.file(entry.path).async('string'),/name="분기 합산"/);assert.match(await saved.file(entry.path).async('string'),/PivotStyleLight16/);
+ }
+});

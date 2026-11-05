@@ -1,10 +1,11 @@
 import JSZip from 'jszip';
 import {buildPivot,applyPivot,aggregations,scalarKey} from './pivot.mjs';
 import {validatePivot} from './pivot-schema.mjs';
-import {address,transformFormulaReferences} from './engine.mjs';
+import {address,parseAddress,transformFormulaReferences} from './engine.mjs';
+import {shiftWorksheetFeatures} from './conditional.mjs';
 import {updateChartReferences} from './chart-model.mjs';
 import {xml} from './chart-xml.mjs';
-import {nativePivotIndex,nativePivotLayout,legacyPivotMatches,preserveNativePivots,nativePivotNames} from './native-pivots.mjs';
+import {nativePivotIndex,nativePivotLayout,legacyPivotMatches,preserveNativePivots,nativePivotNames,pivotHasExtraCells} from './native-pivots.mjs';
 
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL='http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
@@ -97,13 +98,25 @@ export async function restorePivotParts(bytes,workbook,{refresh=true}={}){
     const target=workbook.sheets.find(s=>s.name===entry.sheet),source=workbook.sheets.find(s=>s.name===entry.source);
     if(!target)continue;
     validatePivot(entry.spec);if(target===source)throw new Error('피벗 원본은 다른 시트여야 합니다.');
+    if(entry.rowOffset!==undefined&&(!Number.isInteger(entry.rowOffset)||entry.rowOffset<0||entry.rowOffset>17))throw new Error('피벗 위치 정보가 올바르지 않습니다.');
     const actual=native.filter(n=>n.sheetId===target.id),empty=entry.nativeAbsent===true||!actual.length&&entry.spec.filters.some(f=>!f.values.length);
     const compatible=empty&&!actual.length||actual.length===1&&(typeof entry.nativeLayout==='string'?entry.nativeLayout===nativePivotLayout(actual[0]):legacyPivotMatches(actual[0],entry));
-    if(!compatible){target.pivotImportNotice='외부에서 변경된 피벗 설정과 결과를 유지합니다. 필드 편집·새로 고침은 Excel에서 진행하세요.';continue;}
+    const extras=actual.length===1&&pivotHasExtraCells(target,entry,actual[0]);
+    if(!compatible||extras){target.pivotImportNotice=extras?'피벗 바깥에 추가된 셀과 원본 피벗 결과를 유지합니다. 새로 고침은 Excel에서 진행하세요.':'외부에서 변경된 피벗 설정과 결과를 유지합니다. 필드 편집·새로 고침은 Excel에서 진행하세요.';continue;}
     for(const item of actual)retained.delete(item);
     target.pivot={...entry.spec,sourceSheetId:source?.id||'missing-source'};
-    if(entry.rowOffset!==undefined&&(!Number.isInteger(entry.rowOffset)||entry.rowOffset<0||entry.rowOffset>17))throw new Error('피벗 위치 정보가 올바르지 않습니다.');
-    if(refresh&&entry.rowOffset){for(const owner of workbook.sheets)for(const cell of Object.values(owner.cells))if(cell.raw?.startsWith('='))for(let i=0;i<entry.rowOffset;i++)cell.raw=transformFormulaReferences(cell.raw,{axis:'r',index:0,delta:-1,targetSheet:target.name,ownerSheet:owner.name});for(let i=0;i<entry.rowOffset;i++)updateChartReferences(workbook,target.id,'r',0,-1);}
+    if(refresh&&entry.rowOffset){
+      const offset=entry.rowOffset,cells={};
+      for(const ref in target.cells){const p=parseAddress(ref);if(p.r>=offset)cells[address(p.r-offset,p.c)]=target.cells[ref];}
+      target.cells=cells;target.rowHeights=Object.fromEntries(Object.entries(target.rowHeights||{}).filter(([r])=>+r>=offset).map(([r,h])=>[+r-offset,h]));
+      for(let i=0;i<offset;i++){
+        for(const owner of workbook.sheets){
+          for(const cell of Object.values(owner.cells))if(cell.raw?.startsWith('='))cell.raw=transformFormulaReferences(cell.raw,{axis:'r',index:0,delta:-1,targetSheet:target.name,ownerSheet:owner.name});
+          shiftWorksheetFeatures(owner,'r',0,-1,target.name);
+        }
+        updateChartReferences(workbook,target.id,'r',0,-1);
+      }
+    }
     restored.push(target);
   }
   await preserveNativePivots(zip,workbook,[...retained]);

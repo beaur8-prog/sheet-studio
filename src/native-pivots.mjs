@@ -1,10 +1,12 @@
 import {xml,stringify,all,child,children,attr,readRelationships,resolvePart,relPath,relationship,relationships} from './chart-xml.mjs';
 import {worksheetParts} from './xlsx-preservation.mjs';
 import {capturePartTree,writeStoredParts,contentTypeWriter,validateStoredParts} from './xlsx-part-store.mjs';
+import {tableBounds} from './table-schema.mjs';
+import {aggregations} from './pivot-schema.mjs';
 
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
-const ignored=new Set(['xmlns','name','cacheId','createdVersion','updatedVersion','refreshedVersion','minRefreshableVersion']);
+const ignored=new Set(['xmlns','cacheId','createdVersion','updatedVersion','refreshedVersion','minRefreshableVersion']);
 const canonical=node=>node?.nodeType===1?[node.localName,Array.from(node.attributes).filter(a=>!a.name.startsWith('xmlns')&&!ignored.has(a.localName)).map(a=>[a.localName,a.value]).sort((a,b)=>a[0].localeCompare(b[0])),Array.from(node.childNodes).filter(n=>n.nodeType===1||n.nodeType===3&&n.data.trim()).map(n=>n.nodeType===1?canonical(n):n.data.trim())]:null;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 
@@ -47,10 +49,13 @@ export function legacyPivotMatches(entry,stored){
   if(axis('colFields').includes(-2)!==(spec.values.length>1))return false;
   const data=children(child(table,'dataFields'),'dataField').map(f=>({field:names[Number(attr(f,'fld'))],aggregate:attr(f,'subtotal','sum')==='countNums'?'countNumbers':attr(f,'subtotal','sum')}));
   if(!same(data,spec.values)||['rowGrandTotals','colGrandTotals'].some(k=>!['0','false'].includes(attr(table,k,'1'))!==spec.totals))return false;
+  if(attr(table,'dataCaption','값')!=='값'||children(child(table,'dataFields'),'dataField').some((field,i)=>attr(field,'name')!==`${aggregations[spec.values[i].aggregate]}: ${spec.values[i].field} (${i+1})`||attr(field,'numFmtId','0')!=='0'))return false;
+  const style=child(table,'pivotTableStyleInfo');if(style&&(attr(style,'name')!=='PivotStyleMedium9'||attr(style,'showRowStripes','1')!=='1'||attr(style,'showColStripes','0')!=='0'))return false;
   if(['compact','compactData','outline','outlineData'].some(k=>!['0','false'].includes(attr(table,k,'0'))))return false;
   if(children(table).some(n=>['formats','conditionalFormats','chartFormats','pivotFilters','rowHierarchiesUsage','colHierarchiesUsage','extLst'].includes(n.localName)))return false;
   const expectedPages=spec.filters.filter(f=>!spec.rows.includes(f.field)&&!spec.columns.includes(f.field)).map(f=>f.field);
   if(!same(children(child(table,'pageFields'),'pageField').map(f=>names[Number(attr(f,'fld'))]),expectedPages))return false;
+  if(children(child(table,'pageFields'),'pageField').some(f=>attr(f,'item')!==''))return false;
   const typed=n=>n.localName==='m'?'':n.localName==='n'?Number(attr(n,'v')):n.localName==='b'?attr(n,'v')==='1':n.localName==='s'?attr(n,'v'):undefined;
   const pivots=children(child(table,'pivotFields'),'pivotField');
   for(let i=0;i<fields.length;i++){
@@ -69,7 +74,7 @@ export async function preserveNativePivots(zip,book,entries){
   const roots=[...new Set(entries.map(e=>e.path))],parts=await capturePartTree(zip,roots,{maxBytes:24_000_000,maxFiles:1000});
   const styles=zip.file('xl/styles.xml')?xml(await zip.file('xl/styles.xml').async('string')):null;
   const formats=Object.fromEntries(all(styles,'numFmt').map(n=>[attr(n,'numFmtId'),attr(n,'formatCode')]));
-  book.xlsxPivotArchive={version:1,parts,formats,sheets:entries.map(e=>({sheetId:e.sheetId,path:e.path,cache:e.cache,cacheId:e.cacheId})),names:Object.fromEntries(book.sheets.map(s=>[s.id,s.name]))};
+  book.xlsxPivotArchive={version:1,parts,formats,sheets:entries.map(e=>({sheetId:e.sheetId,path:e.path,cache:e.cache,cacheId:e.cacheId,...(attr(child(e.table,'location'),'ref')?{range:attr(child(e.table,'location'),'ref').replace(/\$/g,'')}:{} )})),names:Object.fromEntries(book.sheets.map(s=>[s.id,s.name]))};
   if(entries.some(e=>attr(child(e.definition,'cacheSource'),'type')!=='worksheet'||all(e.table,'formats').length||all(e.table,'conditionalFormats').length||all(e.table,'extLst').length||all(e.definition,'extLst').length)||Object.keys(zip.files).some(p=>/^xl\/(?:slicerCaches|slicers|timelineCaches|timelines|model)\//.test(p)))book.xlsxPivotArchive.blockReason='외부 데이터·슬라이서·고급 서식이 연결된 원본 피벗의 XLSX 보존 저장은 아직 지원하지 않습니다. Excel에서 저장하거나 일반 범위로 변환한 사본을 저장하세요. 앱 문서는 원본 정보를 유지합니다.';
 }
 
@@ -80,9 +85,26 @@ export function validateNativePivotArchive(value){
   if(Object.entries(value.names).length>100||Object.entries(value.names).some(([id,name])=>!id||typeof name!=='string'||name.length>31))throw Error('피벗 원본 시트 정보가 올바르지 않습니다.');
   if(Object.keys(value.formats).length>65536||Object.entries(value.formats).some(([id,code])=>!/^\d+$/.test(id)||typeof code!=='string'||code.length>8192))throw Error('피벗 숫자 형식 정보가 올바르지 않습니다.');
   for(const item of value.sheets)if(!item||!Object.hasOwn(value.names,item.sheetId)||!Object.hasOwn(value.parts,item.path)||!Object.hasOwn(value.parts,item.cache)||typeof item.cacheId!=='string'||!/^\d+$/.test(item.cacheId))throw Error('피벗 정의의 연결이 올바르지 않습니다.');
+  for(const item of value.sheets)if(item.range!==undefined&&(typeof item.range!=='string'||item.range.length>100||!tableBounds(item.range)))throw Error('피벗 결과 범위가 올바르지 않습니다.');
 }
 
 export const preservedPivots=(book,id)=>book.xlsxPivotArchive?.sheets.filter(s=>s.sheetId===id)||[];
+export function preservedPivotTouches(book,id,selection){
+  const b=typeof selection==='string'?tableBounds(selection):selection;
+  return preservedPivots(book,id).some(item=>{const a=item.range&&tableBounds(item.range);return !a||!b||a.r1<=b.r2&&a.r2>=b.r1&&a.c1<=b.c2&&a.c2>=b.c1;});
+}
+export function pivotHasExtraCells(target,entry,actual){
+  const b=actual&&tableBounds(attr(child(actual.table,'location'),'ref'));if(!b)return false;
+  if(target.merges?.length||target.tables?.length)return true;
+  const pages=entry.rowOffset?entry.rowOffset-1:0;
+  const filters=entry.spec.filters.filter(f=>!entry.spec.rows.includes(f.field)&&!entry.spec.columns.includes(f.field));
+  for(const ref in target.cells){
+    const p=tableBounds(ref),cell=target.cells[ref];if(p.r1>=b.r1&&p.r1<=b.r2&&p.c1>=b.c1&&p.c1<=b.c2)continue;
+    if(pages&&p.r1<pages&&p.c1<=1){const f=filters[p.r1],expected=p.c1===0?f?.field:f?.values.length===1?String(f.values[0]):'(여러 항목)';if(String(cell.raw||'').replace(/^'/,'')===expected&&!cell.note)continue;}
+    return true;
+  }
+  return false;
+}
 export function nativePivotNames(book){return new Set((book.xlsxPivotArchive?.sheets||[]).map(item=>attr(xml(new TextDecoder().decode(Uint8Array.from(atob(book.xlsxPivotArchive.parts[item.path].data),c=>c.charCodeAt(0)))).documentElement,'name')));}
 export function removePreservedPivots(book,id){
   if(!book.xlsxPivotArchive)return;

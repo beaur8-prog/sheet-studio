@@ -25,11 +25,13 @@ try{
   await page.locator('#file-input').setInputFiles({name:'native-edited.xlsx',mimeType:out.mime,buffer:Buffer.from(await zip.generateAsync({type:'uint8array'}))});
   await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='native-edited');await settle();
   await page.locator('#pivot-bar').getByText('Excel 피벗 원본 보존',{exact:true}).waitFor();assert.equal(await value('D4'),40);
+  await go('F10');await page.keyboard.press('F2');await page.locator('#editor').fill('피벗 옆 메모');await page.locator('#editor').press('Enter');await settle();assert.equal(await value('F10'),'피벗 옆 메모');
   await go('D4');await page.keyboard.press('Delete');await settle();assert.equal(await value('D4'),40);
   await page.keyboard.press('F2');assert.equal(await page.locator('#editor').evaluate(el=>el.classList.contains('entry-ready')),true);await page.keyboard.press('Escape');
   await page.locator('[data-tab="홈"]').click();await page.locator('[data-action="insert-row"]').click();await settle();assert.match(await page.locator('.toast').innerText(),/원본 피벗/);
   const file=await save(),saved=await fs.readFile(file),loaded=await readSpreadsheet(saved,'checked.xlsx'),savedZip=await JSZip.loadAsync(saved),entries=await nativePivotIndex(savedZip,loaded);
   assert.equal(entries.length,1);assert.match(await savedZip.file(entries[0].path).async('string'),/subtotal="average"/);assert.equal(loaded.sheets[1].cells.D4.raw,'40');
+  assert.equal(loaded.sheets[1].cells.F10.raw,'피벗 옆 메모');
   await page.evaluate(()=>sheetStudio.flushRecovery());await page.reload();await page.locator('#pivot-bar').getByText('Excel 피벗 원본 보존',{exact:true}).waitFor();assert.equal(await value('D4'),40);
   await page.locator('#pivot-bar').getByRole('button',{name:'일반 범위로 변환',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'변환',exact:true}).click();await settle();assert.equal(await page.locator('#pivot-bar').isVisible(),false);
   await go('D4');await page.keyboard.press('F2');await page.locator('#editor').fill('55');await page.locator('#editor').press('Enter');await settle();assert.equal(await value('D4'),55);

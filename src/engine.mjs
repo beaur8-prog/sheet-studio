@@ -22,6 +22,7 @@ import {validateAutoFilter} from './filter-schema.mjs';
 import {validateChart} from './chart-schema.mjs';
 import {validatePivot} from './pivot-schema.mjs';
 import {validateNativePivotArchive} from './native-pivots.mjs';
+import {validateCompatibilityReview} from './file-compatibility.mjs';
 import {createFunctionRuntime} from './function-runtime.mjs';
 import {normalizeFunctionName,XLSX_FUTURE_FUNCTIONS} from './function-catalog.mjs';
 import {numberFormatKind,effectiveNumberFormat,selectNumberSection,formatTextSection,formatNumericSection} from './number-formats.mjs';
@@ -971,6 +972,7 @@ function callFunction(name, nodes, evaluate, ctx) {
     if (search < 0) indexes.reverse();
     for (const i of indexes) {
       const value = range.values[i];
+      if(nodes[0].omitted){if(value===BLANK){selected=i;break;}continue;}
       if (value instanceof FormulaError||value===BLANK||typeof value!==typeof lookup) continue;
       const order = compare(value, lookup);
       if (mode === 2 ? typeof lookup === 'string' && typeof value === 'string' && wildcardRegex(lookup).test(value) : order === 0) { selected = i; break; }
@@ -1512,7 +1514,8 @@ export function validateWorkbook(data) {
     if (!object(sheet.cells)) throw new Error('셀 데이터가 올바르지 않습니다.');
     validateSheetKind(sheet);
     if(sheet.xlsxDrawings!==undefined)validateDrawings(sheet.xlsxDrawings);
-    let hasArrays=false;for (const [ref, cell] of Object.entries(sheet.cells)) {
+    let hasArrays=false;for (const ref in sheet.cells) {
+      const cell=sheet.cells[ref];
       if (++cellCount > MAX_DOCUMENT_CELLS) throw new Error('통합 문서의 셀 수가 제한을 초과했습니다.');
       validateCell(ref, cell);
       hasArrays||=cell.xlsxFormula?.shareType==='array'&&cell.raw.startsWith('=');
@@ -1542,6 +1545,7 @@ export function validateWorkbook(data) {
   const tableNames=new Set();for(const sheet of data.sheets)for(const table of sheet.tables||[]){const name=table.name.toLocaleLowerCase();if(tableNames.has(name))throw Error('통합 문서의 표 이름은 중복될 수 없습니다.');tableNames.add(name);}
   if(data.xlsxConnections!==undefined){const c=data.xlsxConnections;if(!object(c)||typeof c.root!=='string'||typeof c.type!=='string'||!c.type.endsWith('/connections')||!c.parts?.[c.root])throw Error('원래 데이터 연결 정보가 올바르지 않습니다.');validateStoredParts(c.parts);}
   if(data.xlsxPivotArchive!==undefined)validateNativePivotArchive(data.xlsxPivotArchive);
+  if(data.xlsxCompatibility!==undefined)validateCompatibilityReview(data.xlsxCompatibility);
   if(data.xlsxTableStyles!==undefined){if(!Array.isArray(data.xlsxTableStyles)||data.xlsxTableStyles.length>10000)throw Error('원래 표 스타일이 올바르지 않습니다.');for(const style of data.xlsxTableStyles)validatePreservedXML(style,'tableStyle');}
   if(data.xlsxColors!==undefined)validatePreservedXML(data.xlsxColors,'colors');
   if(data.xlsxMetadata!==undefined)validateArrayMetadata(data.xlsxMetadata);

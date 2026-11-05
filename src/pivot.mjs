@@ -83,12 +83,53 @@ export function pivotCells(output,spec){
   return cells;
 }
 
+const rawLabel=cell=>String(cell?.raw||'').replace(/^'/,'');
+function formattingIndex(cells,spec){
+  const width=Math.max(1,spec?.rows?.length||0),headers=new Map(),rows=new Map(),formats=new Map(),cols=new Set(),lines=new Set();
+  for(const ref in cells){const p=parseAddress(ref);cols.add(p.c);lines.add(p.r);}
+  const counts=new Map();
+  for(const c of [...cols].sort((a,b)=>a-b)){const text=rawLabel(cells[address(0,c)]),n=counts.get(text)||0;headers.set(c,JSON.stringify([text,n]));counts.set(text,n+1);}
+  counts.clear();let last=0;for(const r of lines)if(rawLabel(cells[address(r,0)]))last=Math.max(last,r);
+  for(const r of [...lines].sort((a,b)=>a-b)){
+    const text=JSON.stringify(Array.from({length:width},(_,c)=>rawLabel(cells[address(r,c)]))),n=counts.get(text)||0;
+    rows.set(r,r===0?'header':spec?.totals&&spec.rows.length&&r===last?'grand-total':text+'|'+n);counts.set(text,n+1);
+  }
+  const columnKey=c=>headers.get(c)||'column:'+c,rowKey=r=>rows.get(r)||'row:'+r;
+  const key=(r,c)=>rowKey(r)+'|'+columnKey(c);
+  for(const ref in cells){const p=parseAddress(ref);formats.set(key(p.r,p.c),cells[ref]);}
+  return {formats,key,columnKey,rowKey};
+}
+
 // Calculate before mutation: a bad source must not destroy the last good report.
 export function applyPivot(book,target,spec,output=buildPivot(book,spec)){
   const cells=pivotCells(output,spec);
+  const prior=target.cells||{},old=formattingIndex(prior,target.pivot||spec),next=formattingIndex(cells,spec),keep=spec.preserveFormatting!==false;
+  const notes=new Set();for(const ref in cells){
+    const p=parseAddress(ref),previous=old.formats.get(next.key(p.r,p.c));if(!previous)continue;
+    if(keep){
+      cells[ref].style={...cells[ref].style,...cloneData(previous.style||{})};
+      // Imported codes already contain their decimal places. A generated
+      // two-decimal default must not rewrite 0.000 after the next refresh/save.
+      if((previous.style?.numberFormat!==undefined||previous.style?.format!==undefined)&&previous.style.decimals===undefined)delete cells[ref].style.decimals;
+      for(const key of ['xlsxStyle','xlsxNormal','xlsxProtection'])if(previous[key]!==undefined)cells[ref][key]=cloneData(previous[key]);
+    }
+    if(previous.note){cells[ref].note=previous.note;notes.add(previous);}
+    if(previous.xlsxValue&&rawLabel(previous)===rawLabel(cells[ref]))cells[ref].xlsxValue={...cloneData(previous.xlsxValue),raw:cells[ref].raw};
+  }
+  // Notes are authored content. Refreshing a result must not delete notes placed
+  // beside it, even when the user opts to reset report formatting.
+  for(const ref in prior)if(prior[ref].note&&!notes.has(prior[ref])){
+    if(cells[ref])fail(`${ref}의 메모가 새 피벗 결과와 겹칩니다. 메모를 다른 셀로 옮긴 뒤 다시 시도하세요.`);
+    cells[ref]={raw:'',note:prior[ref].note,...(prior[ref].style?{style:cloneData(prior[ref].style)}:{})};
+  }
   const other=book.sheets.filter(s=>s.id!==target.id).reduce((n,s)=>n+Object.keys(s.cells).length,0);
   if(other+Object.keys(cells).length>MAX_DOCUMENT_CELLS)fail('통합 문서의 1,000,000셀 제한을 초과합니다.');
-  target.cells=cells;target.merges=[];target.rowHeights={0:44};target.columnWidths=Object.fromEntries(output.matrix[0].map((_,i)=>[i,i<Math.max(1,spec.rows.length)?145:190]));
+  const rowHeights={0:44},columnWidths=Object.fromEntries(output.matrix[0].map((_,i)=>[i,i<Math.max(1,spec.rows.length)?145:190]));
+  if(keep){
+    const oldCols=new Map(Object.entries(target.columnWidths||{}).map(([c,size])=>[old.columnKey(+c),size]));for(let c=0;c<output.matrix[0].length;c++)if(oldCols.has(next.columnKey(c)))columnWidths[c]=oldCols.get(next.columnKey(c));
+    const oldRows=new Map(Object.entries(target.rowHeights||{}).map(([r,size])=>[old.rowKey(+r),size]));for(let r=0;r<output.matrix.length;r++)if(oldRows.has(next.rowKey(r)))rowHeights[r]=oldRows.get(next.rowKey(r));
+  }
+  target.cells=cells;target.merges=[];target.rowHeights=rowHeights;target.columnWidths=columnWidths;
   target.pivot=cloneData(spec);delete target.pivotError;
   return output;
 }

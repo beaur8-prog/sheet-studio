@@ -135,6 +135,16 @@ test('modern lookups and text extraction cover modes, optional arguments and laz
   assert.equal(calc('=UNICODE(UNICHAR(128512))'),128512);
 });
 
+test('omitted XLOOKUP lookup value searches physical blanks rather than numeric zero',()=>{
+  // Microsoft documents the omitted first argument as a blank-cell search.
+  // This is a documented-rule regression, not a fresh Excel execution oracle.
+  const cells={A1:'',A2:'0',A3:'text',A4:'',B1:'first blank',B2:'zero',B3:'text',B4:'last blank'};
+  assert.equal(calc('=XLOOKUP(,A1:A4,B1:B4,"missing")',cells),'first blank');
+  assert.equal(calc('=XLOOKUP(,A1:A4,B1:B4,"missing",0,-1)',cells),'last blank');
+  assert.equal(calc('=XLOOKUP(0,A1:A4,B1:B4,"missing")',cells),'zero');
+  assert.equal(calc('=XLOOKUP(,A2:A3,B2:B3,"missing")',cells),'missing');
+});
+
 test('calendar functions cover leap days, weekends, holidays, negative offsets and time',()=>{
   assert.equal(calc('=EDATE(DATE(2024,1,31),1)'),calc('=DATE(2024,2,29)'));
   assert.equal(calc('=EOMONTH(DATE(1900,2,1),0)'),59);

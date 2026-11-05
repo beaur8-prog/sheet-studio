@@ -53,3 +53,17 @@ test('formula strings resembling errors stay text while real errors and unsuppor
  const b=fixture(),p=spec();b.sheets[0].cells.A2.raw='="#N/A"';assert.equal(buildPivot(b,p).matched,5);
  b.sheets[0].cells.C2={raw:'=FutureFoo()',cachedFormula:'=FutureFoo()',cachedValue:99};assert.throws(()=>buildPivot(b,p),/C2.*#NAME/);
 });
+
+test('refresh keeps cell formatting and sizes with their category, including a grand-total label collision',()=>{
+ const b=fixture(),p={...spec(),columns:[],sort:'source',preserveFormatting:true},target={id:'pivot',name:'피벗'};b.sheets[0].cells.A2.raw='총합계';applyPivot(b,target,p);
+ target.cells.B2.style={...target.cells.B2.style,color:'#ff0000',numberFormat:'0.000 "원"'};target.cells.B2.note='이 항목';target.rowHeights[1]=61;target.columnWidths[1]=240;
+ const before=structuredClone(target),next={...p,sort:'desc'};applyPivot(b,target,next);const r=Object.keys(target.cells).find(ref=>ref[0]==='A'&&target.cells[ref].raw==="'총합계"&&ref!=='A5'),cell=target.cells[r.replace('A','B')];
+ assert.equal(cell.style.color,'#ff0000');assert.equal(cell.style.numberFormat,'0.000 "원"');assert.equal(cell.note,'이 항목');assert.equal(target.rowHeights[+r.slice(1)-1],61);assert.equal(target.columnWidths[1],240);assert.notEqual(target.cells.B5.style.color,'#ff0000');assert.deepEqual(before.cells.B2.style,{...before.cells.B2.style,color:'#ff0000',numberFormat:'0.000 "원"'});
+ applyPivot(b,target,{...next,preserveFormatting:false});assert.notEqual(target.cells[r.replace('A','B')].style.color,'#ff0000');assert.equal(target.columnWidths[1],190);assert.equal(target.cells[r.replace('A','B')].note,'이 항목');
+});
+
+test('refresh does not merge formatting for identically displayed labels and does not silently drop notes',()=>{
+ const b=fixture(),p={...spec(),columns:[],sort:'source'},target={id:'pivot',name:'피벗'};b.sheets[0].cells.A2.raw='1';b.sheets[0].cells.A3.raw="'1";applyPivot(b,target,p);
+ target.cells.B2.style.color='#ff0000';target.cells.B3.style.color='#0000ff';target.cells.F10={raw:'',note:'보고서 옆 메모'};applyPivot(b,target,p);assert.equal(target.cells.B2.style.color,'#ff0000');assert.equal(target.cells.B3.style.color,'#0000ff');assert.equal(target.cells.F10.note,'보고서 옆 메모');
+ target.cells.B2.note='필터에서 빠지는 항목';const before=structuredClone(target);assert.throws(()=>applyPivot(b,target,{...p,filters:[{field:'지역',values:['동부','서부']}]}),/메모/);assert.deepEqual(target,before);
+});

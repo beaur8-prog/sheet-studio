@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorkbook} from '../src/engine.mjs';
-import {findWorkbook,replaceWorkbookPlan} from '../src/find-replace.mjs';
+import {findWorkbook,replaceWorkbookPlan,replacementPatch,applyReplacementPatch} from '../src/find-replace.mjs';
 import {createHistory} from '../src/history.mjs';
 
 function fixture(){const b=createWorkbook(),s=b.sheets[0];s.name='매출';s.cells={A3:{raw:'alpha',style:{}},B1:{raw:"'001",style:{}},A1:{raw:'ALPHA',style:{bold:true}},A2:{raw:'Alpha Beta',style:{}},C1:{raw:'=SUM(1,2)',style:{}},D1:{raw:'0.5',style:{format:'percent',numberFormat:'0%'}}};b.sheets.push({id:'second',name:'재고',cells:{A1:{raw:'alpha',style:{}}},charts:[],merges:[],columnWidths:{},rowHeights:{}});return b;}
@@ -63,4 +63,30 @@ test('literal special-character queries are safe and nonmatching replacement has
   const plan=replaceWorkbookPlan(b,{sheetId:s.id,query:'[a].*',replacement:'$1'});assert.equal(plan.book.sheets[0].cells.A1.raw,'$1 $1');
   assert.equal(replaceWorkbookPlan(b,{sheetId:s.id,query:'001',replacement:'002'}).book.sheets[0].cells.B1.raw,"'002");
   assert.deepEqual(replaceWorkbookPlan(b,{sheetId:s.id,query:'missing',replacement:'new'}),{book:null,count:0});
+});
+
+test('small replacements keep delta undo rather than retaining a large replacement document',()=>{
+  const b=createWorkbook(),s=b.sheets[0];for(let i=1;i<=1000;i++)s.cells['A'+i]={raw:i===1?'needle':'same',style:{}};
+  const h=createHistory(b,{maxBytes:4096}),id=h.book.sheets[0].id,plan=replaceWorkbookPlan(h.raw,{sheetId:id,query:'needle',replacement:'replaced'}),patch=replacementPatch(h.raw,plan.book);
+  assert.equal(patch.updates.length,1);h.begin();applyReplacementPatch(h.book,patch);assert.equal(h.commit().discarded,false);assert.ok(h.stats.bytes<4096);assert.equal(h.book.sheets[0].cells.A1.raw,'replaced');h.undo();assert.equal(h.book.sheets[0].cells.A1.raw,'needle');
+});
+
+test('whole-cell matching includes terminal line breaks rather than treating them as end anchors',()=>{
+  const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'alpha\n',style:{}},A2:{raw:'alpha',style:{}}};
+  const o={sheetId:s.id,query:'alpha',wholeCell:true};assert.deepEqual(findWorkbook(b,o).results.map(r=>r.ref),['A2']);
+  const plan=replaceWorkbookPlan(b,{...o,replacement:'new'});assert.equal(plan.count,1);assert.equal(plan.book.sheets[0].cells.A1.raw,'alpha\n');
+});
+
+test('replacing a complete stored array removes its old definition without mutating the source',()=>{
+  const b=createWorkbook(),s=b.sheets[0];s.cells={A1:{raw:'=1',style:{},xlsxFormula:{raw:'=1',formula:'1',shareType:'array',ref:'A1:A3'}},A2:{raw:'1',style:{}},A3:{raw:'1',style:{}}};
+  const before=JSON.stringify(b),plan=replaceWorkbookPlan(b,{sheetId:s.id,query:'1',replacement:'2'});
+  assert.equal(plan.count,3);assert.equal(plan.book.sheets[0].cells.A1.xlsxFormula,undefined);assert.equal(JSON.stringify(b),before);
+});
+
+test('table-header replacement updates cross-sheet formulas and preservation metadata without touching the input',async()=>{
+  const {tableFixture}=await import('./tables-fixture.mjs'),{readSpreadsheet}=await import('../src/io.mjs');
+  const b=await readSpreadsheet(await tableFixture(),'table.xlsx'),s=b.sheets[0];b.sheets.push({id:'other',name:'Other',cells:{A1:{raw:'=1',cachedFormula:'=SUM(Sales[Amount])',cachedValue:26,style:{}},B1:{raw:'=SUM(Sales[Amount])',style:{}}},charts:[],merges:[],columnWidths:{},rowHeights:{}});
+  const before=JSON.stringify(b),plan=replaceWorkbookPlan(b,{sheetId:s.id,query:'Amount',replacement:'Total',wholeCell:true}),patch=replacementPatch(b,plan.book);
+  assert.equal(plan.book.sheets[1].cells.B1.raw,'=SUM(Sales[Total])');assert.equal(plan.book.sheets[1].cells.A1.cachedFormula,'=SUM(Sales[Total])');assert.equal(JSON.stringify(b),before);
+  const h=createHistory(b);h.begin();applyReplacementPatch(h.book,patch);h.commit();assert.equal(h.book.sheets[1].cells.A1.cachedFormula,'=SUM(Sales[Total])');h.undo();assert.equal(h.book.sheets[1].cells.A1.cachedFormula,'=SUM(Sales[Amount])');
 });

@@ -1,5 +1,5 @@
 import {calculationDisplay} from './calculation-display.mjs';
-import {findWorkbook,replaceWorkbookPlan} from './find-replace.mjs';
+import {findWorkbook,replaceWorkbookPlan,replacementPatch} from './find-replace.mjs';
 import {sourceData,buildPivot} from './pivot.mjs';
 import {assertNativeCellTransfers} from './native-cell-features.mjs';
 import {createTablePlan,updateTablePlan,calculatedColumnPlan,finalizeTablePlan} from './tables.mjs';
@@ -140,7 +140,7 @@ async function handle(type, data) {
   if(type==='find')return findWorkbook(book,data.options,evaluator);
   if(type==='replace-plan'){
     const plan=replaceWorkbookPlan(book,data.options);if(!plan.book)return {count:0};
-    const token=crypto.randomUUID();prepared={token,book:plan.book};return {book:plan.book,description:describe(plan.book),token,count:plan.count};
+    return {patch:replacementPatch(book,plan.book),count:plan.count};
   }
   const sheet = book.sheets.find(sheet => sheet.id === data.sheetId);
   if (!sheet) throw Error('시트를 찾을 수 없습니다.');

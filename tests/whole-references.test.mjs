@@ -35,6 +35,15 @@ test('whole-column reads resume long formula dependencies once and remain curren
   const {book,s}=fixture({A1:1,B1:'=SUM(A:A)',B2:'=COUNTBLANK(A:A)'});for(let r=2;r<=5000;r++)s.cells['A'+r]={raw:'=A'+(r-1)+'+1'};const e=createEvaluator(book,s.id);assert.equal(e('B1'),12502500);assert.equal(e('B2'),1043576);
   const loaded=await readSpreadsheet((await writeSpreadsheet(book)).data,'whole.xlsx');assert.equal(createEvaluator(loaded,loaded.activeSheetId)('B1'),12502500);assert.equal(loaded.sheets[0].cells.B1.raw,'=SUM(A:A)');
 });
+
+test('omitted XLOOKUP finds sparse physical blank positions including sheet endpoints without materializing a column',()=>{
+  const {calc}=fixture({A1:0,A2:11,B1:'zero',B3:'first blank',B1048576:'last blank'});
+  assert.equal(calc('XLOOKUP(,A:A,B:B,"missing")'),'first blank');
+  assert.equal(calc('XLOOKUP(,A:A,B:B,"missing",0,-1)'),'last blank');
+  assert.equal(calc('XLOOKUP(0,A:A,B:B,"missing")'),'zero');
+  assert.equal(calc('XLOOKUP(,A:A,B:B,1/0)'),'first blank');
+  const row=fixture({A1:0,B1:'occupied',C2:'row blank'});assert.equal(row.calc('XLOOKUP(,1:1,2:2,"missing")'),'row blank');
+});
 test('a million populated cells share compact range summaries across many whole-column totals',()=>{
   const {book,s}=fixture({});for(let r=1;r<=999900;r++)s.cells['A'+r]={raw:'1'};for(let r=1;r<=100;r++)s.cells['B'+r]={raw:'=SUM(A:A)'};const e=createEvaluator(book,s.id),start=performance.now();for(let r=1;r<=100;r++)assert.equal(e('B'+r),999900);const elapsed=performance.now()-start;assert.ok(elapsed<10000,`whole-column summaries took ${elapsed}ms`);assert.equal(evaluateFormula(book,s.id,'COUNTBLANK(A:A)'),48676);
 });

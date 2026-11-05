@@ -119,15 +119,17 @@ ipcMain.handle('sheet:save-file', (event, payload) => withNativeOperation(event,
       payload.data.length > MAX_FILE_BYTES || Array.isArray(payload.data) && payload.data.some(value => !Number.isInteger(value) || value < 0 || value > 255)) {
     throw new Error('저장할 파일 데이터가 올바르지 않습니다.');
   }
+  if(payload.copyOnly!==undefined&&typeof payload.copyOnly!=='boolean'||payload.protectedName!==undefined&&(typeof payload.protectedName!=='string'||payload.protectedName.length>255))throw Error('사본 저장 정보가 올바르지 않습니다.');
   const basename = path.basename(payload.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || '통합 문서.xlsx';
   const extension = basename.toLowerCase().endsWith('.sheet.json') ? 'json' : path.extname(basename).slice(1);
   const directory = await fileLocations.directory(payload.documentId);
   prepareFileDialogLocation(systemPreferences, directory);
   const result = await dialog.showSaveDialog(win, {
-    title: '통합 문서 저장', defaultPath: path.join(directory, basename),
+    title: payload.copyOnly?'기능을 제외한 XLSX 사본 저장':'통합 문서 저장', defaultPath: path.join(directory, basename),
     filters: [{ name: extension === 'xlsx' ? 'Excel 통합 문서' : extension.toUpperCase(), extensions: [extension || 'xlsx'] }],
   });
   if (result.canceled || !result.filePath) return null;
+  if(payload.copyOnly)await fileLocations.assertCopyTarget(payload.documentId,result.filePath,payload.protectedName);
   const tempPath = path.join(path.dirname(result.filePath), '.' + path.basename(result.filePath) + '.' + randomUUID() + '.tmp');
   try {
     await fs.writeFile(tempPath, Buffer.from(payload.data), { flag: 'wx' });

@@ -22,6 +22,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run runtime:install
+      - run: npm run docs:check
       - run: npm test
         if: inputs.updater_only != true
       - run: npm run test:updates
@@ -43,6 +44,11 @@ jobs:
           node tests/ui-recovery.mjs --packaged
           node tests/ui-file-dialogs.mjs --packaged
           node tests/ui-user-journeys.mjs --packaged
+          node tests/ui-native-pivots.mjs --packaged
+          node tests/ui-pivot-format.mjs --packaged
+          node tests/ui-find-replace.mjs --packaged
+          node tests/ui-file-compatibility.mjs --packaged
+          node tests/ui-dialog-focus.mjs --packaged
       - name: Verify install, reinstall, file associations and uninstall
         if: inputs.updater_only != true
         shell: pwsh

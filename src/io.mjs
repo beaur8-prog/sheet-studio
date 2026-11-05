@@ -26,6 +26,7 @@ import { attachNativeSource } from './native-plan.mjs';
 import {addPivotParts,restorePivotParts} from './pivot-xlsx.mjs';
 import {applyPivot,sourceData} from './pivot.mjs';
 import {addNativePivotParts} from './native-pivots.mjs';
+import {readCompatibilityRisks,assertCompatibleExport} from './file-compatibility.mjs';
 import {restoreChartParts,addChartParts} from './chart-xlsx.mjs';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -270,6 +271,7 @@ export async function readSpreadsheet(arrayBuffer, filename = '통합 문서.xls
       }
     }
   }
+  const review=await readCompatibilityRisks(colorZip,filename);if(review)result.xlsxCompatibility=review;
   return /\.xlsm$/i.test(filename) ? attachNativeSource(result, data, filename) : result;
 }
 
@@ -340,6 +342,7 @@ export async function writeSpreadsheet(workbook, format = 'xlsx', options = {}) 
   if (!workbook?.sheets?.length) throw new Error('통합 문서에 시트가 없습니다.');
   if (workbook.nativeSource && !options.allowMacroLoss) throw new Error('VBA 보존을 위해 XLSM 저장을 사용하세요. 일반 형식 변환에는 매크로 제외 확인이 필요합니다.');
   if (!['xlsx', 'csv', 'tsv'].includes(kind)) throw new Error('지원되지 않는 저장 형식입니다.');
+  assertCompatibleExport(workbook,kind,options);
   if(kind==='xlsx'&&workbook.xlsxPivotArchive?.blockReason)throw Error(workbook.xlsxPivotArchive.blockReason);
   const evaluate = typeof options.evaluate === 'function' ? options.evaluate : await evaluator(),styleCache=new Map(),inheritanceCache=new Map();
   const detailed=typeof options.evaluateDetailed==='function'?options.evaluateDetailed:evaluate.result;

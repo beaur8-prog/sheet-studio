@@ -35,3 +35,13 @@ test('report filter placement keeps dependent formulas correct across XLSX round
   assert.equal(excel.getWorksheet('원본').getCell('F1').formula,"'피벗'!B6");assert.equal(excel.getWorksheet('원본').getCell('F1').result,60);
   const read=await readSpreadsheet(out.data,'links.xlsx');assert.equal(read.sheets[0].cells.F1.raw,"='피벗'!B4");assert.equal(read.sheets[1].cells.B4.raw,'60');
 });
+
+test('filtered report formatting, notes, sizes and conditional ranges survive refresh and repeated XLSX roundtrips',async()=>{
+ const b=fixture(),s={...spec(),rows:['상품'],columns:[],filters:[{field:'지역',values:['동부']}],preserveFormatting:true},target={id:'pivot',name:'피벗',charts:[]};applyPivot(b,target,s);b.sheets.push(target);
+ Object.assign(target.cells.B2.style,{format:'number',numberFormat:'0.000 "원"',decimals:3,color:'#aa2255',bold:true});target.cells.B2.note='첫 상품';target.rowHeights[1]=56;target.columnWidths[1]=230;target.conditionalRules=[{id:'rule',range:'B2:B3',type:'cellIs',operator:'greaterThan',formulae:['20'],style:{color:'#ff0000'}}];
+ let book=b;
+ for(let i=0;i<3;i++){
+   const out=await writeSpreadsheet(book),excel=new ExcelJS.Workbook();await excel.xlsx.load(out.data);const sheet=excel.getWorksheet('피벗');assert.equal(sheet.getCell('B4').numFmt,'0.000 "원"');assert.equal(sheet.getCell('B4').note,'첫 상품');assert.equal(sheet.getRow(4).height,42);assert.equal(sheet.conditionalFormattings[0].ref,'B4:B5');
+   book=await readSpreadsheet(out.data,'styled.xlsx');const t=book.sheets[1];assert.ok(t.pivot);assert.equal(t.cells.B2.style.numberFormat,'0.000 "원"');assert.equal(t.cells.B2.style.color.toLowerCase(),'#aa2255');assert.equal(t.cells.B2.note,'첫 상품');assert.equal(t.rowHeights[1],56);assert.equal(Math.round(t.columnWidths[1]),230);assert.equal(t.conditionalRules[0].range,'B2:B3');
+ }
+});

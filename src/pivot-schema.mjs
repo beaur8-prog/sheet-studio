@@ -9,5 +9,6 @@ export function validatePivot(spec) {
   if (!spec || spec.version !== 1 || !field(spec.sourceSheetId) || typeof spec.sourceRange !== 'string' || !/^(?:[A-Z]{1,3}[1-9]\d*:[A-Z]{1,3}[1-9]\d*|#REF!)$/.test(spec.sourceRange) || !axis(spec.rows) || !axis(spec.columns) || !Array.isArray(spec.values) || !spec.values.length || spec.values.length > 16 || spec.values.some(v => !v || !field(v.field) || !Object.hasOwn(aggregations,v.aggregate)) || !Array.isArray(spec.filters) || spec.filters.length > 16 || spec.filters.some(f => !f || !field(f.field) || !Array.isArray(f.values) || f.values.length > 10000 || !f.values.every(scalar)) || typeof spec.totals !== 'boolean' || !['asc','desc','source'].includes(spec.sort)) throw new Error('피벗테이블 설정이 올바르지 않습니다.');
   if (new Set([...spec.rows,...spec.columns]).size !== spec.rows.length+spec.columns.length) throw new Error('같은 필드를 행과 열에 중복 배치할 수 없습니다.');
   if (new Set(spec.filters.map(f=>f.field)).size !== spec.filters.length) throw new Error('같은 필터 필드를 중복 배치할 수 없습니다.');
+  if(spec.preserveFormatting!==undefined&&typeof spec.preserveFormatting!=='boolean')throw Error('피벗 서식 유지 설정이 올바르지 않습니다.');
   return spec;
 }

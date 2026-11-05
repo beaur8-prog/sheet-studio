@@ -48,7 +48,15 @@ export function sparseFunction(name,nodes,evaluate,h){
     if(name==='MATCH'){const type=nodes.length>2?integer(2):1;if(![-1,0,1].includes(type))fail('#N/A');mode=-type;search=type===0?1:-1;wildcard=type===0;}
     else{mode=nodes.length>(name==='XLOOKUP'?4:2)?integer(name==='XLOOKUP'?4:2):0;search=nodes.length>(name==='XLOOKUP'?5:3)?integer(name==='XLOOKUP'?5:3):1;wildcard=mode===2;}
     if(![0,-1,1,2].includes(mode)||![1,-1,2,-2].includes(search))fail('#VALUE!');const pattern=typeof lookup==='string'&&wildcard?wildcardRegex(lookup):null;let selected=-1,best;
-    for(let j=0;j<r.values.length;j++){const i=search<0?r.values.length-1-j:j,v=r.values[i];if(v instanceof FormulaError||v===BLANK||typeof v!==typeof lookup)continue;const order=compare(v,lookup);if(pattern?pattern.test(v):order===0){selected=r.indices[i];break;}if(mode===-1&&order<0||mode===1&&order>0)if(best===undefined||(mode===-1?compare(v,best)>0:compare(v,best)<0)){best=v;selected=r.indices[i];}}
+    if(name==='XLOOKUP'&&nodes[0].omitted){
+      const total=r.rows*r.cols,direction=search<0?-1:1;let candidate=direction>0?0:total-1;
+      for(let j=0;j<r.values.length;j++){
+        const i=direction<0?r.values.length-1-j:j,index=r.indices[i];
+        if(direction>0?index>candidate:index<candidate)break;
+        if(index===candidate){if(r.values[i]===BLANK)break;candidate+=direction;}
+      }
+      if(candidate>=0&&candidate<total)selected=candidate;
+    }else for(let j=0;j<r.values.length;j++){const i=search<0?r.values.length-1-j:j,v=r.values[i];if(v instanceof FormulaError||v===BLANK||typeof v!==typeof lookup)continue;const order=compare(v,lookup);if(pattern?pattern.test(v):order===0){selected=r.indices[i];break;}if(mode===-1&&order<0||mode===1&&order>0)if(best===undefined||(mode===-1?compare(v,best)>0:compare(v,best)<0)){best=v;selected=r.indices[i];}}
     if(name!=='XLOOKUP')return result(selected<0?fail('#N/A'):selected+1);
     const out=refs[2],target=out?.sheet?out:range(2),vertical=r.cols===1;
     if(vertical?target.rows!==r.rows:target.cols!==r.cols)fail('#VALUE!');

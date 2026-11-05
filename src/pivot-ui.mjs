@@ -11,13 +11,13 @@ export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,
     if(preservedPivots(book,getSheet().id).length)return toast('원본 피벗의 필드 편집과 새로 고침은 Excel에서 진행하세요.');
     const sources=book.sheets.filter(s=>!s.pivot);
     if(!sources.length)return toast('먼저 원본 데이터 시트를 만드세요.');
-    let draft=target?cloneData(target.pivot):{version:1,sourceSheetId:getSheet().id,sourceRange:getRange(),rows:[],columns:[],values:[],filters:[],totals:true,sort:'asc'};
+    let draft=target?cloneData(target.pivot):{version:1,sourceSheetId:getSheet().id,sourceRange:getRange(),rows:[],columns:[],values:[],filters:[],totals:true,sort:'asc',preserveFormatting:true};
     let data=null,loadedKey='',timer,loadSequence=0,previewSequence=0;
     const el=modal(target?'피벗테이블 편집':'피벗테이블 만들기',`
       <p class="pivot-intro">머리글이 있는 원본에서 필드를 배치하세요. 결과는 별도 시트에 표시됩니다.</p>
       <div class="pivot-source"><label>원본 시트<select id="pivot-source">${sources.map(s=>`<option value="${esc(s.id)}" ${s.id===draft.sourceSheetId?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label><label>원본 범위<input id="pivot-range" value="${esc(draft.sourceRange)}" placeholder="A1:D100" spellcheck="false"></label><button id="pivot-load" type="button">필드 불러오기</button></div>
       <div id="pivot-fields" class="pivot-fields"></div>
-      <div class="pivot-options"><label><input type="checkbox" id="pivot-totals" ${draft.totals?'checked':''}>행·열 총합계</label><label>정렬<select id="pivot-sort"><option value="asc">오름차순</option><option value="desc">내림차순</option><option value="source">원본 순서</option></select></label></div>
+      <div class="pivot-options"><label><input type="checkbox" id="pivot-totals" ${draft.totals?'checked':''}>행·열 총합계</label><label><input type="checkbox" id="pivot-preserve-format" ${draft.preserveFormatting!==false?'checked':''}>새로 고침 시 셀 서식·크기 유지</label><label>정렬<select id="pivot-sort"><option value="asc">오름차순</option><option value="desc">내림차순</option><option value="source">원본 순서</option></select></label></div>
       <div id="pivot-error" role="alert"></div><div id="pivot-preview" aria-live="polite"></div>
       <p class="pivot-footnote">첫 8행·8열 미리 보기 · 새 데이터 행을 추가한 경우 원본 범위를 확장하세요. 결과 값은 원본 수정 후 새로 고침합니다.</p>`,
       [{label:target?'적용':'만들기',primary:true,action:async()=>{
@@ -83,7 +83,7 @@ export function createPivotUI({getWorkbook,getSheet,getRange,checkpoint,changed,
         if(event.target.matches('[data-aggregate]'))item.aggregate=event.target.value;
         if(event.target.matches('[data-filter-values]'))item.values=[...event.target.selectedOptions].map(o=>JSON.parse(o.value)[1]);
       }
-      draft.totals=q('#pivot-totals').checked;draft.sort=q('#pivot-sort').value;++previewSequence;q('[data-modal-button]').disabled=true;clearTimeout(timer);timer=setTimeout(preview,80);
+      draft.totals=q('#pivot-totals').checked;draft.preserveFormatting=q('#pivot-preserve-format').checked;draft.sort=q('#pivot-sort').value;++previewSequence;q('[data-modal-button]').disabled=true;clearTimeout(timer);timer=setTimeout(preview,80);
     });
     load();
   }

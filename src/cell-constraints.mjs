@@ -2,7 +2,7 @@ import {unwrap} from './clone.mjs';
 import {address,parseAddress,evaluateCell,evaluateFormula,evaluateFormulaArray,shiftFormula,formulaHasDynamicArrays,formulaHasExternalReferences} from './engine.mjs';
 import {calculatedArrayRegions} from './calculated-arrays.mjs';
 import {xml,all,attr} from './chart-xml.mjs';
-import {preservedPivots} from './native-pivots.mjs';
+import {preservedPivotTouches} from './native-pivots.mjs';
 
 const cache=new Map(),inside=(b,p)=>p.r>=b.r1&&p.r<=b.r2&&p.c>=b.c1&&p.c<=b.c2;
 function parsed(source,read){if(!source)return null;if(cache.has(source))return cache.get(source);const value=read(xml(source));if(cache.size>=40)cache.delete(cache.keys().next().value);cache.set(source,value);return value;}
@@ -25,7 +25,7 @@ export function refreshConstraintIndexes(book,dirty){for(const sheet of book.she
 export function arrayRegions(sheet){const cells=unwrap(sheet.cells);let index=arrayIndexes.get(cells);if(!index){index=new Set();for(const ref in cells)if(cells[ref]?.xlsxFormula?.shareType==='array')index.add(ref);arrayIndexes.set(cells,index);}const arrays=[...calculatedArrayRegions(sheet)];for(const ref of index){const cell=cells[ref];if(cell?.raw?.startsWith('=')&&cell.xlsxFormula?.shareType==='array'&&!cell.xlsxFormula.dynamic){const b=range(cell.xlsxFormula.ref||ref);if(b)arrays.push({ref,...b});}}return arrays;}
 
 export function cellEditError(book,sheet,ref){
-  if(preservedPivots(book,sheet.id).length)return '원본 피벗의 결과는 Excel에서 새로 고치세요. 직접 편집하려면 일반 범위로 변환하세요.';
+  if(preservedPivotTouches(book,sheet.id,ref))return '원본 피벗의 결과는 Excel에서 새로 고치세요. 직접 편집하려면 일반 범위로 변환하세요.';
   if(sheet.kind==='chart')return '차트 전용 시트에서는 셀을 편집할 수 없습니다.';
   if(cellIsLocked(book,sheet,ref))return '보호된 셀입니다. 입력이 허용된 셀을 선택하거나 Excel에서 시트 보호를 해제하세요.';
   const p=parseAddress(ref),array=arrayRegions(sheet).find(a=>inside(a,p));if(array&&book.nativeSource)return 'XLSM의 배열 수식은 Excel에서 편집하거나 XLSX 사본을 사용하세요.';if(array&&array.ref!==ref)return '배열 수식 결과의 일부를 변경할 수 없습니다. 배열의 첫 셀에서 수식을 편집하세요.';
@@ -33,7 +33,7 @@ export function cellEditError(book,sheet,ref){
 }
 export function assertCellUpdates(book,sheet,updates,{editAnchor=false,formatOnly=false}={}){
   if(formatOnly){if(!protectionAllows(sheet,'formatCells'))throw Error('이 시트에서는 셀 서식을 변경할 수 없습니다.');return;}
-  if(updates.length&&preservedPivots(book,sheet.id).length)throw Error('원본 피벗의 결과는 Excel에서 새로 고치거나 일반 범위로 변환하세요.');
+  if(updates.some(u=>preservedPivotTouches(book,sheet.id,u.key)))throw Error('원본 피벗의 결과는 Excel에서 새로 고치거나 일반 범위로 변환하세요.');
   const keys=new Set(updates.map(u=>u.key));
   for(const key of keys)if(cellIsLocked(book,sheet,key))throw Error('선택 범위에 보호된 셀이 있습니다. 변경을 적용하지 않았습니다.');
   for(const a of arrayRegions(sheet)){
