@@ -82,6 +82,8 @@ Windows 실행 파일은 `npm run package:win`으로 만듭니다. 결과는 `re
 
 ## 분석과 검증
 
+- [안드로이드 UI 전환 계획](docs/ANDROID-UI-ADAPTATION-PLAN.md): 스마트폰 뷰어·터치 메뉴·태블릿 키보드의 화면/입력 변경, 단계별 구현과 검수 기준. Android 패키징은 별도 작업
+
 - [두 번째 4시간 개선 결과](docs/EXCEL-NEXT-FOUR-HOUR-20261105.md): 0.7.39 개발 기능·재현·성능 측정·플랫폼 검사와 남은 제한
 
 - [Excel 동작 비교 기반 개선 계획](docs/EXCEL-BEHAVIOR-IMPROVEMENT-PLAN.md): 현재 구현과 남은 차이, 개선 우선순위, 21개 비교 시나리오와 완료 기준
