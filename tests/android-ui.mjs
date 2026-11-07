@@ -30,10 +30,11 @@ const workbook=()=>page.evaluate(()=>sheetStudio.getWorkbook());
 const snapshot=()=>page.evaluate(()=>({book:sheetStudio.getWorkbook(),history:sheetStudio.historyStats(),dirty:sheetStudio.isDirty()}));
 try{
  await boot();assert.equal(await page.evaluate(()=>sheetStudio.getMode()),'view');
- let b=createWorkbook();b.name='Android viewer';b.sheets[0].cells={A1:{raw:'제목'},A2:{raw:'10'},A3:{raw:'20'},B2:{raw:'=SUM(A2:A3)'},C1:{raw:'긴 메모',note:'확인 메모'}};
+ let b=createWorkbook();b.name='Android viewer';b.sheets[0].cells={A1:{raw:'제목'},A2:{raw:'10'},A3:{raw:'20'},B2:{raw:'=SUM(A2:A3)'},C1:{raw:'긴 메모',note:'확인 메모'},D1:{raw:'=FutureFunction()',cachedFormula:'=FutureFunction()',cachedValue:42}};
  const other=structuredClone(createWorkbook().sheets[0]);other.id='second';other.name='두 번째';other.cells.A1={raw:'other'};b.sheets.push(other);
  b.sheets[0].charts=[{id:'chart-1',type:'bar',range:'A1:A3',title:'보기 차트',x:200,y:100,width:360,height:230}];
  await load(b);await page.locator('[data-chart="chart-1"]').tap({position:{x:50,y:50}});await page.getByRole('dialog').waitFor();assert.equal(await page.locator('.android-chart-data table').count(),1);await close();const original=await snapshot();assert.equal(original.dirty,false);assert.equal(original.history.undo,0);assert.equal(await page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('sheet-studio-android-recovery',1);r.onsuccess=()=>resolve(r.result);});return new Promise(resolve=>{const r=db.transaction('state').objectStore('state').getAll();r.onsuccess=()=>{db.close();resolve(r.result.length);};});}),0);
+ await select('D1');await mobile('detail');assert.match(await page.locator('.android-detail .android-help').innerText(),/저장된 계산값/);await close();
  await mobile('sheets');await page.locator('[data-mobile-sheet="second"]').click();await mobile('sheets');await page.locator('[data-mobile-sheet="sheet-1"]').click();
  await select('A2:B3');await command('copy');await command('bold');await command('clear');await command('paste');await command('rename-sheet');
  await page.locator('#grid').focus();await page.keyboard.press('Delete');await page.keyboard.press('Control+b');await page.keyboard.press('Control+v');

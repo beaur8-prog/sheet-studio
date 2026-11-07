@@ -754,6 +754,16 @@ function androidRestoreDraft(){
  if(!draft||typeof draft.value!=='string'||draft.value.length>32767||!book.sheets.some(s=>s.id===draft.sheetId))return;
  setTimeout(()=>{if(busy||editing||androidSession.mode!=='edit')return;switchSheet(draft.sheetId);select(draft.r,draft.c,false,true);startEdit(draft.value);pointMode=!!draft.pointMode;toast('마지막으로 보관한 셀 입력 초안을 복원했습니다. 확인하거나 취소할 수 있습니다.');},0);
 }
+function mobileNotice(){
+ const result=tasks.result(sheet().id,address(selection.r,selection.c)),notices=[];
+ if(result.cached&&!result.stale)notices.push('파일에 저장된 계산값입니다. 미지원 수식·외부 참조는 Excel에서 다시 계산하세요.');
+ if(result.stale)notices.push('문서 변경으로 이전 계산값이 유효하지 않습니다. 현재 오류 또는 계산 결과를 확인하세요.');
+ if(sheet().pivotImportNotice)notices.push(sheet().pivotImportNotice);
+ if(preservedPivots(book,sheet().id).length)notices.push('Excel 피벗 원본과 현재 결과를 보존합니다. 새로 고침은 Excel에서 진행하세요.');
+ if(sheet().pivot)notices.push('피벗 결과입니다. 편집에서 원본 변경 후 새로 고침할 수 있습니다.');
+ if(book.nativeSource)notices.push('XLSM 보기 모드입니다. VBA 실행과 매크로 유지 편집은 PC의 Excel에서 지원합니다.');
+ return notices.join(' ');
+}
 function mobileDisplay(){const result=tasks.result(sheet().id,address(selection.r,selection.c)),cached=result.cached&&!result.stale;return formatValue(cached?result.cachedValue:result.value,effectiveCellStyle(selection.r,selection.c),{error:cached?result.cachedError:result.error});}
 async function androidResolveDraft(){
  if(!editing)return true;
@@ -902,7 +912,7 @@ function initializeAndroid(){
   scrollAt:point=>{const rect=$('#grid').getBoundingClientRect(),g=$('#grid');if(point.clientY>rect.bottom-30)verticalScroll.setTop(verticalScroll.top()+25);if(point.clientY<rect.top+HEADER_H+30)verticalScroll.setTop(verticalScroll.top()-25);if(point.clientX>rect.right-30)g.scrollLeft+=25;if(point.clientX<rect.left+HEADER_W+30)g.scrollLeft=Math.max(0,g.scrollLeft-25);},
   tapCell:p=>{if(editSession?.composing||commitEdit()===false)return false;androidHardware=false;select(p.r,p.c);focusGrid();return true;},
   selectHeading:(axis,n)=>{if(commitEdit()===false)return;selection=axis==='c'?{r:0,c:n,r2:Math.max(usedBounds().r,99),c2:n}:{r:n,c:0,r2:n,c2:Math.max(usedBounds().c,25)};render();focusGrid();},
-  cellDetail:()=>{const info=formulaDisplay(selection.r,selection.c),cell=sheet().cells[address(selection.r,selection.c)];return {display:mobileDisplay(),formula:!info.hidden&&info.raw.startsWith('=')?info.raw:'',note:cell?.note||'',notice:book.nativeSource?'XLSM의 저장된 계산값과 원본을 표시합니다. VBA 실행은 PC의 Excel에서 지원합니다.':''};},
+  cellDetail:()=>{const info=formulaDisplay(selection.r,selection.c),cell=sheet().cells[address(selection.r,selection.c)];return {display:mobileDisplay(),formula:!info.hidden&&info.raw.startsWith('=')?info.raw:'',note:cell?.note||'',notice:mobileNotice()};},
   editCell:()=>{if(canEditAndroid()){ensureVisible(selection.r,selection.c);startEdit();requestAnimationFrame(()=>{if(editing){$('#formula').focus();editInput=$('#formula');}});}},
   changeMode:async()=>{if(!await androidResolveDraft())return;if(androidSession.mode==='view'&&book.nativeSource)return toast('XLSM은 Android에서 보기와 원본 공유만 지원합니다.');androidSession.setMode(androidSession.mode==='view'?'edit':'view');androidHardware=false;closeMenu();closeFilterMenu();updateTitle();render();focusGrid();},
   cancelOrKeepDraft:()=>{void androidResolveDraft();},
@@ -915,7 +925,7 @@ function initializeAndroid(){
    const chart=sheet().charts?.find(c=>c.id===id);if(!chart)return;
    const plot=renderChartSVG(chart,sheet(),book),series=chartData(chart,sheet(),book);
    const rows=series.flatMap(item=>item.values.slice(0,100).map((value,i)=>'<tr><td>'+esc(item.name)+'</td><td>'+esc(item.labels[i]??i+1)+'</td><td>'+esc(value??'')+'</td></tr>')).join('');
-   modal(esc(chart.title||'차트')+' · 크게 보기','<div class="android-chart"><svg viewBox="'+plot.viewBox+'" role="img" aria-label="'+esc(chart.title||'차트')+'">'+plot.svg+'</svg></div><h3>차트 자료</h3><div class="android-chart-data"><table><thead><tr><th>계열</th><th>항목</th><th>값</th></tr></thead><tbody>'+rows+'</tbody></table></div><p>자료 표는 계열별 처음 100개 값을 표시합니다. 원래 차트 위치·크기는 바꾸지 않습니다.</p>');
+   modal(esc(chart.title||'차트')+' · 크게 보기','<div class="android-chart"><svg viewBox="'+plot.viewBox+'" role="img" aria-label="'+esc(chart.title||'차트')+'">'+plot.svg+'</svg></div><p class="android-help">'+esc([chart.previewNote,series.some(item=>item.usesCachedValues)?'일부 자료는 파일에 저장된 계산값입니다. Excel에서 최신 값을 확인하세요.':''].filter(Boolean).join(' '))+'</p><h3>차트 자료</h3><div class="android-chart-data"><table><thead><tr><th>계열</th><th>항목</th><th>값</th></tr></thead><tbody>'+rows+'</tbody></table></div><p>자료 표는 계열별 처음 100개 값을 표시합니다. 원래 차트 위치·크기는 바꾸지 않습니다.</p>');
   },
  });
  const received=new Set();let requests=Promise.resolve();
