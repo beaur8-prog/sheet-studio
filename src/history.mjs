@@ -9,7 +9,7 @@ const index = key => typeof key === 'string' && /^(?:0|[1-9]\d*)$/.test(key) && 
 // Keep references plus reversible property changes, rather than 60 entire books.
 // Every model mutation, including nested formatting and array splices, goes
 // through the journal. Large replacement operations share unchanged objects.
-export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_BYTES, maxCells = MAX_DOCUMENT_CELLS, maxText = MAX_DOCUMENT_TEXT_CHARS, description} = {}) {
+export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_BYTES, maxCells = MAX_DOCUMENT_CELLS, maxText = MAX_DOCUMENT_TEXT_CHARS, description, canMutate} = {}) {
   const holder = {value: description ? initial : plain(initial)}, undo = [], redo = [];
   let transaction = null, bytes = 0, replaying = false, dirty = new Map(), metadataChanged = false, metadataValidation = false;
   const counts = new WeakMap(), textCounts = new WeakMap(), sizes = new WeakMap(), containers = new WeakMap();
@@ -64,6 +64,7 @@ export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_
         value = plain(value);
         const existed = own(object, key), before = object[key], mark = marker(context, key);
         if (existed && Object.is(before, value)) return true;
+        if (canMutate && !canMutate()) throw Error('보기 모드입니다. 편집으로 전환한 뒤 수정하세요.');
         if (Array.isArray(object)) {
           if (key === 'length' && value < object.length) {
             for (let i = value; i < object.length; i++) if (own(object, i)) record(object, String(i), object[i], true, undefined, false, mark);
@@ -79,6 +80,7 @@ export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_
       },
       deleteProperty(object, key) {
         if (!own(object, key)) return true;
+        if (canMutate && !canMutate()) throw Error('보기 모드입니다. 편집으로 전환한 뒤 수정하세요.');
         if (context?.dictionary) counts.set(object, count(object) - 1);
         if(context?.dictionary)textCounts.set(object,textLength(object)-(object[key]?.raw?.length||0));
         record(object, key, object[key], true, undefined, false, marker(context, key));
@@ -163,9 +165,11 @@ export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_
     get raw() { return holder.value; },
     get canUndo() { return undo.length > 0; },
     get canRedo() { return redo.length > 0; },
+    get pendingChanges() { return !!transaction?.ops.length; },
     get stats() { return {undo: undo.length, redo: redo.length, bytes, cells: totalCells(), textChars:holder.value.sheets.reduce((n,s)=>n+textLength(s.cells),0)}; },
     begin() { commit(); transaction = {ops: [], targets: new WeakMap()}; },
     replace(value, description) {
+      if (canMutate && !canMutate()) throw Error('보기 모드에서는 문서를 변경할 수 없습니다.');
       if (!description) { wrap(holder).value = value; return wrap(holder.value); }
       const before = holder.value;
       record(holder, 'value', before, true, value, true, null);
@@ -175,6 +179,7 @@ export function createHistory(initial, {maxEntries = 60, maxBytes = MAX_HISTORY_
     takeDirty() { const result = dirty; result.metadataChanged=metadataChanged; dirty = new Map(); metadataChanged=false; return result; },
     acceptCells(cells, description) { counts.set(cells, description.count); if(description.textLength!==undefined)textCounts.set(cells,description.textLength);sizes.set(cells, description.bytes); return trustData(cells); },
     undo(reverse = false) {
+      if (canMutate && !canMutate()) return false;
       commit(); const from = reverse ? redo : undo, to = reverse ? undo : redo;
       if (!from.length) return false;
       const entry = from.pop(); replaying = true;

@@ -31,17 +31,19 @@ export function createWorkbookTasks({onSave, onCalculated, onError,onFatal}) {
     if (saveRevision === revision) onSave('saved');
     return result;
   }
-  function sync(book, dirty, token, documentId) {
+  function sync(book, dirty, token, documentId, {persist = true} = {}) {
     const sheets = [], metadata = !baseline.size || dirty.metadataChanged || token ? workbookMetadata(book) : null;
     for (const sheet of book.sheets) {
       if (baseline.get(sheet.id) !== sheet.cells && !token) sheets.push({id: sheet.id, cells: sheet.cells});
       else if (dirty.has(sheet.cells)) sheets.push({id: sheet.id, entries: [...dirty.get(sheet.cells)].map(ref => [ref, sheet.cells[ref] || null])});
     }
     adopt(book); values = new Map(); styles = new Map();calculationErrors=new Map();provenance=new Map(); pendingRefs.clear(); ++revision; ++calculationEpoch;
-    onSave('saving');
-    synced = call('sync', {metadata, sheets, revision, token, documentId});
+    if(persist)onSave('saving');
+    synced = call('sync', {metadata, sheets, revision, token, documentId, persist});
     synced.catch(error => { baseline=new Map();onSave('failed'); onError(error); });
-    clearTimeout(flushTimer); flushTimer = setTimeout(() => flush().catch(error => { onSave('failed'); onError(error); }), 100);
+    clearTimeout(flushTimer);
+    if(persist)flushTimer = setTimeout(() => flush().catch(error => { onSave('failed'); onError(error); }), 100);
+    else saveRevision=revision;
     return synced;
   }
   function value(sheetId, ref) {

@@ -1,0 +1,97 @@
+/* Every rule is scoped to a runtime marker; desktop/mobile-width browsers do
+   not acquire the Android interface merely because their window is narrow. */
+body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-behavior:none }
+.sheet-android #app { height:var(--android-height,100dvh);padding:var(--android-top,env(safe-area-inset-top,0px)) var(--android-right,env(safe-area-inset-right,0px)) var(--android-bottom,env(safe-area-inset-bottom,0px)) var(--android-left,env(safe-area-inset-left,0px));min-height:0 }
+.sheet-android .titlebar,.sheet-android .sheetbar,.sheet-android .statusbar,.sheet-android .pivot-bar,.sheet-android .table-bar { display:none!important }
+.sheet-android .tabs,.sheet-android .ribbon { display:none }
+.sheet-android .android-header { display:flex;gap:4px;align-items:center;min-height:56px;flex-shrink:0;background:var(--chrome);padding:4px 6px }
+.sheet-android .android-title { min-width:0;flex:1;text-align:left;display:flex;flex-direction:column;align-items:flex-start;line-height:1.4 }
+.sheet-android .android-title strong { max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.sheet-android .android-title small { font-size:12px;color:var(--muted) }
+.sheet-android .android-nav { display:flex;flex-shrink:0;min-height:56px;gap:2px;background:var(--chrome);border-top:1px solid var(--line);padding:4px }
+.sheet-android .android-nav button { flex:1;padding:4px;white-space:normal }
+.sheet-android button:not(.filter-arrow):not(.validation-list-button),.sheet-android select,.sheet-android input:not([type=checkbox]):not([type=range]):not(#editor) { min-height:48px }
+.sheet-android button:not(.filter-arrow):not(.validation-list-button) { min-width:48px }
+.sheet-android .android-primary { background:var(--accent);color:white }
+.sheet-android .android-selection { display:flex;gap:8px;align-items:center;flex-shrink:0;min-height:48px;padding:0 8px;background:var(--chrome);border-bottom:1px solid var(--line) }
+.sheet-android .android-selection button { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;flex:1;min-width:0!important }
+.sheet-android .android-selection .android-address { flex:0 0 auto;max-width:45%;font-weight:600 }
+.sheet-android .android-selection[hidden] { display:none }
+.sheet-android .formula-bar { display:none;min-height:56px;height:auto;padding:4px;gap:2px }
+.sheet-android.android-cell-editing .formula-bar { display:flex;order:7;background:var(--chrome) }
+.sheet-android .formula-bar .formula-divider,.sheet-android .formula-fx { display:none }
+.sheet-android .formula-bar .name-box { width:76px;min-width:0;font-size:13px }
+.sheet-android .formula-input { font-size:16px;flex:1;width:0 }
+.sheet-android.android-cell-editing .android-nav { display:none }
+.sheet-android .grid-shell { min-height:0;touch-action:pan-x pan-y pinch-zoom }
+.sheet-android .grid-scroll,.sheet-android .chart-card { touch-action:pan-x pan-y pinch-zoom;overscroll-behavior:contain }
+.sheet-android .fill-handle,.sheet-android .col-resize,.sheet-android .row-resize,.sheet-android .chart-resize,.sheet-android .chart-delete,.sheet-android .chart-settings { display:none!important }
+.sheet-android .filter-arrow,.sheet-android .validation-list-button { visibility:hidden;pointer-events:none }
+.sheet-android .cell { user-select:none }
+.sheet-android .android-handle { position:absolute;z-index:15;width:48px;height:48px;padding:0;touch-action:none;transform:translate(-50%,-50%);border-radius:50%;background:transparent }
+.sheet-android .android-handle:after { content:'';display:block;width:14px;height:14px;margin:auto;border:2px solid white;box-shadow:0 0 0 1px #107c41;border-radius:50%;background:#107c41 }
+.sheet-android .android-handle[hidden] { display:none }
+.sheet-android .backdrop { padding:8px;align-items:end;inset:0;max-height:var(--android-height,100dvh) }
+.sheet-android .modal { width:min(100%,720px)!important;max-width:100%;max-height:100%;padding:16px;display:flex;flex-direction:column;overflow:hidden;font-size:14px }
+.sheet-android .modal>h2,.sheet-android .modal>.modal-actions { flex-shrink:0 }
+.sheet-android .modal>.modal-body { overflow:auto;min-height:0;overscroll-behavior:contain }
+.sheet-android .modal-actions { display:flex;flex-wrap:wrap;gap:8px;padding-top:8px }
+.sheet-android .modal-actions button { flex:1;white-space:normal }
+.sheet-android .modal label { font-size:14px }
+.sheet-android .modal input:not([type=checkbox]):not([type=color]),.sheet-android .modal select,.sheet-android .modal textarea { font-size:16px;max-width:100%;width:100% }
+.sheet-android .modal input[type=checkbox] { width:24px;height:24px;flex-shrink:0 }
+.sheet-android .worksheet-check,.sheet-android .find-checks label { min-height:48px }
+.sheet-android .format-tabs { overflow:auto;flex-shrink:0 }
+.sheet-android .format-tabs button { padding:8px;white-space:nowrap }
+.sheet-android .format-presets,.sheet-android .format-edge-buttons { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px }
+.sheet-android .color-swatches { grid-template-columns:repeat(auto-fit,minmax(48px,1fr));gap:8px }
+.sheet-android .color-swatches button { width:100%;height:48px }
+.sheet-android .menu { position:fixed;left:8px!important;right:8px;top:auto!important;bottom:8px;width:auto;min-width:0;max-height:calc(var(--android-height,100dvh) - 32px);overflow:auto;font-size:14px }
+.sheet-android .menu button { min-height:48px;white-space:normal }
+.sheet-android .android-list { display:grid;gap:8px }
+.sheet-android .android-list button { text-align:left;border:1px solid var(--line);padding:8px 12px;white-space:normal }
+.sheet-android .android-detail { white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;line-height:1.7 }
+.sheet-android .android-value { max-height:38dvh;overflow:auto;border:1px solid #aaa;padding:12px }
+.sheet-android .android-chart { overflow:auto }
+.sheet-android .android-chart svg { display:block;width:100%;height:auto;min-height:200px }
+.sheet-android .android-chart-data { overflow:auto;max-height:220px }
+.sheet-android .android-chart-data table { border-collapse:collapse }
+.sheet-android .android-chart-data th,.sheet-android .android-chart-data td { border:1px solid #aaa;padding:8px }
+.sheet-android .android-help { font-size:13px;color:#58645b;line-height:1.6 }
+.sheet-android .toast { max-width:calc(100vw - 24px);white-space:normal;bottom:70px;font-size:14px }
+.sheet-android .workbook-busy { flex-wrap:wrap;align-content:center;padding:24px;text-align:center }
+.sheet-android .function-assist { max-width:calc(100vw - 16px);max-height:35dvh;overflow:auto }
+.sheet-android.android-view #validation-list-button { display:none }
+.sheet-android .android-tools { display:flex;gap:4px;overflow:auto;flex-shrink:0;background:var(--chrome);border-bottom:1px solid var(--line);padding:4px }
+.sheet-android .android-tools[hidden] { display:none }
+.sheet-android .android-tools button { flex-shrink:0;padding:4px 10px }
+.sheet-android .filter-popup { left:8px!important;right:8px;top:8px!important;bottom:8px;width:auto;max-width:none;max-height:calc(var(--android-height,100dvh) - 16px);font-size:14px;display:flex;flex-direction:column;overflow:hidden }
+.sheet-android .filter-main,.sheet-android .filter-custom { overflow:auto;min-height:0 }
+.sheet-android .filter-main[hidden],.sheet-android .filter-custom[hidden] { display:none }
+.sheet-android .filter-buttons { flex-shrink:0;display:flex;gap:8px }
+.sheet-android .filter-buttons button { flex:1 }
+.sheet-android .filter-popup label,.sheet-android .filter-popup summary { min-height:48px }
+.sheet-android .filter-popup input[type=checkbox],.sheet-android .filter-popup input[type=radio] { width:24px;height:24px }
+.sheet-android .android-header { order:0 }
+.sheet-android .android-selection { order:1 }
+.sheet-android .android-tools { order:2 }
+.sheet-android .tabs { order:3 }
+.sheet-android .ribbon { order:4 }
+.sheet-android .grid-shell { order:6 }
+.sheet-android .android-nav { order:8 }
+.sheet-android .backdrop [hidden] { display:none!important }
+@media (max-width:599px) {
+ .sheet-android .find-fields,.sheet-android .find-options,.sheet-android .format-columns,.sheet-android .chart-form,.sheet-android .validation-columns,.sheet-android .pivot-source { grid-template-columns:minmax(0,1fr) }
+ .sheet-android .find-checks { display:flex;flex-direction:column }
+ .sheet-android .modal { border-radius:12px 12px 0 0 }
+}
+@media (min-width:840px) and (min-height:600px) {
+ .sheet-android.android-edit.android-ribbon-open .tabs { display:flex;height:auto;min-height:48px;overflow:auto }
+ .sheet-android.android-edit.android-ribbon-open .tab { flex-shrink:0 }
+ .sheet-android.android-edit.android-ribbon-open .ribbon { display:flex;height:auto;min-height:120px;max-height:180px;padding:8px }
+ .sheet-android .group-content { height:auto;min-height:96px }
+ .sheet-android .stack { gap:4px }
+ .sheet-android .small-btn,.sheet-android .icon-btn,.sheet-android .style-chip { height:auto }
+ .sheet-android .tab-right,.sheet-android [data-tab="개발 도구"],.sheet-android [data-tab="페이지 레이아웃"],.sheet-android [data-action^="updates-"],.sheet-android [data-action="print"],.sheet-android [data-action="vba"],.sheet-android [data-action="save-xlsm"] { display:none }
+ .sheet-android .backdrop { align-items:center;justify-content:center }
+}

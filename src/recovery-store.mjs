@@ -9,18 +9,19 @@ export const workbookMetadata = book => ({...book, sheets: book.sheets.map(({cel
 const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
 const completed = tx => new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error || Error('자동 복구 저장이 취소되었습니다.')); tx.onerror = () => {}; });
 
-export async function openRecoveryStore() {
-  const opening = indexedDB.open(RECOVERY_DB, 1);
+export async function openRecoveryStore({databaseName = RECOVERY_DB, retainDocuments = false, maxDocuments = 20} = {}) {
+  const opening = indexedDB.open(databaseName, 1);
   opening.onupgradeneeded = () => {
     opening.result.createObjectStore('state');
     opening.result.createObjectStore('chunks');
   };
   const db = await request(opening);
   db.onversionchange = () => db.close();
-  let saved = null, previous = null, fresh = false;
+  let saved = null, previous = null, fresh = false, documents = new Map();
   async function readState() {
     const tx = db.transaction('state', 'readonly'), done = completed(tx), state = tx.objectStore('state');
     [saved, previous] = await Promise.all([request(state.get('current')), request(state.get('previous'))]);
+    if(retainDocuments){const all=await request(state.getAll());documents=new Map(all.filter(item=>item?.documentId).map(item=>[item.documentId,item]));if(saved?.documentId)documents.set(saved.documentId,saved);}
     await done;
   }
   async function read(snapshot) {
@@ -54,16 +55,20 @@ export async function openRecoveryStore() {
     }
     return !!(saved || previous);
   }
-  async function recover() {
-    const snapshot = fresh ? saved || previous : previous || saved;
+  async function recover(documentId) {
+    if(retainDocuments)await readState();
+    const snapshot = documentId ? documents.get(documentId) : fresh ? saved || previous : previous || saved;
     return snapshot ? {book: await read(snapshot), documentId: snapshot.documentId} : null;
   }
   async function save(book, dirty, replace, metadataChanged = true, documentId) {
+    if(retainDocuments&&!documentId)throw Error('복구 문서 식별자가 없습니다. 편집본을 파일로 저장하세요.');
+    if(retainDocuments&&!documents.has(documentId)&&documents.size>=maxDocuments)throw Error(`미저장 복구 문서가 ${maxDocuments}개입니다. 복구 목록에서 파일로 저장한 문서를 정리한 뒤 다시 시도하세요. 현재 편집본은 유지됩니다.`);
     const retained = fresh ? saved || previous : previous;
     const base = fresh ? null : saved;
     const publish = !base || metadataChanged || replace.size > 0 || base.documentId !== documentId;
     const metadata = publish ? workbookMetadata(book) : base.metadata, generations = {}, groups = [];
-    const obsolete = new Set([...Object.values(saved?.generations || {}), ...Object.values(previous?.generations || {})]);
+    const obsolete = new Set([...Object.values(saved?.generations || {}), ...Object.values(previous?.generations || {}),...Array.from(documents.values()).flatMap(item=>Object.values(item.generations||{}))]);
+    if(retainDocuments)for(const [id,snapshot] of documents)if(id!==documentId)for(const generation of Object.values(snapshot.generations||{}))obsolete.delete(generation);
     for (const generation of Object.values(retained?.generations || {})) obsolete.delete(generation);
     for (const sheet of book.sheets) {
       const full = !base?.generations[sheet.id] || replace.has(sheet.id);
@@ -101,15 +106,27 @@ export async function openRecoveryStore() {
       }
       await Promise.all(patches);
       for (const generation of obsolete) store.delete(IDBKeyRange.bound([generation, 0], [generation, BUCKETS - 1]));
-      const next = {metadata, generations, ...(documentId ? {documentId} : {})};
+      const next = {metadata, generations, ...(documentId ? {documentId} : {}),...(retainDocuments?{updatedAt:Date.now()}: {})};
       if (publish) tx.objectStore('state').put(next, 'current');
       if (fresh && retained) tx.objectStore('state').put(retained, 'previous');
+      if(retainDocuments){if(saved?.documentId&&saved.documentId!==documentId)tx.objectStore('state').put(saved,'document:'+saved.documentId);tx.objectStore('state').put(next,'document:'+documentId);}
       await done; saved = next; previous = retained; fresh = false;
+      if(retainDocuments)documents.set(documentId,next);
       return {chunksWritten: groups.reduce((n, group) => n + group.chunks.size, 0), fullSheets: groups.filter(group => group.full).length, metadataWritten: publish};
     } catch (error) {
       try { tx.abort(); } catch {}
       await done.catch(() => {}); throw error;
     }
   }
-  return {load, startBlank, recover, save, get documentId() { return saved?.documentId; }, close: () => db.close()};
+  async function list(){await readState();return [...documents.values()].map(item=>({documentId:item.documentId,name:item.metadata.name,updatedAt:item.updatedAt||0})).sort((a,b)=>b.updatedAt-a.updatedAt);}
+  async function forget(documentId){
+    if(!retainDocuments)throw Error('문서별 복구 목록을 사용할 수 없습니다.');
+    await readState();const target=documents.get(documentId);if(!target)return;
+    const tx=db.transaction(['state','chunks'],'readwrite'),done=completed(tx),state=tx.objectStore('state');
+    state.delete('document:'+documentId);if(saved?.documentId===documentId)state.delete('current');if(previous?.documentId===documentId)state.delete('previous');
+    const retained=new Set([...documents].filter(([id])=>id!==documentId).flatMap(([,item])=>Object.values(item.generations||{})));
+    for(const generation of Object.values(target.generations||{}))if(!retained.has(generation))tx.objectStore('chunks').delete(IDBKeyRange.bound([generation,0],[generation,BUCKETS-1]));
+    await done;await readState();
+  }
+  return {load, startBlank, recover, save, list, forget, get documentId() { return saved?.documentId; }, close: () => db.close()};
 }

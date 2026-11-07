@@ -1,9 +1,9 @@
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function createFindUI({getWorkbook,getSheet,getRange,getRevision,getDocumentId,search,replace,navigate,modal,toast,runBusy}){
   let saved={query:'',replacement:'',matchCase:false,wholeCell:false,scope:'sheet',lookIn:'formulas',includeHiddenSheets:false};
-  return {open(){
+  return {open({readOnly=false}={}){
     const documentId=getDocumentId(),sheetId=getSheet().id,range={...getRange()};let preview=null,signature='',previewRevision=-1,index=-1,sequence=0;
-    const options=()=>({...saved,query:q('#find-text').value,replacement:q('#replace-text').value,scope:q('#find-scope').value,lookIn:q('#find-look-in').value,matchCase:q('#find-case').checked,wholeCell:q('#find-whole').checked,includeHiddenSheets:q('#find-hidden').checked,sheetId,range});
+    const options=()=>({...saved,query:q('#find-text').value,replacement:q('#replace-text').value,scope:q('#find-scope').value,lookIn:q('#find-look-in').value,matchCase:q('#find-case').checked,wholeCell:q('#find-whole').checked,includeHiddenSheets:!readOnly&&q('#find-hidden').checked,sheetId,range});
     const current=()=>el.isConnected&&getDocumentId()===documentId;
     const el=modal('찾기 및 바꾸기',`
       <div class="find-fields"><label>찾을 내용<input id="find-text" value="${esc(saved.query)}" autocomplete="off"></label><label>바꿀 내용<input id="replace-text" value="${esc(saved.replacement)}" autocomplete="off"></label></div>
@@ -37,7 +37,7 @@ export function createFindUI({getWorkbook,getSheet,getRange,getRevision,getDocum
     async function next(){if(!fresh())await scan();if(!fresh()||!preview.results.length)return;await jump((index+1)%preview.results.length);}
     async function apply(){
       if(!fresh()){await scan();if(current()&&preview)q('#find-status').textContent+=' · 미리 보기를 확인한 뒤 모두 바꾸기를 다시 누르세요.';return;}
-      const o=options();if(o.lookIn==='values')return;if(!preview.count)return;
+      const o=options();if(readOnly||o.lookIn==='values')return;if(!preview.count)return;
       const key=signature,request=++sequence;
       try{
         const result=await runBusy('바꾸기 결과를 검증하는 중…',async()=>{try{return await replace(o,()=>current()&&request===sequence&&key===JSON.stringify(options()));}catch(error){return {error:error.message};}});
@@ -48,6 +48,11 @@ export function createFindUI({getWorkbook,getSheet,getRange,getRevision,getDocum
     el.addEventListener('click',event=>{const button=event.target.closest('[data-find-result]');if(button)void jump(+button.dataset.findResult);});
     el.addEventListener('keydown',event=>{if(event.key==='Tab'){const nodes=[...el.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled])')],i=nodes.indexOf(document.activeElement);if(event.shiftKey&&i===0||!event.shiftKey&&i===nodes.length-1){event.preventDefault();nodes[event.shiftKey?nodes.length-1:0]?.focus();}}});
     q('[data-modal-button="2"]').disabled=saved.lookIn==='values';q('#replace-text').disabled=saved.lookIn==='values';q('#find-hidden').disabled=saved.scope!=='workbook';
+    if(readOnly){
+      el.querySelector('.modal').setAttribute('aria-label','찾기');el.querySelector('h2').textContent='찾기';
+      q('#replace-text').closest('label').hidden=true;q('[data-modal-button="2"]').hidden=true;q('#find-hidden').closest('label').hidden=true;
+      q('.find-help').textContent='현재 시트나 통합 문서에서 찾습니다. 보기 모드에서는 문서를 바꾸지 않습니다.';
+    }
     q('#find-text').select();return el;
   }};
 }

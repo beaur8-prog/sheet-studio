@@ -38,7 +38,7 @@ async function handle(type, data) {
   if(type==='import-preview'){if(prepared?.token!==data.token)throw Error('파일 열기 작업이 만료되었습니다. 다시 여세요.');return {token:data.token,book:prepared.book,description:prepared.description};}
 
   if (type === 'load') {
-    store = await openRecoveryStore();
+    store = await openRecoveryStore(data.android ? {databaseName:'sheet-studio-android-recovery',retainDocuments:true} : undefined);
     let recoveryAvailable, migrated = false;
     const previousId = typeof data.documentId==='string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(data.documentId) ? data.documentId : undefined;
     if (data.fresh) {
@@ -63,11 +63,13 @@ async function handle(type, data) {
     return {book, description: describe(book), migrated, recoveryAvailable, revision};
   }
   if (type === 'recover') {
-    const recovered = await store.recover();
+    const recovered = await store.recover(data.documentId);
     if (!recovered) return null;
     const loaded = validateWorkbook(recovered.book);loaded.activeSheetId=openingSheetId(loaded);const token = crypto.randomUUID(); prepared = {token, book: loaded};
     return {book: loaded, description: describe(loaded), token, documentId: recovered.documentId};
   }
+  if(type==='recovery-list')return store.list();
+  if(type==='recovery-forget')return store.forget(data.documentId);
   if (type === 'import') {
     if (data.bytes.byteLength > 100 * 1024 * 1024) throw Error('100 MB 이하의 파일을 선택하세요.');
     const loaded = /\.json$/i.test(data.name) ? parseWorkbook(new TextDecoder().decode(data.bytes)) : validateWorkbook(await readSpreadsheet(data.bytes, data.name));
@@ -102,7 +104,9 @@ async function handle(type, data) {
       return {...metadata, cells};
     })};
     book=next;
-    revision = data.revision; changed(); return {revision};
+    revision = data.revision; changed();
+    if(data.persist===false){dirty=new Map();metadataDirty=false;needsSave=false;}
+    return {revision};
   }
   if (type === 'flush') {
     if (!needsSave) return {revision, chunksWritten: 0, fullSheets: 0, metadataWritten: false};
