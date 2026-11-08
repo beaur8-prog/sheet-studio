@@ -1,7 +1,7 @@
 # Android 전용 UI 구현·검증 기록
 
 - 날짜: 2026-11-08
-- 개발 버전: **0.7.42**
+- 개발 버전: **0.7.43**
 - 기준 계획: [Android UI 전환 계획](ANDROID-UI-ADAPTATION-PLAN.md)
 - 범위: Android 웹 렌더러의 보기·편집 UI와 호스트 연결 지점. APK/AAB·서명·스토어 배포는 별도다.
 
@@ -53,6 +53,7 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 | API | 계약 |
 |---|---|
 | `setFullscreen({enabled,hideStatusBar,hideNavigationBar,edgeToEdge,transientBarsBySwipe})` | 실행 시 위 상태줄·아래 탐색줄 숨김과 전체 창 사용 요청, 버튼의 표시/복원. 실제 적용 확인 후 `{enabled}` 응답. 렌더러는 네이티브 구현을 포함하지 않으며 미제공 시 버튼에서 웹 Fullscreen API 사용 |
+| `closeApp()` | 종료 확인과 셀 입력 해결·복구 flush 후에만 호출. Android 호스트의 `close` 요청으로 Activity를 finish하며 실패 시 문서와 화면을 유지 |
 | `openFile()` | 취소는 null. 성공은 `{name, mime, data}`. `data`는 읽기 완료한 ArrayBuffer/Uint8Array/Blob이며 URI 문자열만 전달하지 않음 |
 | `saveCopy({name,mime,data})` | SAF의 새 문서로 저장. 취소 `{cancelled:true}`, 실제 제공자 완료 확인 시만 `{completed:true}`. 예외/불확실한 응답은 편집본 보존·실패 안내 |
 | `shareFile({name,mime,data})` | 임시 파일의 읽기 권한·수명을 보장해 공유. 취소/오류는 원본·편집본을 변경하지 않음 |
@@ -60,7 +61,7 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 | `takeRequestedFile()` / `onOpenFile(callback)` | `{requestId,name,mime,data}`. 같은 요청 ID는 한 번만 소비. 작업·패널 중인 요청은 대기 후 문서 보호 절차를 거침 |
 | `resumeSession` | 기존 Activity/작업의 재생성일 때만 true. 일반 새 실행은 false/생략. 새 파일 intent는 별도 요청으로 전달 |
 
-시스템 IME의 뒤로 가기를 먼저 처리한 뒤, 호스트는 취소 가능한 `sheet-studio-android-back` 이벤트를 발행한다. `defaultPrevented`이면 앱이 메뉴/입력/문서를 처리한 것이므로 Activity 종료를 반복하지 않는다. 아무 상태도 처리하지 않은 빈 보기 화면에서는 호스트가 정상 종료할 수 있다.
+시스템 IME의 뒤로 가기를 먼저 처리한 뒤, 호스트는 취소 가능한 `sheet-studio-android-back` 이벤트를 발행한다. `defaultPrevented`이면 앱이 메뉴/입력/문서를 처리한 것이므로 Activity 종료를 반복하지 않는다. 편집/보기 상태 자체를 바꾸거나 빈 문서로 교체하지 않는다. 입력·패널 처리를 마친 뒤에는 앱 종료 확인을 띄운다. 확인의 `닫기`는 복구 flush 후 `closeApp()`을 호출하고 `취소`는 현재 문서로 돌아간다. 브라우저에서는 앱 종료 API가 없다는 안내를 표시하며 종료 성공을 가장하지 않는다.
 
 `sheet-studio-android-insets`는 매번 전체 스냅샷을 CSS px로 전달한다. 권장 detail은 `{systemBars:{top,right,bottom,left},displayCutout:{top,right,bottom,left}}`다. 보이는 시스템줄과 실제 카메라 cutout을 구분하며 누락된 변은 0으로 초기화한다. WebView가 이미 모든 여백을 소비했다면 `{consumedByWebView:true}`를 전달해 중복 패딩을 방지한다. 기존 평면 `{top,right,bottom,left}`는 시스템줄 여백으로 호환 처리하며 전체화면에서는 무시한다. `visualViewport`가 이미 반영한 IME 높이를 중복해서 빼지 않는다. `sheet-studio-android-input`의 `{hardwareKeyboard:boolean}`은 연결/해제 상태를 알려 준다. 실제 dp 대응·edge-to-edge·분할 창·IME 동작은 호스트와 함께 검증해야 한다.
 
@@ -119,3 +120,12 @@ else controller.show(WindowInsetsCompat.Type.systemBars())
 0.7.41의 연속 입력·집계·가로 화면 검증은 [0.7.41 기록](releases/v0.7.41.md), 0.7.42의 위아래 여백 제거·격자 확장 검증은 [0.7.42 기록](releases/v0.7.42.md)을 따른다.
 
 0.7.42부터 앱 전체의 안전 영역 padding은 0이며 실제 가시 viewport를 채운다. 필요한 inset은 상단·하단 조작부 또는 격자의 cutout 가장자리에서만 처리한다. 전체화면 진입·복원은 inset과 크기를 다시 계산한다. 키보드가 페이지를 이동시킨 경우 `visualViewport.offsetTop/offsetLeft`와 크기를 함께 반영하며, pinch zoom 중에는 문서 레이아웃을 축소하지 않는다. 브라우저가 웹 콘텐츠 밖에 남긴 주소줄·OS 창 여백은 CSS로 회수할 수 없으므로 실제 실행 환경도 확인해야 한다. [Chrome edge-to-edge 안내](https://developer.chrome.com/docs/css-ui/edge-to-edge), [Android edge-to-edge 안내](https://developer.android.com/develop/ui/views/layout/edge-to-edge)
+
+
+## 실제 Android 호스트 연결 (0.7.43)
+
+별도 [Office Studio Android 수정 브랜치](https://github.com/beaur8-prog/office-studio/tree/codex/android-sheet-lifecycle-20261108)에 APK 호스트가 있다. 앞선 0.7.41/0.7.42의 렌더러 변경만으로 배포된 APK의 네이티브 창 설정과 포함된 웹 자산이 바뀌지는 않는다. 새 패키지는 Sheet 소스와 아래 호스트 변경을 함께 포함해야 한다.
+
+Sheet에서만 WebView를 시스템줄·카메라 영역 전체로 확장하고 네이티브 부모의 카메라 padding을 제거했다. IME 높이만 네이티브 뷰포트에서 소비하며, 시스템줄·카메라 여백과 `displayCutoutRects`를 CSS px로 웹에 전달한다. 카메라 옆에 공간이 있으면 상단 메뉴를 좌우에 배치해 별도 빈 줄을 추가하지 않는다. 해당 메타데이터가 없거나 메뉴가 들어갈 수 없는 넓은 cutout이면 안전 여백을 유지한다.
+
+입력 미리보기는 Android의 현재 편집 셀에 초안 문자열을 그리는 표시 처리다. HTML은 이스케이프하며 문서 값·수식 계산·실행 취소는 Enter/완료 때만 갱신된다. 입력 취소·유효성 오류·한글 조합·다음 셀에서도 기존 문서 보호 경로를 유지한다. [검증 기록](releases/v0.7.43.md)

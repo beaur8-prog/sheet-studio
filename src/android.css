@@ -73,6 +73,9 @@ body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-
 .sheet-android .filter-popup label,.sheet-android .filter-popup summary { min-height:48px }
 .sheet-android .filter-popup input[type=checkbox],.sheet-android .filter-popup input[type=radio] { width:24px;height:24px }
 .sheet-android .android-header { order:0 }
+.sheet-android .android-header-start,.sheet-android .android-header-end { display:flex;align-items:center;gap:4px;min-width:0 }
+.sheet-android .android-header-start { flex:1 }
+.sheet-android .android-header-end { flex-shrink:0;justify-content:flex-end }
 .sheet-android .android-selection { order:1 }
 .sheet-android .android-tools { order:2 }
 .sheet-android .tabs { order:3 }
@@ -123,6 +126,11 @@ body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-
 .sheet-android.android-cell-editing .grid-shell { margin-top:var(--android-safe-top,0px) }
 .sheet-android.android-landscape:not(.android-cell-editing) .grid-shell { margin-bottom:var(--android-safe-bottom,0px) }
 .sheet-android .backdrop { top:var(--android-viewport-top,0px);left:var(--android-viewport-left,0px);right:auto;bottom:auto;width:var(--android-width,100%);height:var(--android-height,100dvh);padding:max(8px,var(--android-safe-top,0px)) max(8px,var(--android-safe-right,0px)) max(8px,var(--android-safe-bottom,0px)) max(8px,var(--android-safe-left,0px)) }
+.sheet-android .android-header-cutout { padding-top:0;min-height:var(--header-cutout-height) }
+.sheet-android .android-cutout-split { display:grid;grid-template-columns:var(--header-cutout-left) var(--header-cutout-gap) minmax(0,1fr);column-gap:0 }
+.sheet-android .android-cutout-split .android-header-end { grid-column:3 }
+.sheet-android .android-cutout-left { padding-left:var(--header-cutout-inset) }
+.sheet-android .android-cutout-right { padding-right:var(--header-cutout-inset) }
 @media (max-width:599px) {
  .sheet-android .find-fields,.sheet-android .find-options,.sheet-android .format-columns,.sheet-android .chart-form,.sheet-android .validation-columns,.sheet-android .pivot-source { grid-template-columns:minmax(0,1fr) }
  .sheet-android .find-checks { display:flex;flex-direction:column }

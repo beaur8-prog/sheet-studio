@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {androidInsets,androidViewportFrame} from '../src/android-viewport.mjs';
+import {androidInsets,androidViewportFrame,androidHeaderCutout} from '../src/android-viewport.mjs';
 
 test('Android inset snapshots separate cutouts from hidden bars and clear obsolete edges',()=>{
   const message=androidInsets({systemBars:{top:40,bottom:44},displayCutout:{right:24}});
@@ -21,4 +21,11 @@ test('Android uses the visible keyboard-reduced viewport including browser pan w
 });
 test('Android preserves the layout viewport during pinch zoom so the document can still be panned',()=>{
   assert.deepEqual(androidViewportFrame({innerWidth:412,innerHeight:842,visualViewport:{width:206,height:421,offsetTop:80,offsetLeft:50,scale:2}}),{width:412,height:842,top:0,left:0});
+});
+
+test('Android header uses space beside camera holes instead of adding a blank row',()=>{
+ assert.deepEqual(androidHeaderCutout({displayCutoutRects:[{top:0,bottom:30,left:195,right:217}]},412),{mode:'split',left:183,gap:38,height:48});
+ assert.equal(androidHeaderCutout({displayCutoutRects:[{top:0,bottom:32,left:0,right:30}]},412).mode,'left');
+ assert.equal(androidHeaderCutout({consumedByWebView:true,displayCutoutRects:[{top:0,bottom:30,left:195,right:217}]},412),null);
+ assert.equal(androidHeaderCutout({displayCutoutRects:[{top:0,bottom:30,left:0,right:410}]},412),null);
 });

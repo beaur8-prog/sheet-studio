@@ -1,6 +1,6 @@
 import './android.css';
 import {createAndroidFullscreen} from './android-fullscreen.mjs';
-import {androidInsets,androidViewportFrame} from './android-viewport.mjs';
+import {androidInsets,androidViewportFrame,androidHeaderCutout} from './android-viewport.mjs';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const button = (id, label, cls = '') => `<button type="button" data-mobile="${id}" class="${cls}">${label}</button>`;
@@ -12,7 +12,7 @@ export function installAndroidUI(api) {
   const root = document.querySelector('#app'), shell = document.querySelector('#grid-shell');
   const header = document.createElement('header'), summary = document.createElement('div'), nav = document.createElement('nav'), tools = document.createElement('div');
   header.className = 'android-header';
-  header.innerHTML = button('open','열기') + '<button class="android-title" data-mobile="info"><strong></strong><small></small></button>' + button('address','A1','android-header-address') + button('fullscreen','전체화면') + button('more','더보기');
+  header.innerHTML = '<div class="android-header-start">'+button('open','열기') + '<button class="android-title" data-mobile="info"><strong></strong><small></small></button></div><div class="android-header-end">' + button('address','A1','android-header-address') + button('fullscreen','전체화면') + button('more','더보기')+'</div>';
   summary.className = 'android-selection';
   summary.setAttribute('role','status');summary.setAttribute('aria-live','polite');
   summary.innerHTML = '<button class="android-address" data-mobile="address" aria-label="셀 주소 또는 범위로 이동"></button><button data-mobile="detail" aria-label="선택 셀 상세 보기"></button>';
@@ -30,7 +30,13 @@ export function installAndroidUI(api) {
   done.textContent='완료';done.setAttribute('aria-label','입력 완료');cancel.textContent='취소';
   const manifest=document.createElement('link');manifest.rel='manifest';manifest.href=new URL('android.webmanifest',document.baseURI).href;document.head.append(manifest);
   const viewportMeta=document.querySelector('meta[name=viewport]');if(viewportMeta&&!viewportMeta.content.includes('viewport-fit'))viewportMeta.content+=', viewport-fit=cover';
-  let hostInsets=null,viewportFrame=0;
+  let hostInsets=null,hostInsetMessage=null,viewportFrame=0;
+  function headerCutout(active,width){
+    const layout=active?androidHeaderCutout(hostInsetMessage,width):null;
+    header.classList.toggle('android-header-cutout',!!layout);
+    for(const mode of ['split','left','right'])header.classList.toggle('android-cutout-'+mode,layout?.mode===mode);
+    for(const key of ['left','gap','inset','height'])header.style.setProperty('--header-cutout-'+key,(layout?.[key]||0)+'px');
+  }
   function safeAreas(active){
     for(const edge of ['top','right','bottom','left']){
       const bar=active?0:hostInsets?.bars[edge]||0,cutout=hostInsets?.cutout?.[edge];
@@ -39,6 +45,7 @@ export function installAndroidUI(api) {
   }
   const fullscreen=createAndroidFullscreen({onChange:active=>{
     document.body.classList.toggle('android-fullscreen',active);safeAreas(active);
+    headerCutout(active,androidViewportFrame(window).width);
     header.querySelector('[data-mobile=fullscreen]').textContent=active?'화면 복원':'전체화면';
     header.querySelector('[data-mobile=fullscreen]').setAttribute('aria-pressed',String(active));
     header.querySelector('[data-mobile=fullscreen]').hidden=!fullscreen.canToggle();
@@ -204,6 +211,7 @@ export function installAndroidUI(api) {
   function viewport() {
     candidate=null;touches.clear();finishRange(true);
     const frame=androidViewportFrame(window);
+    headerCutout(fullscreen.active(),frame.width);
     // Soft-keyboard height changes must not turn a portrait layout into a
     // landscape layout. A real width change, or idle resize, updates the base.
     const typing=api.state().cellEditing||textInput(document.activeElement)||keyboardMayBeOpen&&window.innerHeight<layoutHeight;
@@ -219,7 +227,7 @@ export function installAndroidUI(api) {
   }
   function scheduleViewport(){cancelAnimationFrame(viewportFrame);viewportFrame=requestAnimationFrame(viewport);}
   window.addEventListener('sheet-studio-android-insets',event=>{
-    hostInsets=androidInsets(event.detail);safeAreas(fullscreen.active());
+    hostInsetMessage=event.detail;hostInsets=androidInsets(event.detail);safeAreas(fullscreen.active());
     viewport();
   });
   window.addEventListener('sheet-studio-android-input',event=>{if(typeof event.detail?.hardwareKeyboard==='boolean')api.hardware(event.detail.hardwareKeyboard);});
@@ -239,8 +247,7 @@ export function installAndroidUI(api) {
     if(el){el.querySelector('[data-close],[data-function-close]')?.click();event.preventDefault();return;}
     if(document.querySelector('.filter-popup')){api.closeFilter();event.preventDefault();return;}
     if(api.state().cellEditing){api.cancelOrKeepDraft();event.preventDefault();return;}
-    if(api.state().mode==='edit'){run(()=>api.changeMode());event.preventDefault();return;}
-    if(api.state().dirty||api.sourceName()){run(()=>api.closeDocument());event.preventDefault();}
+    event.preventDefault();run(()=>api.requestExit());
   });
   viewport();
   // Register inset listeners before a native host can synchronously reply.
