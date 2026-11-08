@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import {R,D,A,relationships,relationship} from '../../src/chart-xml.mjs';
-export const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
+export const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
 export async function drawingFixture(){
   const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Pictures');sheet.getCell('A1').value='그림과 도형';sheet.getCell('A2').value=5;const id=book.addImage({base64:png,extension:'png'});sheet.addImage(id,{tl:{col:3,row:2},ext:{width:140,height:80}});
   const zip=await JSZip.loadAsync(await book.xlsx.writeBuffer()),part='xl/drawings/drawing1.xml';let drawing=await zip.file(part).async('string');
