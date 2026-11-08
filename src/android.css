@@ -1,7 +1,7 @@
 /* Every rule is scoped to a runtime marker; desktop/mobile-width browsers do
    not acquire the Android interface merely because their window is narrow. */
-body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-behavior:none }
-.sheet-android #app { height:var(--android-height,100dvh);padding:var(--android-top,env(safe-area-inset-top,0px)) var(--android-right,env(safe-area-inset-right,0px)) var(--android-bottom,env(safe-area-inset-bottom,0px)) var(--android-left,env(safe-area-inset-left,0px));min-height:0 }
+body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-behavior:none;margin:0;padding:0 }
+.sheet-android #app { position:fixed;top:var(--android-viewport-top,0px);left:var(--android-viewport-left,0px);width:var(--android-width,100%);height:var(--android-height,100dvh);padding:0;min-height:0 }
 .sheet-android .titlebar,.sheet-android .sheetbar,.sheet-android .statusbar,.sheet-android .pivot-bar,.sheet-android .table-bar { display:none!important }
 .sheet-android .tabs,.sheet-android .ribbon { display:none }
 .sheet-android .android-header { display:flex;gap:4px;align-items:center;min-height:56px;flex-shrink:0;background:var(--chrome);padding:4px 6px }
@@ -112,6 +112,17 @@ body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-
 .sheet-android .function-browser { grid-template-columns:minmax(0,1fr) }
 .sheet-android .function-filters { grid-template-columns:minmax(0,1fr) }
 .sheet-android .function-library { padding:16px }
+/* The document fills the viewport. Protect controls from visible bars/cutouts
+   locally; never reserve blank strips around the whole worksheet. Fullscreen
+   drops system-bar insets and keeps only actual display cutout protection. */
+.sheet-android .android-header { padding-top:var(--android-safe-top,0px) }
+.sheet-android .android-nav,.sheet-android .formula-bar { padding-bottom:var(--android-safe-bottom,0px) }
+.sheet-android .android-header,.sheet-android .android-nav,.sheet-android .android-tools,.sheet-android .formula-bar { padding-left:max(4px,var(--android-safe-left,0px));padding-right:max(4px,var(--android-safe-right,0px)) }
+.sheet-android .android-selection { padding-left:max(8px,var(--android-safe-left,0px));padding-right:max(8px,var(--android-safe-right,0px)) }
+.sheet-android .grid-shell { margin-left:var(--android-safe-left,0px);margin-right:var(--android-safe-right,0px) }
+.sheet-android.android-cell-editing .grid-shell { margin-top:var(--android-safe-top,0px) }
+.sheet-android.android-landscape:not(.android-cell-editing) .grid-shell { margin-bottom:var(--android-safe-bottom,0px) }
+.sheet-android .backdrop { top:var(--android-viewport-top,0px);left:var(--android-viewport-left,0px);right:auto;bottom:auto;width:var(--android-width,100%);height:var(--android-height,100dvh);padding:max(8px,var(--android-safe-top,0px)) max(8px,var(--android-safe-right,0px)) max(8px,var(--android-safe-bottom,0px)) max(8px,var(--android-safe-left,0px)) }
 @media (max-width:599px) {
  .sheet-android .find-fields,.sheet-android .find-options,.sheet-android .format-columns,.sheet-android .chart-form,.sheet-android .validation-columns,.sheet-android .pivot-source { grid-template-columns:minmax(0,1fr) }
  .sheet-android .find-checks { display:flex;flex-direction:column }

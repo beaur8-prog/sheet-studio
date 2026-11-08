@@ -31,7 +31,7 @@ test('Android fullscreen uses an acknowledged native status-bar request or web f
   const calls=[],doc={fullscreenElement:null,documentElement:{async requestFullscreen(options){calls.push(options);doc.fullscreenElement=this;}},async exitFullscreen(){doc.fullscreenElement=null;},addEventListener(){}};
   let native;
   const win={matchMedia:()=>({matches:false}),sheetStudioAndroid:{protocolVersion:1,platform:'android',async setFullscreen(options){native=options;return {enabled:options.enabled};}}};
-  const host=createAndroidFullscreen({document:doc,window:win});await host.initialize();assert.equal(host.active(),true);assert.equal(native.hideStatusBar,true);assert.equal(native.hideNavigationBar,false);await host.toggle();assert.equal(host.active(),false);assert.equal(calls.length,0);
+  const host=createAndroidFullscreen({document:doc,window:win});await host.initialize();assert.equal(host.active(),true);assert.equal(native.hideStatusBar,true);assert.equal(native.hideNavigationBar,true);assert.equal(native.edgeToEdge,true);await host.toggle();assert.equal(host.active(),false);assert.equal(calls.length,0);
   const browser=createAndroidFullscreen({document:doc,window:{matchMedia:()=>({matches:false})}});await browser.initialize();assert.equal(calls.length,0);await browser.toggle();assert.deepEqual(calls,[{navigationUI:'hide'}]);await browser.toggle();assert.equal(browser.active(),false);
 });
 test('fullscreen does not report native success when the host rejects or fails to acknowledge it',async()=>{

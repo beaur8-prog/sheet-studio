@@ -1,7 +1,7 @@
 # Android 전용 UI 구현·검증 기록
 
 - 날짜: 2026-11-08
-- 개발 버전: **0.7.41**
+- 개발 버전: **0.7.42**
 - 기준 계획: [Android UI 전환 계획](ANDROID-UI-ADAPTATION-PLAN.md)
 - 범위: Android 웹 렌더러의 보기·편집 UI와 호스트 연결 지점. APK/AAB·서명·스토어 배포는 별도다.
 
@@ -52,7 +52,7 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 
 | API | 계약 |
 |---|---|
-| `setFullscreen({enabled,hideStatusBar,hideNavigationBar,transientBarsBySwipe})` | 실행 시 상태줄 숨김 요청과 버튼의 표시/복원. 실제 적용 확인 후 `{enabled}` 응답. 렌더러는 네이티브 구현을 포함하지 않으며 미제공 시 버튼에서 웹 Fullscreen API 사용 |
+| `setFullscreen({enabled,hideStatusBar,hideNavigationBar,edgeToEdge,transientBarsBySwipe})` | 실행 시 위 상태줄·아래 탐색줄 숨김과 전체 창 사용 요청, 버튼의 표시/복원. 실제 적용 확인 후 `{enabled}` 응답. 렌더러는 네이티브 구현을 포함하지 않으며 미제공 시 버튼에서 웹 Fullscreen API 사용 |
 | `openFile()` | 취소는 null. 성공은 `{name, mime, data}`. `data`는 읽기 완료한 ArrayBuffer/Uint8Array/Blob이며 URI 문자열만 전달하지 않음 |
 | `saveCopy({name,mime,data})` | SAF의 새 문서로 저장. 취소 `{cancelled:true}`, 실제 제공자 완료 확인 시만 `{completed:true}`. 예외/불확실한 응답은 편집본 보존·실패 안내 |
 | `shareFile({name,mime,data})` | 임시 파일의 읽기 권한·수명을 보장해 공유. 취소/오류는 원본·편집본을 변경하지 않음 |
@@ -62,23 +62,24 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 
 시스템 IME의 뒤로 가기를 먼저 처리한 뒤, 호스트는 취소 가능한 `sheet-studio-android-back` 이벤트를 발행한다. `defaultPrevented`이면 앱이 메뉴/입력/문서를 처리한 것이므로 Activity 종료를 반복하지 않는다. 아무 상태도 처리하지 않은 빈 보기 화면에서는 호스트가 정상 종료할 수 있다.
 
-`sheet-studio-android-insets`의 detail `{top,right,bottom,left}`는 **WebView가 아직 소비하지 않은** CSS px 값만 전달한다. `visualViewport`가 이미 반영한 IME 높이를 중복해서 빼지 않는다. `sheet-studio-android-input`의 `{hardwareKeyboard:boolean}`은 연결/해제 상태를 알려 준다. 실제 dp 대응·edge-to-edge·분할 창·IME 동작은 호스트와 함께 검증해야 한다.
+`sheet-studio-android-insets`는 매번 전체 스냅샷을 CSS px로 전달한다. 권장 detail은 `{systemBars:{top,right,bottom,left},displayCutout:{top,right,bottom,left}}`다. 보이는 시스템줄과 실제 카메라 cutout을 구분하며 누락된 변은 0으로 초기화한다. WebView가 이미 모든 여백을 소비했다면 `{consumedByWebView:true}`를 전달해 중복 패딩을 방지한다. 기존 평면 `{top,right,bottom,left}`는 시스템줄 여백으로 호환 처리하며 전체화면에서는 무시한다. `visualViewport`가 이미 반영한 IME 높이를 중복해서 빼지 않는다. `sheet-studio-android-input`의 `{hardwareKeyboard:boolean}`은 연결/해제 상태를 알려 준다. 실제 dp 대응·edge-to-edge·분할 창·IME 동작은 호스트와 함께 검증해야 한다.
 
 ## 전체화면과 상태줄
 
-Android에만 manifest 링크와 `viewport-fit=cover`를 적용한다. `public/android.webmanifest`는 홈 화면 실행의 `fullscreen` 표시 방식을 요청한다. 일반 브라우저의 전체화면 버튼은 사용자 동작에서 `requestFullscreen({navigationUI:'hide'})`를 호출하고 다시 눌러 복귀한다. 네이티브 호스트는 `setFullscreen`이 있으면 실행 시 상태줄 숨김을 요청한다. UI가 안테나 줄을 CSS로 가린 것처럼 처리하거나 기기 높이를 임의로 더하지 않는다. [Fullscreen 표준](https://fullscreen.spec.whatwg.org/), [Web App Manifest 표시 모드](https://www.w3.org/TR/appmanifest/#display-member)
+Android에만 manifest 링크와 `viewport-fit=cover`를 적용한다. `public/android.webmanifest`는 홈 화면 실행의 `fullscreen` 표시 방식을 요청한다. 일반 브라우저의 전체화면 버튼은 사용자 동작에서 `requestFullscreen({navigationUI:'hide'})`를 호출하고 다시 눌러 복귀한다. 네이티브 호스트는 `setFullscreen`이 있으면 실행 시 상태줄·탐색줄 숨김과 `edgeToEdge:true`를 요청한다. UI가 안테나 줄을 CSS로 가린 것처럼 처리하거나 기기 높이를 임의로 더하지 않는다. [Fullscreen 표준](https://fullscreen.spec.whatwg.org/), [Web App Manifest 표시 모드](https://www.w3.org/TR/appmanifest/#display-member)
 
-APK 호스트의 실제 상태줄 숨김은 아래와 같은 네이티브 처리가 필요하다. 이 예시는 패키징 연결 지침이며 현재 저장소에서 빌드한 Android Activity가 아니다. 적용 후 호스트는 남은 안전 영역/IME inset을 다시 전달한다. [Android 공식 immersive mode](https://developer.android.com/develop/ui/views/layout/immersive)
+APK 호스트의 실제 상태줄 숨김은 아래와 같은 네이티브 처리가 필요하다. 이 예시는 패키징 연결 지침이며 현재 저장소에서 빌드한 Android Activity가 아니다. WebView는 부모 전체 크기를 사용하고, 루트 padding/fitsSystemWindows로 같은 여백을 다시 예약하지 않아야 한다. 적용 후 호스트는 시스템줄과 cutout 스냅샷을 다시 전달한다. [Android 공식 immersive mode](https://developer.android.com/develop/ui/views/layout/immersive)
 
 ```kotlin
+WindowCompat.enableEdgeToEdge(activity.window)
 val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
 controller.systemBarsBehavior =
     WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-if (enabled) controller.hide(WindowInsetsCompat.Type.statusBars())
-else controller.show(WindowInsetsCompat.Type.statusBars())
+if (enabled) controller.hide(WindowInsetsCompat.Type.systemBars())
+else controller.show(WindowInsetsCompat.Type.systemBars())
 ```
 
-시스템 탐색/IME를 강제로 숨기지 않는다. 실제 OS 표시 방식·Gboard/삼성 입력기·상태줄과 cutout은 기기 검증 대상이다. 설치 앱이 이미 fullscreen 표시 방식이고 웹 API로 종료할 수 없는 경우에는 불필요한 전체화면 전환 버튼을 숨긴다.
+전체화면에서는 위·아래 시스템줄을 함께 숨기며 가장자리 스와이프로 일시 표시할 수 있다. IME를 숨기거나 키보드 높이까지 격자 공간으로 계산하지 않는다. 실제 OS 표시 방식·Gboard/삼성 입력기·상태줄과 cutout은 기기 검증 대상이다. 설치 앱이 이미 fullscreen 표시 방식이고 웹 API로 종료할 수 없는 경우에는 불필요한 전체화면 전환 버튼을 숨긴다.
 
 ## 검증과 남은 단계
 
@@ -115,4 +116,6 @@ else controller.show(WindowInsetsCompat.Type.statusBars())
 | G4 | 태블릿 리본·키보드 이벤트·입력 초안 보존 경로 구현. 실제 외부 키보드 첫 한글과 연결/분리 검증 필요 |
 | G5·후속 | 실제 Android 접근성·메모리·시스템 제스처·장시간 문서 검사, APK/AAB 패키징·서명·배포는 남음 |
 
-0.7.41의 연속 입력·집계·전체화면·가로 화면 재검증은 [이번 변경 기록](releases/v0.7.41.md)을 따른다.
+0.7.41의 연속 입력·집계·가로 화면 검증은 [0.7.41 기록](releases/v0.7.41.md), 0.7.42의 위아래 여백 제거·격자 확장 검증은 [0.7.42 기록](releases/v0.7.42.md)을 따른다.
+
+0.7.42부터 앱 전체의 안전 영역 padding은 0이며 실제 가시 viewport를 채운다. 필요한 inset은 상단·하단 조작부 또는 격자의 cutout 가장자리에서만 처리한다. 전체화면 진입·복원은 inset과 크기를 다시 계산한다. 키보드가 페이지를 이동시킨 경우 `visualViewport.offsetTop/offsetLeft`와 크기를 함께 반영하며, pinch zoom 중에는 문서 레이아웃을 축소하지 않는다. 브라우저가 웹 콘텐츠 밖에 남긴 주소줄·OS 창 여백은 CSS로 회수할 수 없으므로 실제 실행 환경도 확인해야 한다. [Chrome edge-to-edge 안내](https://developer.chrome.com/docs/css-ui/edge-to-edge), [Android edge-to-edge 안내](https://developer.android.com/develop/ui/views/layout/edge-to-edge)

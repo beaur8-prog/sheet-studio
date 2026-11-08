@@ -9,7 +9,7 @@ export function createAndroidFullscreen({document:doc=document,window:win=window
   doc.addEventListener('fullscreenchange',changed);
   async function setNative(enabled){
     const host=androidHost(win);if(!host?.setFullscreen)return false;
-    const result=await host.setFullscreen({enabled,hideStatusBar:enabled,hideNavigationBar:false,transientBarsBySwipe:true});
+    const result=await host.setFullscreen({enabled,hideStatusBar:enabled,hideNavigationBar:enabled,edgeToEdge:true,transientBarsBySwipe:true});
     if(result?.enabled!==enabled)throw Error('Android 전체화면 적용을 확인하지 못했습니다.');
     native=enabled;changed();return true;
   }

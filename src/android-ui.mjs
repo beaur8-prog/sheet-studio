@@ -1,5 +1,6 @@
 import './android.css';
 import {createAndroidFullscreen} from './android-fullscreen.mjs';
+import {androidInsets,androidViewportFrame} from './android-viewport.mjs';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const button = (id, label, cls = '') => `<button type="button" data-mobile="${id}" class="${cls}">${label}</button>`;
@@ -29,12 +30,20 @@ export function installAndroidUI(api) {
   done.textContent='완료';done.setAttribute('aria-label','입력 완료');cancel.textContent='취소';
   const manifest=document.createElement('link');manifest.rel='manifest';manifest.href=new URL('android.webmanifest',document.baseURI).href;document.head.append(manifest);
   const viewportMeta=document.querySelector('meta[name=viewport]');if(viewportMeta&&!viewportMeta.content.includes('viewport-fit'))viewportMeta.content+=', viewport-fit=cover';
+  let hostInsets=null,viewportFrame=0;
+  function safeAreas(active){
+    for(const edge of ['top','right','bottom','left']){
+      const bar=active?0:hostInsets?.bars[edge]||0,cutout=hostInsets?.cutout?.[edge];
+      document.body.style.setProperty('--android-safe-'+edge,`max(${bar}px, ${cutout===undefined?'env(safe-area-inset-'+edge+', 0px)':cutout+'px'})`);
+    }
+  }
   const fullscreen=createAndroidFullscreen({onChange:active=>{
+    document.body.classList.toggle('android-fullscreen',active);safeAreas(active);
     header.querySelector('[data-mobile=fullscreen]').textContent=active?'화면 복원':'전체화면';
     header.querySelector('[data-mobile=fullscreen]').setAttribute('aria-pressed',String(active));
     header.querySelector('[data-mobile=fullscreen]').hidden=!fullscreen.canToggle();
+    scheduleViewport();
   }});
-  void fullscreen.initialize().catch(error=>toast(error.message));
   const handles = ['start','end'].map(edge=>{
     const el=document.createElement('button');el.type='button';el.className='android-handle';el.dataset.rangeHandle=edge;
     el.setAttribute('aria-label',edge==='start'?'선택 시작 조절 · 주소 입력으로도 선택할 수 있습니다':'선택 끝 조절 · 주소 입력으로도 선택할 수 있습니다');
@@ -194,7 +203,7 @@ export function installAndroidUI(api) {
   document.addEventListener('focusin',event=>{if(textInput(event.target))keyboardMayBeOpen=true;});
   function viewport() {
     candidate=null;touches.clear();finishRange(true);
-    const v=window.visualViewport;
+    const frame=androidViewportFrame(window);
     // Soft-keyboard height changes must not turn a portrait layout into a
     // landscape layout. A real width change, or idle resize, updates the base.
     const typing=api.state().cellEditing||textInput(document.activeElement)||keyboardMayBeOpen&&window.innerHeight<layoutHeight;
@@ -205,16 +214,18 @@ export function installAndroidUI(api) {
     }
     previousWindowHeight=window.innerHeight;
     document.body.classList.toggle('android-landscape',layoutWidth>layoutHeight);
-    document.body.style.setProperty('--android-height',(v?.height||window.innerHeight)+'px');
+    for(const [name,value] of Object.entries(frame))document.body.style.setProperty('--android-'+(name==='top'||name==='left'?'viewport-':'')+name,value+'px');
     refresh();
   }
+  function scheduleViewport(){cancelAnimationFrame(viewportFrame);viewportFrame=requestAnimationFrame(viewport);}
   window.addEventListener('sheet-studio-android-insets',event=>{
-    // The host supplies only insets not already consumed by the WebView.
-    for(const edge of ['top','right','bottom','left']){const value=event.detail?.[edge];if(Number.isFinite(value)&&value>=0&&value<500)document.body.style.setProperty('--android-'+edge,value+'px');}
+    hostInsets=androidInsets(event.detail);safeAreas(fullscreen.active());
     viewport();
   });
   window.addEventListener('sheet-studio-android-input',event=>{if(typeof event.detail?.hardwareKeyboard==='boolean')api.hardware(event.detail.hardwareKeyboard);});
-  window.addEventListener('resize',viewport);window.visualViewport?.addEventListener('resize',viewport);
+  window.addEventListener('resize',scheduleViewport);window.visualViewport?.addEventListener('resize',scheduleViewport);
+  window.visualViewport?.addEventListener('scroll',scheduleViewport);
+  window.addEventListener('pageshow',scheduleViewport);window.screen.orientation?.addEventListener('change',scheduleViewport);
   window.addEventListener('blur',()=>{candidate=null;touches.clear();finishRange(true);});
   document.addEventListener('keydown',event=>{
     if(event.isComposing||event.keyCode===229||event.defaultPrevented)return;
@@ -232,5 +243,7 @@ export function installAndroidUI(api) {
     if(api.state().dirty||api.sourceName()){run(()=>api.closeDocument());event.preventDefault();}
   });
   viewport();
+  // Register inset listeners before a native host can synchronously reply.
+  void fullscreen.initialize().catch(error=>toast(error.message));
   return {refresh, detail, context, cancelGesture:()=>{candidate=null;touches.clear();finishRange(true);}};
 }
