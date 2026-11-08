@@ -129,3 +129,5 @@ else controller.show(WindowInsetsCompat.Type.systemBars())
 Sheet에서만 WebView를 시스템줄·카메라 영역 전체로 확장하고 네이티브 부모의 카메라 padding을 제거했다. IME 높이만 네이티브 뷰포트에서 소비하며, 시스템줄·카메라 여백과 `displayCutoutRects`를 CSS px로 웹에 전달한다. 카메라 옆에 공간이 있으면 상단 메뉴를 좌우에 배치해 별도 빈 줄을 추가하지 않는다. 해당 메타데이터가 없거나 메뉴가 들어갈 수 없는 넓은 cutout이면 안전 여백을 유지한다.
 
 입력 미리보기는 Android의 현재 편집 셀에 초안 문자열을 그리는 표시 처리다. HTML은 이스케이프하며 문서 값·수식 계산·실행 취소는 Enter/완료 때만 갱신된다. 입력 취소·유효성 오류·한글 조합·다음 셀에서도 기존 문서 보호 경로를 유지한다. [검증 기록](releases/v0.7.43.md)
+
+0.7.43의 네이티브 수정은 [Android API 35 에뮬레이터 3개 검사](https://github.com/beaur8-prog/office-studio/actions/runs/42448953777)로 실행 검증했다. 실제 제조사 폰 검증과 정식 APK 배포는 별도다. [이번 결과](releases/v0.7.43.md)
