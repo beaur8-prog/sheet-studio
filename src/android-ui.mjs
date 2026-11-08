@@ -257,7 +257,7 @@ export function installAndroidUI(api) {
     hostInsetMessage=event.detail;hostInsets=androidInsets(event.detail);safeAreas(fullscreen.active());
     viewport();
   });
-  window.addEventListener('sheet-studio-android-input',event=>{if(typeof event.detail?.hardwareKeyboard==='boolean'){hardwareConnected=event.detail.hardwareKeyboard;api.hardware(hardwareConnected,{focus:false});refresh();}});
+  window.addEventListener('sheet-studio-android-input',event=>{if(typeof event.detail?.hardwareKeyboard==='boolean'){hardwareConnected=event.detail.hardwareKeyboard;if(!hardwareConnected)api.hardware(false,{focus:false});refresh();}});
   window.addEventListener('resize',scheduleViewport);window.visualViewport?.addEventListener('resize',scheduleViewport);
   window.visualViewport?.addEventListener('scroll',scheduleViewport);
   window.addEventListener('pageshow',scheduleViewport);window.screen.orientation?.addEventListener('change',scheduleViewport);
