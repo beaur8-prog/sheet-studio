@@ -4,36 +4,38 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
 import {createWorkbook,address} from '../src/engine.mjs';
+import {applyValidationChange,planValidationChange} from '../src/data-validation.mjs';
 import {readSpreadsheet} from '../src/io.mjs';
 const root=path.resolve(import.meta.dirname,'..'),dist=path.join(root,'dist');
-const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
+const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.webmanifest':'application/manifest+json','.svg':'image/svg+xml'};
 const server=http.createServer(async(req,res)=>{try{if(req.url==='/__test__/recovery-store.mjs'){res.setHeader('Content-Type','text/javascript');res.end(await fs.readFile(path.join(root,'src/recovery-store.mjs')));return;}const requested=decodeURIComponent(new URL(req.url,'http://local').pathname),file=path.resolve(dist,'.'+(requested==='/'?'/index.html':requested));if(!file.startsWith(dist+path.sep))throw Error();res.setHeader('Content-Type',mime[path.extname(file)]||'application/octet-stream');res.end(await fs.readFile(file));}catch{res.statusCode=404;res.end();}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url='http://127.0.0.1:'+server.address().port;
 const browser=await chromium.launch({channel:'chrome',headless:true});
 const errors=[];let context,page;
 const settle=async()=>{await page.locator('.workbook-busy').waitFor({state:'detached'});await page.evaluate(()=>sheetStudio.whenIdle());};
-const boot=async(options={})=>{
+const boot=async(options={},setup)=>{
  await context?.close();context=await browser.newContext({viewport:{width:412,height:915},hasTouch:true,isMobile:true,userAgent:'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/142.0.0.0 Mobile Safari/537.36',...options});
  await context.addInitScript(()=>{
   window.testClipboard='';Object.defineProperty(navigator,'clipboard',{value:{writeText:async t=>window.testClipboard=t,write:async items=>window.testClipboard=await(await items[0].getType('text/plain')).text(),readText:async()=>window.testClipboard},configurable:true});
   window.sharedFiles=[];navigator.canShare=()=>true;navigator.share=async({files})=>{window.sharedFiles.push({name:files[0].name,bytes:Array.from(new Uint8Array(await files[0].arrayBuffer()))});};
  });
+ if(setup)await context.addInitScript(setup);
  page=await context.newPage();page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));await page.goto(url);await page.waitForFunction(()=>!!window.sheetStudio,null,{timeout:10000});await settle();
 };
 const load=async(book,name='android-test.sheet.json')=>{await page.locator('#file-input').setInputFiles({name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(book))});await page.waitForFunction(name=>sheetStudio.getWorkbook().name===name,book.name);await settle();};
 const command=async name=>{await page.evaluate(name=>{const el=document.createElement('button');el.dataset.action=name;document.body.append(el);el.click();el.remove();},name);await settle();};
-const mobile=async name=>{await page.locator('[data-mobile="'+name+'"]').filter({visible:true}).first().click();await settle();};
+const mobile=async name=>{if(!await page.locator('[data-mobile="'+name+'"]').filter({visible:true}).count()&&['share','mode','find','sheets','view','address','detail'].includes(name))await mobile('more');await page.locator('[data-mobile="'+name+'"]').filter({visible:true}).first().click();await settle();};
 const close=async()=>{await page.locator('.backdrop [data-close]').click();await settle();};
 const select=async text=>{await mobile('address');await page.locator('#android-address').fill(text);await page.getByRole('button',{name:'이동',exact:true}).click();await settle();};
 const workbook=()=>page.evaluate(()=>sheetStudio.getWorkbook());
 const snapshot=()=>page.evaluate(()=>({book:sheetStudio.getWorkbook(),history:sheetStudio.historyStats(),dirty:sheetStudio.isDirty()}));
 try{
- await boot();assert.equal(await page.evaluate(()=>sheetStudio.getMode()),'view');
+ await boot();assert.equal(await page.evaluate(()=>sheetStudio.getMode()),'edit');
  let b=createWorkbook();b.name='Android viewer';b.sheets[0].cells={A1:{raw:'제목'},A2:{raw:'10'},A3:{raw:'20'},B2:{raw:'=SUM(A2:A3)'},C1:{raw:'긴 메모',note:'확인 메모'},D1:{raw:'=FutureFunction()',cachedFormula:'=FutureFunction()',cachedValue:42}};
  const other=structuredClone(createWorkbook().sheets[0]);other.id='second';other.name='두 번째';other.cells.A1={raw:'other'};b.sheets.push(other);
  b.sheets[0].charts=[{id:'chart-1',type:'bar',range:'A1:A3',title:'보기 차트',x:200,y:100,width:360,height:230}];
- await load(b);await page.locator('[data-chart="chart-1"]').tap({position:{x:50,y:50}});await page.getByRole('dialog').waitFor();assert.equal(await page.locator('.android-chart-data table').count(),1);await close();const original=await snapshot();assert.equal(original.dirty,false);assert.equal(original.history.undo,0);assert.equal(await page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('sheet-studio-android-recovery',1);r.onsuccess=()=>resolve(r.result);});return new Promise(resolve=>{const r=db.transaction('state').objectStore('state').getAll();r.onsuccess=()=>{db.close();resolve(r.result.length);};});}),0);
+ await load(b);await mobile('mode');await page.locator('[data-chart="chart-1"]').tap({position:{x:50,y:50}});await page.getByRole('dialog').waitFor();assert.equal(await page.locator('.android-chart-data table').count(),1);await close();const original=await snapshot();assert.equal(original.dirty,false);assert.equal(original.history.undo,0);assert.equal(await page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('sheet-studio-android-recovery',1);r.onsuccess=()=>resolve(r.result);});return new Promise(resolve=>{const r=db.transaction('state').objectStore('state').getAll();r.onsuccess=()=>{db.close();resolve(r.result.length);};});}),0);
  await select('D1');await mobile('detail');assert.match(await page.locator('.android-detail .android-help').innerText(),/저장된 계산값/);await close();
  await mobile('sheets');await page.locator('[data-mobile-sheet="second"]').click();await mobile('sheets');await page.locator('[data-mobile-sheet="sheet-1"]').click();
  await select('A2:B3');await command('copy');await command('bold');await command('clear');await command('paste');await command('rename-sheet');
@@ -93,14 +95,61 @@ try{
  await fs.mkdir(path.join(root,'test-results/android-ui'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/android-ui/phone.png')});
  // Android selection is not activated on other platforms, even at phone width.
  for(const userAgent of ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/142.0.0.0 Safari/537.36','Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148']){
-  await boot({userAgent,isMobile:false});assert.equal(await page.locator('.android-header').count(),0);assert.equal(await page.evaluate(()=>document.body.classList.contains('sheet-android')),false);assert.equal(await page.evaluate(()=>sheetStudio.getMode()),'edit');
+  await boot({userAgent,isMobile:false});assert.equal(await page.locator('.android-header').count(),0);assert.equal(await page.locator('link[rel=manifest]').count(),0);assert.equal(await page.locator('meta[name=viewport]').getAttribute('content').then(value=>value.includes('viewport-fit')),false);assert.equal(await page.evaluate(()=>document.body.classList.contains('sheet-android')),false);assert.equal(await page.evaluate(()=>sheetStudio.getMode()),'edit');
  }
- await boot({viewport:{width:1280,height:800},isMobile:false});await mobile('mode');await mobile('more');await mobile('ribbon');assert.equal(await page.locator('.tabs').isVisible(),true);
+ await boot({viewport:{width:1280,height:800},isMobile:false});await mobile('more');await mobile('ribbon');assert.equal(await page.locator('.tabs').isVisible(),true);
  await page.locator('#grid').focus();await page.keyboard.press('ArrowDown');await page.locator('#editor').dispatchEvent('compositionstart',{data:''});await page.locator('#editor').fill('한글');await page.locator('#editor').dispatchEvent('input');await page.locator('#editor').dispatchEvent('compositionend',{data:'한글'});await page.locator('#editor').press('Enter');await settle();assert.equal((await workbook()).sheets[0].cells.A2.raw,'한글');
  await page.screenshot({path:path.join(root,'test-results/android-ui/tablet.png')});
  console.log('PASS platform isolation: narrow Windows/iPad unchanged; Android tablet ribbon and native composition event path');
+ // A phone tap enters the stable formula field. Enter keeps that exact field
+ // focused while advancing, rather than blurring to the grid between cells.
+ await boot();assert.equal(await page.evaluate(()=>document.activeElement.id),'grid');
+ await page.locator('#android-cell-0-0').tap();await page.waitForFunction(()=>document.activeElement.id==='formula');
+ await page.evaluate(()=>{window.entryInput=document.querySelector('#formula');window.entryBlurs=0;entryInput.addEventListener('blur',()=>entryBlurs++);});
+ for(const [index,value] of ['12','34','56'].entries()){
+  await page.locator('#formula').fill(value);await page.locator('#formula').press('Enter');await settle();
+  assert.equal(await page.evaluate(()=>document.activeElement===entryInput),true);assert.equal(await page.evaluate(()=>entryBlurs),0);assert.equal(await page.evaluate(()=>sheetStudio.getSelection().r),index+1);
+ }
+ assert.deepEqual(await page.evaluate(()=>['A1','A2','A3'].map(key=>sheetStudio.getCell(key).raw)),['12','34','56']);
+ await page.locator('.android-entry-tools [data-mobile=keyboard]').tap();assert.equal(await page.locator('#formula').getAttribute('inputmode'),'decimal');
+ await page.locator('.android-entry-tools [data-mobile=keyboard]').tap();assert.equal(await page.locator('#formula').getAttribute('inputmode'),'text');assert.equal(await page.evaluate(()=>entryBlurs),0);
+ await page.locator('#formula').dispatchEvent('compositionstart',{data:''});await page.locator('#formula').fill('한글');await page.locator('#formula').press('Enter');assert.equal(await page.evaluate(()=>sheetStudio.getSelection().r),3);
+ await page.locator('#formula').dispatchEvent('compositionend',{data:'한글'});await page.locator('#formula').press('Enter');await settle();assert.equal(await page.evaluate(()=>sheetStudio.getCell('A4').raw),'한글');assert.equal(await page.evaluate(()=>entryBlurs),0);
+ await page.locator('.android-entry-tools [data-mobile=next-cell]').tap();await settle();assert.equal(await page.evaluate(()=>sheetStudio.getSelection().r),5);assert.equal(await page.evaluate(()=>entryBlurs),0);
+ await page.locator('[data-action=commit-edit]').click();await settle();await mobile('mode');await page.locator('#android-cell-0-0').tap();await settle();assert.equal(await page.evaluate(()=>sheetStudio.getMode()),'view');assert.equal(await page.locator('.formula-bar').isVisible(),false);
+ console.log('PASS direct entry: single tap, 3 numeric Enter commits, same focused input, text/numeric toggle, Korean composition, next button, read-only view');
+
+ await boot();const aggregate=createWorkbook();aggregate.name='Aggregate shortcuts';aggregate.sheets[0].cells={A1:{raw:'1'},B1:{raw:'2'},A2:{raw:'3'},B2:{raw:'4'}};await load(aggregate);
+ await select('A1:B2');await mobile('aggregate-sum');assert.equal(await page.locator('#android-aggregate-range').inputValue(),'A1:B2');assert.equal(await page.locator('#android-aggregate-target').inputValue(),'A3');
+ await page.getByRole('button',{name:'수식 넣기',exact:true}).click();assert.equal(await page.locator('#formula').inputValue(),'=SUM(A1:B2)');await page.locator('#formula').press('Enter');await settle();assert.equal(await page.evaluate(()=>sheetStudio.evaluateAsync('A3')),10);assert.equal(await page.evaluate(()=>document.activeElement.id),'formula');
+ await mobile('aggregate-average');await page.locator('#android-aggregate-range').fill('A1:B2');await page.locator('#android-aggregate-target').fill('A3');await page.getByRole('button',{name:'수식 넣기',exact:true}).click();assert.match(await page.locator('#android-aggregate-error').innerText(),/내용/);assert.equal(await page.evaluate(()=>sheetStudio.getCell('A3').raw),'=SUM(A1:B2)');
+ await page.locator('#android-aggregate-target').fill('C1');await page.getByRole('button',{name:'수식 넣기',exact:true}).click();await page.locator('#formula').press('Enter');await settle();assert.equal(await page.evaluate(()=>sheetStudio.evaluateAsync('C1')),2.5);
+ await mobile('function');await page.locator('#function-search').fill('SUM');await page.locator('#function-list button').filter({has:page.getByText('SUM',{exact:true})}).click();await page.getByRole('button',{name:'수식에 삽입',exact:true}).click();assert.match(await page.locator('#formula').inputValue(),/^=SUM\(/);await page.locator('[data-action=cancel-edit]').click();await settle();
+ console.log('PASS aggregate shortcuts: entire rectangle sum/average, visible range and target preview, occupied-cell protection, all-functions search');
+
+ await boot();const validation=createWorkbook();validation.name='Continuous validation';validation.sheets[0].cells.A1={raw:'5'};
+ applyValidationChange(validation.sheets[0],planValidationChange(validation,validation.sheets[0],'A1:A3',{type:'whole',operator:'between',formulae:['1','10']}));await load(validation);
+ await page.locator('#android-cell-0-0').tap();await page.locator('#formula').fill('99');await page.locator('#formula').press('Enter');await settle();assert.equal(await page.evaluate(()=>sheetStudio.getSelection().r),0);assert.equal(await page.evaluate(()=>sheetStudio.getCell('A1').raw),'5');assert.equal(await page.locator('#formula').inputValue(),'99');assert.equal(await page.evaluate(()=>document.activeElement.id),'formula');
+ await page.locator('#formula').fill('7');await page.keyboard.down('Enter');await page.locator('#formula').evaluate(el=>el.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true})));assert.equal(await page.evaluate(()=>sheetStudio.getSelection().r),1);await page.keyboard.up('Enter');await settle();
+ await page.locator('#formula').fill('8');await page.locator('#formula').evaluate(el=>el.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true})));await settle();assert.equal(await page.evaluate(()=>sheetStudio.getSelection().r),2);assert.equal(await page.evaluate(()=>sheetStudio.getCell('A2').raw),'8');
+ await page.locator('#formula').evaluate(el=>el.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true})));await settle();assert.equal(await page.evaluate(()=>sheetStudio.getSelection().r),3);
+ console.log('PASS continuous validation: rejected input stays in place with draft and focus; beforeinput/Enter does not advance twice');
+
+ await boot({viewport:{width:915,height:412},isMobile:false});assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('android-landscape')),true);
+ const idleGrid=await page.locator('#grid').boundingBox();assert.ok(idleGrid.height>=300,JSON.stringify(idleGrid));
+ await page.locator('#android-cell-0-0').tap();await settle();const entryGrid=await page.locator('#grid').boundingBox(),entryBar=await page.locator('.formula-bar').boundingBox();assert.ok(entryBar.height<=50,JSON.stringify(entryBar));assert.ok(entryGrid.height>=360,JSON.stringify(entryGrid));
+ await page.setViewportSize({width:915,height:200});await page.waitForFunction(()=>innerHeight===200);await settle();assert.equal(await page.evaluate(()=>document.activeElement.id),'formula');const keyboardGrid=await page.locator('#grid').boundingBox();assert.ok(keyboardGrid.height>=148,JSON.stringify(keyboardGrid));
+ await page.screenshot({path:path.join(root,'test-results/android-ui/landscape-entry.png')});
+ await page.setViewportSize({width:412,height:300});await page.waitForFunction(()=>innerWidth===412);await settle();assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('android-landscape')),false);assert.equal(await page.evaluate(()=>document.activeElement.id),'formula');
+ await boot();await mobile('aggregate-sum');await page.locator('#android-aggregate-range').focus();await page.setViewportSize({width:412,height:300});await page.waitForFunction(()=>innerHeight===300);assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('android-landscape')),false);await close();await page.locator('#android-cell-0-0').tap();await page.setViewportSize({width:412,height:300});await page.waitForFunction(()=>innerHeight===300);await settle();assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('android-landscape')),false);assert.ok((await page.locator('.formula-bar').boundingBox()).height<=98);assert.equal(await page.evaluate(()=>document.activeElement.id),'formula');
+ console.log('PASS compact layout: 96px landscape idle chrome, 48px entry row, 152px grid with 200px keyboard-reduced viewport, portrait stays portrait');
+
+ await boot();assert.equal(await page.locator('link[rel=manifest]').count(),1);await mobile('fullscreen');await page.waitForFunction(()=>!!document.fullscreenElement);await mobile('fullscreen');await page.waitForFunction(()=>!document.fullscreenElement);
+ await boot({},()=>{window.systemUiCalls=[];window.sheetStudioAndroid={protocolVersion:1,platform:'android',setFullscreen:async options=>{systemUiCalls.push(options);return {enabled:options.enabled};}};});await page.waitForFunction(()=>systemUiCalls.length===1);assert.equal(await page.evaluate(()=>systemUiCalls[0].hideStatusBar),true);await mobile('fullscreen');assert.equal(await page.evaluate(()=>systemUiCalls.at(-1).enabled),false);
+ console.log('PASS fullscreen: actual browser entry/exit and acknowledged native status-bar request (native host simulated)');
+
  await boot();const large=createWorkbook();large.name='100k Android viewer';for(let i=0;i<100000;i++)large.sheets[0].cells[address(Math.floor(i/10),i%10)]={raw:String(i)};
- const start=performance.now();await load(large);const elapsed=performance.now()-start;await select('J10000');assert.equal(await page.evaluate(()=>sheetStudio.getCell('J10000').raw),'99999');assert.equal(await page.evaluate(()=>sheetStudio.isDirty()),false);
+ const start=performance.now();await load(large);const elapsed=performance.now()-start;await mobile('mode');await select('J10000');assert.equal(await page.evaluate(()=>sheetStudio.getCell('J10000').raw),'99999');assert.equal(await page.evaluate(()=>sheetStudio.isDirty()),false);
  await page.locator('#file-input').setInputFiles({name:'broken.xlsx',mimeType:'application/octet-stream',buffer:Buffer.from('invalid zip')});await settle();assert.equal((await page.evaluate(()=>sheetStudio.getWorkbook().name)),'100k Android viewer');assert.equal(await page.evaluate(()=>sheetStudio.getCell('J10000').raw),'99999');
  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('sheet-studio-android-back',{cancelable:true})));await page.waitForFunction(()=>sheetStudio.getWorkbook().name==='통합 문서1');assert.equal(await page.evaluate(()=>sheetStudio.getMode()),'view');
  console.log('PASS large viewer/failure/back: 100,000 cells in '+Math.round(elapsed)+'ms on desktop Chrome; malformed import preserves the open document');

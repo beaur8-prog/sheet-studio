@@ -1,7 +1,7 @@
 # Android 전용 UI 구현·검증 기록
 
-- 날짜: 2026-11-07
-- 개발 버전: **0.7.40**
+- 날짜: 2026-11-08
+- 개발 버전: **0.7.41**
 - 기준 계획: [Android UI 전환 계획](ANDROID-UI-ADAPTATION-PLAN.md)
 - 범위: Android 웹 렌더러의 보기·편집 UI와 호스트 연결 지점. APK/AAB·서명·스토어 배포는 별도다.
 
@@ -15,13 +15,14 @@ Android에서만 `body.sheet-android`와 모드 클래스를 붙이고 [전용 C
 
 | 항목 | Android 동작 |
 |---|---|
-| 시작·열기 | 파일 요청 없는 새 실행은 빈 문서. 파일 선택/외부 요청은 보기 모드로 열기. 잘못된 파일·취소 시 열린 문서 유지 |
-| 보기 화면 | 문서명·모드·공유·더보기, 선택 주소/값, 하단 찾기·시트·보기 설정·편집. 불필요한 제목줄·리본·상태줄 숨김 |
+| 시작·열기 | 파일 요청 없는 새 실행은 빈 문서. 일반 문서는 입력 모드로 열되 시작만으로 키보드를 띄우지 않음. XLSM은 보기로 열고 명시적 읽기 전용 보기도 제공. 잘못된 파일·취소 시 열린 문서 유지 |
+| 보기 화면 | 문서명·모드·전체화면·더보기(공유 포함), 선택 주소/값, 하단 찾기·시트·보기 설정·편집. 불필요한 제목줄·리본·상태줄 숨김 |
 | 읽기 | 긴 값·수식·메모와 저장된 계산값/피벗 제한 상세, 주소/범위/정의된 이름 이동, 검색, 여러 시트 이동, 차트 크게 보기와 계열별 처음 100개 자료 표 |
 | 보기 불변 | 선택·시트 이동·임시 틀 고정·확대가 문서·dirty·실행 취소를 바꾸지 않음. 명령 가드와 문서 Proxy 가드로 수정 경로 차단. 검색 입력창의 입력은 허용 |
 | 터치 | 브라우저 팬을 사용하며 터치 스와이프를 데스크톱 범위 드래그로 처리하지 않음. 큰 확대 버튼·너비 맞춤, 선택 손잡이와 주소 대안. 핸들 취소·캡처 상실·회전 시 선택 복원 |
-| 편집 | 명시적 편집 전환, 셀 입력·확인/취소, 색·서식·테두리의 적용/취소와 범위 유지, 실행 취소/다시 실행. 입력 중 하단에 수식 입력창 배치 |
+| 편집 | 일반 문서는 셀 단일 탭으로 입력. 같은 입력창을 유지하며 Enter/다음 셀 이동, 123/문자 전환, 완료/취소. 색·서식·테두리의 적용/취소와 범위 유지, 실행 취소/다시 실행 |
 | 필터·입력 목록 | 큰 ‘이 열 필터’·‘입력 목록’ 명령. 필터 창의 값/색/조건과 확인·취소를 큰 화면 조작 대상으로 제공. 보기 모드의 임시 행 표시(G2b)는 아직 노출하지 않음 |
+| 수식·가로 화면 | 합계/평균/함수 버튼을 입력 전과 입력 중 모두 제공. 범위/결과 셀 미리 보기, 기존 셀 덮어쓰기·순환 참조 차단. 가로 입력줄 48 CSS px, 키보드 높이와 회전 분리 |
 | 태블릿 | 외부 키보드 바로 입력 대기 설정, 방향키 뒤 네이티브 입력 이벤트 수신 경로, 터치/키보드 탐색. 넓고 충분히 높은 창에서 리본을 명시적으로 펼치기 |
 | 모드 전환 | 편집→보기는 dirty·확정한 값·실행 취소 유지. 미확정 셀 입력은 확인/취소/계속 편집으로 해결. 조합 중에는 전환을 유보 |
 | 공유 | 미편집 열람은 보관한 원본 File/Blob을 공유. 편집한 세션은 검증된 내보내기 파일 공유를 기본으로 하며 ‘변경 전 원본’은 별도 선택 |
@@ -51,6 +52,7 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 
 | API | 계약 |
 |---|---|
+| `setFullscreen({enabled,hideStatusBar,hideNavigationBar,transientBarsBySwipe})` | 실행 시 상태줄 숨김 요청과 버튼의 표시/복원. 실제 적용 확인 후 `{enabled}` 응답. 렌더러는 네이티브 구현을 포함하지 않으며 미제공 시 버튼에서 웹 Fullscreen API 사용 |
 | `openFile()` | 취소는 null. 성공은 `{name, mime, data}`. `data`는 읽기 완료한 ArrayBuffer/Uint8Array/Blob이며 URI 문자열만 전달하지 않음 |
 | `saveCopy({name,mime,data})` | SAF의 새 문서로 저장. 취소 `{cancelled:true}`, 실제 제공자 완료 확인 시만 `{completed:true}`. 예외/불확실한 응답은 편집본 보존·실패 안내 |
 | `shareFile({name,mime,data})` | 임시 파일의 읽기 권한·수명을 보장해 공유. 취소/오류는 원본·편집본을 변경하지 않음 |
@@ -62,6 +64,22 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 
 `sheet-studio-android-insets`의 detail `{top,right,bottom,left}`는 **WebView가 아직 소비하지 않은** CSS px 값만 전달한다. `visualViewport`가 이미 반영한 IME 높이를 중복해서 빼지 않는다. `sheet-studio-android-input`의 `{hardwareKeyboard:boolean}`은 연결/해제 상태를 알려 준다. 실제 dp 대응·edge-to-edge·분할 창·IME 동작은 호스트와 함께 검증해야 한다.
 
+## 전체화면과 상태줄
+
+Android에만 manifest 링크와 `viewport-fit=cover`를 적용한다. `public/android.webmanifest`는 홈 화면 실행의 `fullscreen` 표시 방식을 요청한다. 일반 브라우저의 전체화면 버튼은 사용자 동작에서 `requestFullscreen({navigationUI:'hide'})`를 호출하고 다시 눌러 복귀한다. 네이티브 호스트는 `setFullscreen`이 있으면 실행 시 상태줄 숨김을 요청한다. UI가 안테나 줄을 CSS로 가린 것처럼 처리하거나 기기 높이를 임의로 더하지 않는다. [Fullscreen 표준](https://fullscreen.spec.whatwg.org/), [Web App Manifest 표시 모드](https://www.w3.org/TR/appmanifest/#display-member)
+
+APK 호스트의 실제 상태줄 숨김은 아래와 같은 네이티브 처리가 필요하다. 이 예시는 패키징 연결 지침이며 현재 저장소에서 빌드한 Android Activity가 아니다. 적용 후 호스트는 남은 안전 영역/IME inset을 다시 전달한다. [Android 공식 immersive mode](https://developer.android.com/develop/ui/views/layout/immersive)
+
+```kotlin
+val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+controller.systemBarsBehavior =
+    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+if (enabled) controller.hide(WindowInsetsCompat.Type.statusBars())
+else controller.show(WindowInsetsCompat.Type.statusBars())
+```
+
+시스템 탐색/IME를 강제로 숨기지 않는다. 실제 OS 표시 방식·Gboard/삼성 입력기·상태줄과 cutout은 기기 검증 대상이다. 설치 앱이 이미 fullscreen 표시 방식이고 웹 API로 종료할 수 없는 경우에는 불필요한 전체화면 전환 버튼을 숨긴다.
+
 ## 검증과 남은 단계
 
 자동 검사는 격리한 Chrome/Electron 프로필과 시험용 클립보드를 사용한다. 실제 사용자 문서·복구 DB·OS 클립보드는 사용하지 않는다.
@@ -70,7 +88,7 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 - `npm run test:android`: 프로덕션 빌드를 임시 로컬 서버에서 열고 Android 전화/태블릿의 User-Agent·viewport·터치를 모의한다. 원본 바이트 공유, 저장된 계산값 안내, 수정 차단, 검색, 시트 전환, 스와이프, 범위 취소, 한글 이벤트, 색 적용, undo/redo, 편집본 XLSX 재열기, 저장 실패/취소, 입력 초안 reload, 여러 문서 복구·용량 거부/삭제를 검사한다. 좁은 Windows/iPad 창에 전용 UI가 생기지 않는지도 확인한다.
 - `node scripts/electron-smoke.cjs`와 기존 UI 검사는 실제 Electron의 버전·메뉴·열기/저장·편집 경로를 확인한다.
 
-2026-11-07 실행 결과:
+0.7.40의 2026-11-07 실행 결과(기준 검사):
 
 | 검사 | 결과 |
 |---|---|
@@ -96,3 +114,5 @@ XLSM은 Android에서 보기·원본 공유로 제한한다. Android에 Windows 
 | G3 | 기본 편집·서식·사본/공유·복구 UI 구현. 실제 파일 제공자 완료·실패 검증 필요 |
 | G4 | 태블릿 리본·키보드 이벤트·입력 초안 보존 경로 구현. 실제 외부 키보드 첫 한글과 연결/분리 검증 필요 |
 | G5·후속 | 실제 Android 접근성·메모리·시스템 제스처·장시간 문서 검사, APK/AAB 패키징·서명·배포는 남음 |
+
+0.7.41의 연속 입력·집계·전체화면·가로 화면 재검증은 [이번 변경 기록](releases/v0.7.41.md)을 따른다.

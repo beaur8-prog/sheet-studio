@@ -1,4 +1,5 @@
 import {decodeWorkbookWire} from './workbook-wire.mjs';
+import {mobileAggregateSuggestion} from './android-aggregate.mjs';
 import {openingSheetId} from './opening-sheet.mjs';
 import {calculationDisplay} from './calculation-display.mjs';
 import {buildChartPreview} from './chart-preview.mjs';
@@ -156,6 +157,7 @@ async function handle(type, data) {
   }
   if(type==='table-plan'){const table=sheet.tables?.find(t=>t.id===data.tableId);if(data.operation!=='create'&&!table)throw Error('표를 찾을 수 없습니다.');if(data.operation==='convert')return tableConversionPlan(book,sheet,table);const plan=data.operation==='create'?createTablePlan(book,sheet,data.values):data.operation==='calculate'?calculatedColumnPlan(book,sheet,table,data.values):updateTablePlan(book,sheet,table,data.values);return finalizeTablePlan(book,sheet,plan,data.values);}
   if(type==='auto-sum')return autoSumPlan(sheet,data.selection,evaluator(sheet.id));
+  if(type==='mobile-aggregate')return mobileAggregateSuggestion(sheet,data.selection,evaluator(sheet.id));
   if (type === 'name-range') return formulaReference(book,sheet.id,data.name);
   if (type === 'validation-review') return reviewValidation(book,sheet,data.range,{evaluate:evaluator(sheet.id)});
   if (type === 'validation-options') return validationChoices(book,sheet,data.ref);

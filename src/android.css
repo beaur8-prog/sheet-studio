@@ -80,6 +80,38 @@ body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-
 .sheet-android .grid-shell { order:6 }
 .sheet-android .android-nav { order:8 }
 .sheet-android .backdrop [hidden] { display:none!important }
+/* Entry owns one stable input. Hide document chrome while typing so the
+   keyboard and grid share the remaining viewport instead of competing with
+   four toolbar rows. All controls retain a 48 CSS px touch target. */
+.sheet-android .android-header,.sheet-android .android-nav { min-height:48px;padding:0 4px }
+.sheet-android .android-tools { min-height:48px;padding:0 4px }
+.sheet-android .android-header-address { display:none }
+.sheet-android.android-cell-editing .android-header,
+.sheet-android.android-cell-editing .android-selection,
+.sheet-android.android-cell-editing .android-tools,
+.sheet-android.android-cell-editing .android-nav,
+.sheet-android.android-cell-editing .tabs,
+.sheet-android.android-cell-editing .ribbon { display:none!important }
+.sheet-android .formula-bar { min-height:48px;padding:0 4px;flex-wrap:wrap;gap:0 2px }
+.sheet-android .formula-bar .name-box { display:none }
+.sheet-android .formula-input { order:1;flex:1;min-width:64px;min-height:48px;height:48px }
+.sheet-android .formula-bar>[data-action=cancel-edit] { order:3 }
+.sheet-android .formula-bar>[data-action=commit-edit] { order:4 }
+.sheet-android .android-entry-address { order:0;min-width:40px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600 }
+.sheet-android .android-entry-tools { order:5;display:flex;flex-basis:100%;gap:2px;min-width:0;overflow:auto;border-top:1px solid var(--line) }
+.sheet-android .android-entry-tools>button { flex:1;padding:0 4px;white-space:nowrap }
+.sheet-android.android-landscape .android-nav,.sheet-android.android-landscape .android-selection { display:none!important }
+.sheet-android.android-landscape .android-header-address { display:inline-flex;align-items:center;justify-content:center }
+.sheet-android.android-landscape .android-title small { display:none }
+.sheet-android.android-landscape .android-entry-tools { display:contents }
+.sheet-android.android-landscape .android-entry-tools>button { order:2;flex:0 0 auto }
+.sheet-android .android-aggregate-preview { padding:12px;background:#edf5f0;color:#174c31;white-space:pre-wrap;overflow-wrap:anywhere }
+.sheet-android .android-aggregate-functions { display:flex;gap:4px;overflow:auto }
+.sheet-android .android-aggregate-functions button { flex-shrink:0;padding:4px 12px;border:1px solid #aaa }
+.sheet-android .android-aggregate-error { color:#ac3131;min-height:20px }
+.sheet-android .function-browser { grid-template-columns:minmax(0,1fr) }
+.sheet-android .function-filters { grid-template-columns:minmax(0,1fr) }
+.sheet-android .function-library { padding:16px }
 @media (max-width:599px) {
  .sheet-android .find-fields,.sheet-android .find-options,.sheet-android .format-columns,.sheet-android .chart-form,.sheet-android .validation-columns,.sheet-android .pivot-source { grid-template-columns:minmax(0,1fr) }
  .sheet-android .find-checks { display:flex;flex-direction:column }

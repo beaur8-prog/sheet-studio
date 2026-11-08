@@ -1,3 +1,4 @@
+import {mobileAggregateNames,mobileAggregateEntry} from './android-aggregate.mjs';
 import {isAndroidRuntime,createAndroidSession,androidCommandAllowed} from './android-mode.mjs';
 import {installAndroidUI} from './android-ui.mjs';
 import {openAndroidSources,androidHost,androidFile} from './android-files.mjs';
@@ -74,7 +75,7 @@ const android=isAndroidRuntime({desktop:window.desktop,capacitor:window.Capacito
 const androidSession=android?createAndroidSession():null;
 const sessionEditedKey=android?'sheet-studio.android-session-edited':'sheet-studio.session-edited';
 const locationStorage=android?{getItem:key=>localStorage.getItem('android.'+key),setItem:(key,value)=>localStorage.setItem('android.'+key,value)}:localStorage;
-let androidUI=null,androidHardware=false,androidSource=null,androidSources=null,androidFileApproved=false;
+let androidUI=null,androidHardware=false,androidSource=null,androidSources=null,androidFileApproved=false,androidInputMode='text',androidEnterHandled=false;
 if(android)document.body.classList.add('sheet-android','android-view');
 const historyOptions=description=>({description,...(android?{canMutate:()=>androidSession.mode==='edit'}:{})});
 function canEditAndroid(){if(!android||androidSession.mode==='edit')return true;toast('보기 모드입니다. 편집 버튼을 눌러 수정하세요.');return false;}
@@ -97,7 +98,7 @@ $('#app').innerHTML='<p role="status" style="padding:32px">통합 문서를 준�
 const recovered=await tasks.load((android?'':localStorage.getItem('sheet-studio.book'))||'',{fresh:!continuingSession,documentId:locationStorage.getItem('sheet-studio.document-location'),...(android?{android:true}:{})});
 if(recovered.migrated)localStorage.removeItem('sheet-studio.book');
 let history=createHistory(recovered.book,historyOptions(recovered.description));
-if(android){androidSession.open(recovered.book.activeSheetId,{editing:continuingSession,restored:continuingSession});androidSources=await openAndroidSources().catch(()=>null);}
+if(android){androidSession.open(recovered.book.activeSheetId,{editing:continuingSession||!recovered.book.nativeSource,restored:continuingSession});androidSources=await openAndroidSources().catch(()=>null);}
 const documentLocation=createDocumentLocation(()=>history.raw,locationStorage,{restore:continuingSession});
 let book=history.book,externalArrayIndexes=new Map();
 function formatValue(value,style,extra={}){return formatWorkbookValue(value,style,{...book,...extra});}
@@ -288,17 +289,18 @@ function renderFormulaReferences(){
 // Keep the same native text input focused while navigating. Starting an IME
 // must not move focus or inject KeyboardEvent.key before composition begins.
 function beginNativeEntry(){if(editing)return true;if(!beginEditing())return false;editSession.inline=true;editInput=$('#editor');pointMode=true;positionEditor();updateStats();return true;}
-function syncFormulaInput(input){if(input===$('#editor')&&!editing&&!beginNativeEntry()){input.value='';return;}editInput=input;const other=input===$('#editor')?$('#formula'):$('#editor');other.value=input.value;keyboardReference=null;renderFormulaReferences();updateStats();functionAssistant.update(input);if(android)androidPersistDraft();}
-function startEdit(text,selectText=false){if(!beginEditing())return;editSession.inline=true;const el=$('#editor');el.value=text??rawAt(selection.r,selection.c);$('#formula').value=el.value;editInput=el;pointMode=text!==undefined;positionEditor();el.focus();if(selectText)el.select();else el.setSelectionRange(el.value.length,el.value.length);renderFormulaReferences();updateStats();functionAssistant.update(el);}
+function syncFormulaInput(input){if(input===$('#editor')&&!editing&&!beginNativeEntry()){input.value='';return;}editInput=input;const other=input===$('#editor')?$('#formula'):$('#editor');other.value=input.value;keyboardReference=null;renderFormulaReferences();updateStats();functionAssistant.update(input);if(android){androidEnterHandled=false;androidPersistDraft();}}
+function startEdit(text,selectText=false){if(android&&!androidHardware)return androidStartTouchEntry(text,{selectText});if(!beginEditing())return;editSession.inline=true;const el=$('#editor');el.value=text??rawAt(selection.r,selection.c);$('#formula').value=el.value;editInput=el;pointMode=text!==undefined;positionEditor();el.focus();if(selectText)el.select();else el.setSelectionRange(el.value.length,el.value.length);renderFormulaReferences();updateStats();functionAssistant.update(el);}
 function restoreEditView(){
  if(!editSession)return;const cross=sheet().id!==editSession.sheetId;if(android)androidSession.activate(editSession.sheetId);else book.activeSheetId=editSession.sheetId;selection={...editSession.selection};entryRange=editSession.entryRange;
  if(cross||editSession.viewChanged){filteredRows=editSession.filteredRows;filterEnabled=editSession.filterEnabled;makeLayout();$('#grid').scrollLeft=editSession.scrollLeft;verticalScroll.setTop(editSession.scrollTop);renderSheets();renderPivotBar();}
 }
-function finishEditing(){if(android){localStorage.removeItem('sheet-studio.android-draft.'+documentLocation.id());if(!dirty)sessionStorage.removeItem(sessionEditedKey);}functionAssistant.hide();editing=false;editSession=null;referenceDrag=null;keyboardReference=null;$('#editor').hidden=true;$('#editor').value='';renderFormulaReferences();focusGrid();render();}
+function finishEditing({keepInputFocus=false}={}){if(android){localStorage.removeItem('sheet-studio.android-draft.'+documentLocation.id());if(!dirty)sessionStorage.removeItem(sessionEditedKey);}functionAssistant.hide();editing=false;editSession=null;referenceDrag=null;keyboardReference=null;$('#editor').hidden=true;$('#editor').value='';renderFormulaReferences();if(!keepInputFocus)focusGrid();render();}
 function calendarKindAt(r,c){return validationRules(sheet()).find(rule=>['date','time'].includes(rule.type)&&rule.ranges.some(b=>r>=b.r1&&r<=b.r2&&c>=b.c1&&c<=b.c2))?.type;}
 function calendarInput(value,r,c){return calendarEntry(value,effectiveCellStyle(r,c),{date1904:!!book.date1904,kind:calendarKindAt(r,c)});}
-function commitEdit(move,fillSelection=false,allowInvalid=false){
- if(!editing)return true;if(arrayConstraintsPending){afterArrayConstraints(()=>commitEdit(move,fillSelection,allowInvalid));return false;}
+function commitEdit(move,fillSelection=false,allowInvalid=false,options={}){
+ if(!editing)return true;if(android&&editSession.composing)return false;if(arrayConstraintsPending){afterArrayConstraints(()=>commitEdit(move,fillSelection,allowInvalid,options));return false;}
+ const continueInput=android&&options.continueEntry&&!androidHardware&&editInput===$('#formula'),keepInputFocus=android&&(continueInput||options.keepInputFocus)&&editInput===$('#formula'),previousCell={r:editSession.r,c:editSession.c};
  // Calculation may have made this cell a spill follower after entry began.
  // Reject that obsolete edit just as the pending-calculation path does, so it
  // cannot leave the editor blocking the next open/save/navigation command.
@@ -307,13 +309,14 @@ function commitEdit(move,fillSelection=false,allowInvalid=false){
  if(fillSelection){const b=bounds();if((b.r2-b.r1+1)*(b.c2-b.c1+1)>100000){toast('한 번에 최대 100,000개 셀을 편집할 수 있습니다.');return;}edits.length=0;for(let r=b.r1;r<=b.r2;r++)for(let c=b.c1;c<=b.c2;c++)if(editableCell(r,c)){const value=rawFor(r,c);edits.push({r,c,raw:value.startsWith('=')?shiftFormula(value,r-editSession.r,c-editSession.c):value});}}
  const updates=edits.filter(e=>e.raw!==rawAt(e.r,e.c));
  if(updates.length){const headerPlan=prepareHeaders(updates.map(e=>{const key=address(e.r,e.c),cell={...sheet().cells[key],raw:e.raw},inferred=protectionAllows(sheet(),'formatCells')?(calendarInput(input,e.r,e.c)?.style||entryNumberStyle(e.raw,effectiveCellStyle(e.r,e.c))):null;if(inferred)cell.style={...cell.style,...inferred};return {key,cell};}),{auto:true});if(!headerPlan)return false;const candidates=headerPlan.updates;if(!permitUpdates(candidates,{editAnchor:true}))return false;
-  const invalid=!allowInvalid&&validateCellUpdates(book,sheet(),candidates);if(invalid){if(['warning','information'].includes(invalid.severity))modal(esc(invalid.title),`<p>${esc(invalid.ref)}: ${esc(invalid.message)}</p>`,[{label:'계속 입력',primary:true,action:el=>{el.remove();commitEdit(move,fillSelection,true);}}]);else{toast(`${invalid.ref}: ${invalid.message}`);editInput?.focus();}return false;}
+  const invalid=!allowInvalid&&validateCellUpdates(book,sheet(),candidates);if(invalid){if(['warning','information'].includes(invalid.severity))modal(esc(invalid.title),`<p>${esc(invalid.ref)}: ${esc(invalid.message)}</p>`,[{label:'계속 입력',primary:true,action:el=>{el.remove();commitEdit(move,fillSelection,true,options);}}]);else{toast(`${invalid.ref}: ${invalid.message}`);editInput?.focus();}return false;}
   checkpoint();applyTableHeaderEdits(book,sheet(),headerPlan);for(const {key,cell} of candidates)sheet().cells[key]=cell;}
- finishEditing();if(updates.length)changed();if(move?.startsWith('step:')){const [,axis,direction]=move.split(':');advanceSelection(axis,+direction);return true;}if(move){
+ finishEditing({keepInputFocus});if(updates.length)changed();if(move?.startsWith('step:')){const [,axis,direction]=move.split(':');advanceSelection(axis,+direction);}else if(move){
   const merged=mergeRanges().find(m=>selection.r>=m.r1&&selection.r<=m.r2&&selection.c>=m.c1&&selection.c<=m.c2),origin=merged||{r1:selection.r,r2:selection.r,c1:selection.c,c2:selection.c};
   const dr=move==='down'?1:move==='up'?-1:0,dc=move==='right'?1:move==='left'?-1:0;
   select(dr?visibleRow((dr>0?origin.r2:origin.r1)+dr,dr):selection.r,dc?visibleCol((dc>0?origin.c2:origin.c1)+dc,dc):selection.c,false,true);
  }
+ if(continueInput){if(selection.r!==previousCell.r||selection.c!==previousCell.c){if(!androidStartTouchEntry(undefined,{selectText:true,keepInputMode:true})){androidUI?.refresh();focusGrid();}}else{androidUI?.refresh();focusGrid();}}
  return true;
 }
 function cancelEdit(){if(editing)restoreEditView();finishEditing();}
@@ -340,7 +343,7 @@ function formulaKeydown(e){
  if(e.isComposing||e.keyCode===229||!editing||editSession.composing)return;
  if(functionAssistant.keydown(e))return;
  if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();commitEdit(null,true);return;}
- if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();commitEdit('step:'+(e.key==='Enter'?'r':'c')+':'+(e.shiftKey?-1:1));return;}
+ if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();if(android)androidEnterHandled=true;commitEdit('step:'+(e.key==='Enter'?'r':'c')+':'+(e.shiftKey?-1:1),false,false,{continueEntry:android});return;}
  if(e.key==='Escape'){e.preventDefault();cancelEdit();return;}
  if(e.key==='F2'){e.preventDefault();pointMode=!pointMode;updateStats();return;}
  if(e.key==='F4'||e.metaKey&&e.key.toLowerCase()==='t'){
@@ -650,7 +653,7 @@ async function editChart(id){
 function newBook(){if(android)return androidNew();modal('새 통합 문서','<p>현재 문서는 파일로 저장할 수 있습니다. 새 문서를 만들면 작업 화면이 바뀝니다.</p>',[{label:'새로 만들기',primary:true,action:el=>{checkpoint();book=history.replace(createWorkbook());bindEvaluator();switchSheet(book.sheets[0].id);el.remove();}}]);}
 function demo(){checkpoint();book=history.replace(createWorkbook());bindEvaluator();book.name='월별 운영 현황';const s=book.sheets[0];s.name='매출 현황';s.columnWidths={0:145,1:120,2:120,3:120,4:110,5:160};const rows=[['2026 월별 운영 현황'],['월별 매출과 비용을 입력하면 이익과 이익률이 계산됩니다.'],[],['월','매출','비용','영업 이익','이익률','메모'],['1월',12800000,8200000,'=B5-C5','=D5/B5','신규 프로젝트'],['2월',15400000,9600000,'=B6-C6','=D6/B6',''],['3월',17200000,10300000,'=B7-C7','=D7/B7','분기 마감'],['4월',16900000,10100000,'=B8-C8','=D8/B8',''],['5월',19800000,11400000,'=B9-C9','=D9/B9','신제품 출시'],['6월',21400000,12600000,'=B10-C10','=D10/B10','상반기 마감'],[],['합계','=SUM(B5:B10)','=SUM(C5:C10)','=SUM(D5:D10)','=D12/B12',''],[],['평균 매출','=AVERAGE(B5:B10)'],['최고 매출','=MAX(B5:B10)'],[],['셀을 더블 클릭하거나 F2를 눌러 편집하세요.']];rows.forEach((row,r)=>row.forEach((raw,c)=>{s.cells[address(r,c)]={raw:String(raw),style:{}};}));s.merges=['A1:F1','A2:F2','A17:F17'];s.rowHeights={0:43,1:32,3:31,11:32};s.cells.A1.style={fontSize:20,bold:true,color:'#176f43'};s.cells.A2.style={color:'#707870',fontSize:10};s.cells.A17.style={color:'#808880',fontSize:10};for(let c=0;c<6;c++){s.cells[address(3,c)].style={background:'#107c41',color:'#fff',bold:true};s.cells[address(11,c)].style={background:'#e2efda',bold:true,format:c===4?'percent':c>0&&c<4?'number':'general'};}for(let r=4;r<=9;r++)for(let c=0;c<6;c++)s.cells[address(r,c)].style={background:r%2?'#f1f7f3':'#fff',format:c===4?'percent':c>0&&c<4?'number':'general',color:c===3?'#107c41':'#222',bold:c===3};s.cells.B14.style={format:'number'};s.cells.B15.style={format:'number'};switchSheet(s.id);select(11,3);toast('예제 문서를 열었습니다. 원래 문서는 실행 취소로 복원할 수 있습니다.');}
 function doUndo(reverse=false){if(commitEdit()===false)return;if(!history.undo(reverse))return;book=history.book;bindEvaluator();filteredRows=null;filterEnabled=false;changed({rebuild:true});syncToolbar();}
-function action(name,event){if(android){if(['save','save-xlsx','save-json','save-csv'].includes(name))return androidSave(name==='save-json'?'json':name==='save-csv'?'csv':'xlsx');if(!androidCommandAllowed(name,androidSession.mode)){toast('이 기능은 편집 모드 또는 데스크톱 앱에서 사용할 수 있습니다.');return;}if(name==='new')return androidNew();if(name==='recover')return androidRecover();if(name==='open')return androidOpen();}if(busy||openingFile)return;if(book.xlsxPivotArchive&&['rename-sheet','duplicate-sheet','delete-sheet'].includes(name))return toast('원본 피벗의 시트 연결을 보존하기 위해 시트 구성은 Excel에서 변경하세요.');if(arrayConstraintsPending&&!['cancel-edit'].includes(name))return afterArrayConstraints(()=>action(name,event));if(sheet().kind==='chart'&&((book.nativeSource&&['rename-sheet','duplicate-sheet','delete-sheet'].includes(name))||['note','pivot','format-painter','freeze-menu','freeze-selection','freeze-first-row','freeze-first-col','freeze-none'].includes(name)))return toast('차트 전용 시트에서는 이 작업을 사용할 수 없습니다.');closeFilterMenu();closeMenu();if(name==='autosum'&&editing)cancelEdit();else if(!['cancel-edit','commit-edit','function'].includes(name)&&commitEdit()===false)return;if(['conditional','clear-format','merge'].includes(name)&&!permitOperation('formatCells'))return;if(name==='note'&&!permitOperation('objects'))return;if(['hide-row','unhide-row','autofit-row'].includes(name)&&!permitOperation('formatRows'))return;if(['hide-col','unhide-col','autofit-col'].includes(name)&&!permitOperation('formatColumns'))return;if(name==='validation-list'){if(android&&$('#validation-list-button').hidden)return toast('이 셀에는 입력 목록이 없습니다.');return openValidationList();}if(name.startsWith('validation-value:'))return chooseValidation(+name.split(':')[1]);switch(name){
+function action(name,event){if(android){if(name==='autosum')return androidAggregate('SUM');if(name==='func-average')return androidAggregate('AVERAGE');if(['save','save-xlsx','save-json','save-csv'].includes(name))return androidSave(name==='save-json'?'json':name==='save-csv'?'csv':'xlsx');if(!androidCommandAllowed(name,androidSession.mode)){toast('이 기능은 편집 모드 또는 데스크톱 앱에서 사용할 수 있습니다.');return;}if(name==='new')return androidNew();if(name==='recover')return androidRecover();if(name==='open')return androidOpen();}if(busy||openingFile)return;if(book.xlsxPivotArchive&&['rename-sheet','duplicate-sheet','delete-sheet'].includes(name))return toast('원본 피벗의 시트 연결을 보존하기 위해 시트 구성은 Excel에서 변경하세요.');if(arrayConstraintsPending&&!['cancel-edit'].includes(name))return afterArrayConstraints(()=>action(name,event));if(sheet().kind==='chart'&&((book.nativeSource&&['rename-sheet','duplicate-sheet','delete-sheet'].includes(name))||['note','pivot','format-painter','freeze-menu','freeze-selection','freeze-first-row','freeze-first-col','freeze-none'].includes(name)))return toast('차트 전용 시트에서는 이 작업을 사용할 수 없습니다.');closeFilterMenu();closeMenu();if(name==='autosum'&&editing)cancelEdit();else if(!['cancel-edit','commit-edit','function'].includes(name)&&commitEdit()===false)return;if(['conditional','clear-format','merge'].includes(name)&&!permitOperation('formatCells'))return;if(name==='note'&&!permitOperation('objects'))return;if(['hide-row','unhide-row','autofit-row'].includes(name)&&!permitOperation('formatRows'))return;if(['hide-col','unhide-col','autofit-col'].includes(name)&&!permitOperation('formatColumns'))return;if(name==='validation-list'){if(android&&$('#validation-list-button').hidden)return toast('이 셀에는 입력 목록이 없습니다.');return openValidationList();}if(name.startsWith('validation-value:'))return chooseValidation(+name.split(':')[1]);switch(name){
  case 'updates-check':case 'updates-manual':case 'updates-status':return updateUI.open(name.slice(8));
  case 'pivot':return pivotUI.open();case 'pivot-refresh':return pivotUI.refresh();case 'pivot-refresh-all':return pivotUI.refresh(true);case 'pivot-source':return pivotUI.source();case 'pivot-convert':return pivotUI.convert();
  case 'vba':return vbaUI.open();case 'save-xlsm':return vbaUI.save();case 'save-xlsx':return book.nativeSource?confirmMacroExport('xlsx'):save();case 'save':return save();case 'save-csv':return save('csv');case 'save-json':return save('json');case 'recover':return recoverBook();case 'open':return openFile();case 'new':return newBook();case 'undo':return doUndo();case 'redo':return doUndo(true);case 'copy':return copy();case 'cut':return copy(true);case 'paste':return paste();case 'paste-special':return pasteSpecial();case 'fill-right':return fillDown(true);case 'freeze-menu':return showMenu(event?.clientX||700,event?.clientY||150,[[sheet().freeze?.rows||sheet().freeze?.cols?'freeze-none':'freeze-selection',sheet().freeze?.rows||sheet().freeze?.cols?'틀 고정 취소':'틀 고정','freeze'],['freeze-first-row','첫 행 고정','freeze'],['freeze-first-col','첫 열 고정','freeze']]);case 'freeze-selection':case 'freeze-first-row':case 'freeze-first-col':case 'freeze-none':return setFreeze(name.slice(7));case 'cell-format':return openCellFormat();case 'cell-format-menu':return showMenu(event?.clientX||700,event?.clientY||150,[['cell-format','셀 서식…','grid'], '-',['autofit-col','열 너비 자동 맞춤','grid'],['autofit-row','행 높이 자동 맞춤','grid'],['hide-row','행 숨기기','grid'],['unhide-row','행 숨기기 취소','grid'],['hide-col','열 숨기기','grid'],['unhide-col','열 숨기기 취소','grid']]);case 'hide-row':case 'hide-col':case 'unhide-row':case 'unhide-col':case 'autofit-row':case 'autofit-col':return sizeCells(name.endsWith('row')?'r':'c',name.startsWith('unhide')?'show':name.startsWith('hide')?'hide':'fit');case 'text-color':return openColorPalette('color');case 'fill-color':return openColorPalette('background');case 'bold':case 'italic':case 'underline':return toggleStyle(name);case 'wrap':return toggleStyle('wrap');case 'borders':return openCellFormat('border');case 'merge':return merge();case 'align-left':case 'align-center':case 'align-right':return applyStyle({align:name.split('-')[1]});case 'currency':case 'percent':case 'number':return applyStyle({format:name});case 'decimals':return applyStyle({format:'number',numberFormat:'0.00',decimals:2});
@@ -705,6 +708,8 @@ document.addEventListener('pointermove',e=>{if(referenceDrag){const g=$('#grid')
 document.addEventListener('pointerup',()=>{if(referenceDrag){referenceDrag=null;editInput.focus();return;}if(dragging){dragging=false;if(fillStart)finishFill();if(globalThis.pendingStyle){const format=globalThis.pendingStyle;globalThis.pendingStyle=null;applyPaintFormat(format);}}});
 $('#grid').addEventListener('scroll',render);new ResizeObserver(render).observe($('#grid-shell'));
 for(const input of [$('#editor'),$('#formula')]){input.addEventListener('input',()=>syncFormulaInput(input));input.addEventListener('keydown',formulaKeydown);input.addEventListener('focus',()=>{editInput=input;});input.addEventListener('click',()=>{if(editing)functionAssistant.update(input);});input.addEventListener('keyup',e=>{if(editing&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key))functionAssistant.update(input);});input.addEventListener('compositionstart',()=>{if(input===$('#editor')&&!editing)beginNativeEntry();if(editSession)editSession.composing=true;functionAssistant.composition(true);});input.addEventListener('compositionend',()=>{if(editSession)editSession.composing=false;functionAssistant.composition(false);});}
+$('#formula').addEventListener('keyup',e=>{if(android&&['Enter','Tab'].includes(e.key))androidEnterHandled=false;});
+$('#formula').addEventListener('beforeinput',e=>{if(android&&['insertLineBreak','insertParagraph'].includes(e.inputType)){e.preventDefault();if(!e.isComposing&&!editSession?.composing){if(androidEnterHandled)androidEnterHandled=false;else androidNextCell();}}});
 $('#formula').addEventListener('focus',()=>{if(android&&androidSession.mode==='view')return;if($('#formula').readOnly)return;if(!editing){if(!beginEditing())return;$('#editor').value=$('#formula').value;pointMode=false;}renderFormulaReferences();updateStats();});
 $('#name-box').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(commitEdit()===false)return;const text=e.target.value.trim(),parts=text.toUpperCase().replace(/\$/g,'').split(':'),[a,b]=parts.map(parseAddress);if(!a||parts.length>2||parts.length>1&&!b){if(parts.length>2||parts.length===2&&parts.every(p=>/^[A-Z]+[1-9]\d*$/.test(p))&&(!a||!b))return toast('올바른 주소나 범위를 입력하세요.');if(text)return navigateName(text);return toast('주소, 범위 또는 정의된 이름을 입력하세요.');}select(a.r,a.c,false,true);if(b){selection.r2=b.r;selection.c2=b.c;render();}focusGrid();}});
 $('#book-title').addEventListener('change',e=>{if(!canEditAndroid()){e.target.value=book.name;return;}const name=e.target.value.trim()||'통합 문서';if(commitEdit()===false)return;checkpoint();book.name=name;changed();});$('#zoom').addEventListener('input',e=>setZoom(+e.target.value));
@@ -740,11 +745,60 @@ const findUI=createFindUI({getWorkbook:()=>book,getSheet:sheet,getRange:bounds,g
 const vbaUI=createVbaUI({getWorkbook:()=>book,getDocumentId:documentLocation.id,commitEdit,toast,replaceWorkbook:loaded=>{const id=documentLocation.id();checkpoint();book=history.replace(loaded);documentLocation.carry(id);bindEvaluator();switchSheet(openingSheetId(book));}});
 // Android adapter: keep native capabilities optional and never treat a browser
 // download request as proof that a file has been saved by the operating system.
+function androidStartTouchEntry(text,{selectText=false,keepInputMode=false}={}){
+ if(editSession?.composing||!canEditAndroid())return false;
+ ensureVisible(selection.r,selection.c);if(!beginEditing())return false;
+ editSession.inline=false;androidHardware=false;
+ const input=$('#formula'),value=text??rawAt(editSession.r,editSession.c);
+ if(value.startsWith('='))androidInputMode='text';
+ else if(!keepInputMode&&value!=='')androidInputMode=typeof valueAt(editSession.r,editSession.c)==='number'?'decimal':'text';
+ $('#editor').value=value;input.value=value;input.readOnly=false;input.inputMode=androidInputMode;editInput=input;pointMode=text!==undefined;
+ // Reveal first, then focus synchronously in the tap's user gesture. The input
+ // element is never replaced or blurred while continuing to the next cell.
+ androidUI?.refresh();positionEditor();input.focus({preventScroll:true});
+ if(selectText)input.select();else input.setSelectionRange(value.length,value.length);
+ renderFormulaReferences();updateStats();functionAssistant.update(input);render();return true;
+}
+function androidNextCell(){
+ if(!editing||editSession.composing)return false;
+ return commitEdit('step:r:1',false,false,{continueEntry:true});
+}
+function androidToggleKeyboard(){
+ androidHardware=false;androidInputMode=androidInputMode==='decimal'?'text':'decimal';
+ $('#formula').inputMode=androidInputMode;if(editing)$('#formula').focus({preventScroll:true});androidUI?.refresh();
+}
+async function androidAggregate(name='SUM'){
+ if(!canEditAndroid()||busy)return;
+ if(sheet().kind==='chart'||sheet().pivot)return toast('일반 워크시트에서 계산할 셀을 선택하세요.');
+ if(editSession?.composing)return toast('한글 조합을 마친 뒤 수식을 선택하세요.');
+ if(editing&&$('#editor').value!==rawAt(editSession.r,editSession.c)&&!await androidResolveDraft())return;
+ const sheetId=sheet().id,ticket=androidSession.ticket(documentLocation.id(),tasks.revision),selected={...selection};
+ const suggestion=await runBusy('계산 범위를 찾는 중…',()=>tasks.run('mobile-aggregate',{sheetId,selection:selected}));
+ if(!suggestion||!androidSession.current(ticket,documentLocation.id(),tasks.revision))return;
+ let chosen=name;
+ const el=modal('합계·평균 수식',`<div class="android-aggregate-functions" aria-label="자주 쓰는 함수">${Object.entries(mobileAggregateNames).map(([key,label])=>'<button type="button" data-aggregate="'+key+'" aria-pressed="'+(key===chosen)+'">'+esc(label)+'</button>').join('')}</div><label>계산할 범위<input id="android-aggregate-range" value="${esc(suggestion.range)}" autocapitalize="characters" spellcheck="false"></label><label>결과를 넣을 빈 셀<input id="android-aggregate-target" value="${esc(suggestion.target)}" autocapitalize="characters" spellcheck="false"></label><p class="android-help">선택한 범위 전체를 계산합니다. 빈 셀에서는 위쪽 또는 왼쪽 숫자 범위를 제안합니다. 수식을 넣은 뒤 Enter로 확인할 수 있습니다.</p><div id="android-aggregate-preview" class="android-aggregate-preview"></div><p id="android-aggregate-error" class="android-aggregate-error" role="alert"></p>`,[{label:'수식 넣기',primary:true,action:dialog=>{
+  try{
+   if(!androidSession.current(ticket,documentLocation.id(),tasks.revision)||androidSession.mode!=='edit')throw Error('문서가 변경되었습니다. 수식 메뉴를 다시 여세요.');
+   const plan=mobileAggregateEntry(chosen,dialog.querySelector('#android-aggregate-range').value,dialog.querySelector('#android-aggregate-target').value),owner=sheet();
+   if(owner.cells[plan.ref]?.raw||computedArrayAt(owner.id,plan.ref))throw Error('결과 셀에 내용이 있습니다. 기존 값을 보존하려면 빈 셀을 지정하세요.');
+   const error=cellEditError(book,owner,plan.ref);if(error)throw Error(error);
+   if(preservedPivotTouches(book,owner.id,plan.ref))throw Error('피벗 결과 밖의 빈 셀을 선택하세요.');
+   if(editing){restoreEditView();finishEditing({keepInputFocus:true});}
+   select(plan.point.r,plan.point.c,false,true);dialog.remove();androidHardware=false;
+   if(androidStartTouchEntry(plan.raw)){const input=$('#formula'),start=plan.raw.indexOf('(')+1;input.setSelectionRange(start,plan.raw.length-1);pointMode=true;functionAssistant.update(input);}
+  }catch(error){dialog.querySelector('#android-aggregate-error').textContent=error.message;}
+ }}]);
+ el.querySelector('[data-close]').textContent='취소';
+ const update=()=>{try{const plan=mobileAggregateEntry(chosen,el.querySelector('#android-aggregate-range').value,el.querySelector('#android-aggregate-target').value);el.querySelector('#android-aggregate-preview').textContent=plan.ref+' ← '+plan.raw;el.querySelector('#android-aggregate-error').textContent='';}catch(error){el.querySelector('#android-aggregate-preview').textContent='';el.querySelector('#android-aggregate-error').textContent=error.message;}};
+ el.addEventListener('click',event=>{const button=event.target.closest('[data-aggregate]');if(button){chosen=button.dataset.aggregate;el.querySelectorAll('[data-aggregate]').forEach(node=>node.setAttribute('aria-pressed',String(node===button)));update();}});
+ el.querySelectorAll('input').forEach(input=>input.addEventListener('input',update));update();
+}
+
 function androidPersistDraft(){
  if(!editing||androidSession.mode!=='edit')return;
  const id=documentLocation.id();
  try{
-  localStorage.setItem('sheet-studio.android-draft.'+id,JSON.stringify({sheetId:editSession.sheetId,r:editSession.r,c:editSession.c,value:$('#editor').value,pointMode,updatedAt:Date.now()}));
+  localStorage.setItem('sheet-studio.android-draft.'+id,JSON.stringify({sheetId:editSession.sheetId,r:editSession.r,c:editSession.c,value:$('#editor').value,pointMode,inputMode:androidInputMode,updatedAt:Date.now()}));
   sessionStorage.setItem(sessionEditedKey,'1');
   if(!editSession.recoveryReady){editSession.recoveryReady=true;const metadata=new Map();metadata.metadataChanged=true;tasks.sync(history.raw,metadata,undefined,id);}
  }catch{toast('입력 초안을 기기에 보관하지 못했습니다. 입력을 확인하고 사본으로 저장하세요.');}
@@ -752,7 +806,7 @@ function androidPersistDraft(){
 function androidRestoreDraft(){
  let draft;try{draft=JSON.parse(localStorage.getItem('sheet-studio.android-draft.'+documentLocation.id())||'null');}catch{}
  if(!draft||typeof draft.value!=='string'||draft.value.length>32767||!book.sheets.some(s=>s.id===draft.sheetId))return;
- setTimeout(()=>{if(busy||editing||androidSession.mode!=='edit')return;switchSheet(draft.sheetId);select(draft.r,draft.c,false,true);startEdit(draft.value);pointMode=!!draft.pointMode;toast('마지막으로 보관한 셀 입력 초안을 복원했습니다. 확인하거나 취소할 수 있습니다.');},0);
+ setTimeout(()=>{if(busy||editing||androidSession.mode!=='edit')return;switchSheet(draft.sheetId);select(draft.r,draft.c,false,true);if(['text','decimal'].includes(draft.inputMode))androidInputMode=draft.inputMode;startEdit(draft.value);pointMode=!!draft.pointMode;toast('마지막으로 보관한 셀 입력 초안을 복원했습니다. 확인하거나 취소할 수 있습니다.');},0);
 }
 function mobileNotice(){
  const result=tasks.result(sheet().id,address(selection.r,selection.c)),notices=[];
@@ -799,7 +853,7 @@ async function androidOpen(){
  try{const file=await androidFile(await host.openFile());if(file)await androidImport(new Uint8Array(await file.arrayBuffer()),file.name,file,{protected:true});}
  catch(error){toast('파일을 열 수 없습니다: '+error.message);}finally{openingFile=false;}
 }
-async function androidImport(data,name,source,{protected:protectedAlready=false,documentId:restoredId}={}){
+async function androidImport(data,name,source,{protected:protectedAlready=false,documentId:restoredId,viewOnly=false}={}){
  if(!protectedAlready&&!await androidProtect())return false;
  return runBusy('파일을 보기 모드로 여는 중…',async({signal,stage,lock})=>{
   let token;
@@ -810,11 +864,11 @@ async function androidImport(data,name,source,{protected:protectedAlready=false,
    const nextHistory=createHistory(result.book,historyOptions(result.description));
    await tasks.sync(nextHistory.raw,new Map(),token,crypto.randomUUID(),{persist:false});
    $('.backdrop')?.remove();closeMenu();closeFilterMenu();androidUI?.cancelGesture();
-   history=nextHistory;book=history.book;androidSession.open(openingSheetId(book));androidSource=file;
+   history=nextHistory;book=history.book;androidSession.open(openingSheetId(book),{editing:!viewOnly&&!book.nativeSource});androidSource=file;
    dirty=false;pendingImportToken=undefined;sessionStorage.removeItem(sessionEditedKey);androidHardware=false;selection={r:0,c:0,r2:0,c2:0};zoom=100;
    bindEvaluator();makeLayout();verticalScroll.setTop(0);$('#grid').scrollLeft=0;renderSheets();renderPivotBar();renderRibbon();updateTitle();render();focusGrid();
    if(restoredId)documentLocation.carry(restoredId);const id=documentLocation.id();if(androidSources)await androidSources.put(id,file).catch(()=>toast('원본의 재실행 후 공유용 보관에 실패했습니다. 현재 열람과 원본 파일은 유지됩니다.'));
-   toast('보기 모드로 열었습니다.');return true;
+   toast(androidSession.mode==='edit'?'셀을 탭하면 입력할 수 있습니다.':'보기 모드로 열었습니다.');return true;
   }catch(error){if(token)void tasks.discardImport(token);throw error;}
  },{cancelable:true});
 }
@@ -905,15 +959,22 @@ function initializeAndroid(){
  $('#file-input').accept+=',.tsv';
  if(continuingSession){dirty=true;androidSession.markEdited();androidSources?.get(documentLocation.id()).then(file=>{androidSource=file||null;});}
  androidUI=installAndroidUI({
-  state:()=>({mode:androidSession.mode,name:book.name,version:appVersion,dirty,cellEditing:editing,canUndo:history.canUndo,canRedo:history.canRedo,rangeLabel:rangeLabel(),display:mobileDisplay(),sheetId:sheet().id,chartSheet:sheet().kind==='chart',zoom,hardware:androidHardware,busy:busy||openingFile}),
+  state:()=>({mode:androidSession.mode,name:book.name,version:appVersion,dirty,cellEditing:editing,canUndo:history.canUndo,canRedo:history.canRedo,rangeLabel:rangeLabel(),editAddress:editing?address(editSession.r,editSession.c):'',inputMode:androidInputMode,display:mobileDisplay(),sheetId:sheet().id,chartSheet:sheet().kind==='chart',zoom,hardware:androidHardware,busy:busy||openingFile}),
   modal,toast,command:action,sourceName:()=>androidSource?.name,closeFilter:closeFilterMenu,columnFilter:androidColumnFilter,cancelBusy:()=>busyCancel?.(),closeDocument:()=>androidNew({viewOnly:true}),
   selection:()=>({...selection}),setSelection:value=>{selection={...value};render();},
   selectionRects:()=>viewRects(bounds()).map(q=>({...q,x:q.x+HEADER_W,y:q.y+HEADER_H})),pickCell,
   scrollAt:point=>{const rect=$('#grid').getBoundingClientRect(),g=$('#grid');if(point.clientY>rect.bottom-30)verticalScroll.setTop(verticalScroll.top()+25);if(point.clientY<rect.top+HEADER_H+30)verticalScroll.setTop(verticalScroll.top()-25);if(point.clientX>rect.right-30)g.scrollLeft+=25;if(point.clientX<rect.left+HEADER_W+30)g.scrollLeft=Math.max(0,g.scrollLeft-25);},
-  tapCell:p=>{if(editSession?.composing||commitEdit()===false)return false;androidHardware=false;select(p.r,p.c);focusGrid();return true;},
+  tapCell:(p,{edit=false}={})=>{
+   if(editSession?.composing)return false;
+   const slot=edit&&pointMode&&currentReferenceSlot();
+   if(slot){pickReference({r1:p.r,r2:p.r,c1:p.c,c2:p.c},$('#editor').value,slot);editInput.focus({preventScroll:true});return true;}
+   if(commitEdit(null,false,false,{keepInputFocus:edit})===false)return false;
+   androidHardware=false;androidEnterHandled=false;select(p.r,p.c);
+   if(edit)return androidStartTouchEntry(undefined,{selectText:true});focusGrid();return true;
+  },
   selectHeading:(axis,n)=>{if(commitEdit()===false)return;selection=axis==='c'?{r:0,c:n,r2:Math.max(usedBounds().r,99),c2:n}:{r:n,c:0,r2:n,c2:Math.max(usedBounds().c,25)};render();focusGrid();},
   cellDetail:()=>{const info=formulaDisplay(selection.r,selection.c),cell=sheet().cells[address(selection.r,selection.c)];return {display:mobileDisplay(),formula:!info.hidden&&info.raw.startsWith('=')?info.raw:'',note:cell?.note||'',notice:mobileNotice()};},
-  editCell:()=>{if(canEditAndroid()){ensureVisible(selection.r,selection.c);startEdit();requestAnimationFrame(()=>{if(editing){$('#formula').focus();editInput=$('#formula');}});}},
+  editCell:()=>{androidHardware=false;androidStartTouchEntry(undefined,{selectText:true});},aggregate:androidAggregate,nextCell:androidNextCell,toggleKeyboard:androidToggleKeyboard,
   changeMode:async()=>{if(!await androidResolveDraft())return;if(androidSession.mode==='view'&&book.nativeSource)return toast('XLSM은 Android에서 보기와 원본 공유만 지원합니다.');androidSession.setMode(androidSession.mode==='view'?'edit':'view');androidHardware=false;closeMenu();closeFilterMenu();updateTitle();render();focusGrid();},
   cancelOrKeepDraft:()=>{void androidResolveDraft();},
   hardware:value=>{androidHardware=value;positionEditor();if(!$('.backdrop')&&!editing)focusGrid();},
@@ -936,7 +997,7 @@ function initializeAndroid(){
  if(continuingSession)androidRestoreDraft();
  else if(resumingSession){
   let view;try{view=JSON.parse(sessionStorage.getItem('sheet-studio.android-view')||'null');}catch{}
-  if(view?.id)void androidSources?.get(view.id).then(async file=>{if(!file)return;if(await androidImport(new Uint8Array(await file.arrayBuffer()),file.name,file,{protected:true,documentId:view.id})){switchSheet(view.sheetId);selection=view.selection;setZoom(view.zoom);$('#grid').scrollLeft=view.left;verticalScroll.setTop(view.top);render();}}).catch(error=>toast('보기 세션 복원 실패: '+error.message));
+  if(view?.id)void androidSources?.get(view.id).then(async file=>{if(!file)return;if(await androidImport(new Uint8Array(await file.arrayBuffer()),file.name,file,{protected:true,documentId:view.id,viewOnly:view.mode==='view'})){switchSheet(view.sheetId);selection=view.selection;setZoom(view.zoom);$('#grid').scrollLeft=view.left;verticalScroll.setTop(view.top);render();}}).catch(error=>toast('보기 세션 복원 실패: '+error.message));
  }
 }
 

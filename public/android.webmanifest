@@ -1,0 +1,12 @@
+{
+  "id": "./",
+  "name": "Sheet Studio",
+  "short_name": "Sheet Studio",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#252525",
+  "theme_color": "#252525",
+  "icons": [{"src":"android-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
+}

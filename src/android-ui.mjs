@@ -1,4 +1,5 @@
 import './android.css';
+import {createAndroidFullscreen} from './android-fullscreen.mjs';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const button = (id, label, cls = '') => `<button type="button" data-mobile="${id}" class="${cls}">${label}</button>`;
@@ -10,15 +11,30 @@ export function installAndroidUI(api) {
   const root = document.querySelector('#app'), shell = document.querySelector('#grid-shell');
   const header = document.createElement('header'), summary = document.createElement('div'), nav = document.createElement('nav'), tools = document.createElement('div');
   header.className = 'android-header';
-  header.innerHTML = button('open','열기') + '<button class="android-title" data-mobile="info"><strong></strong><small></small></button>' + button('share','공유') + button('more','더보기');
+  header.innerHTML = button('open','열기') + '<button class="android-title" data-mobile="info"><strong></strong><small></small></button>' + button('address','A1','android-header-address') + button('fullscreen','전체화면') + button('more','더보기');
   summary.className = 'android-selection';
   summary.setAttribute('role','status');summary.setAttribute('aria-live','polite');
   summary.innerHTML = '<button class="android-address" data-mobile="address" aria-label="셀 주소 또는 범위로 이동"></button><button data-mobile="detail" aria-label="선택 셀 상세 보기"></button>';
   tools.className = 'android-tools';tools.setAttribute('aria-label','편집 도구');
-  tools.innerHTML = [['edit-cell','셀 입력'],['copy','복사'],['paste','붙여넣기'],['cell-format','셀 서식'],['text-color','글자색'],['fill-color','배경색'],['borders','테두리'],['column-filter','이 열 필터'],['validation-list','입력 목록'],['undo','실행 취소'],['redo','다시 실행'],['save','사본 저장']].map(([id,label])=>button(id,label)).join('');
+  tools.innerHTML = [['aggregate-sum','Σ 합계'],['aggregate-average','평균'],['function','함수'],['edit-cell','셀 입력'],['copy','복사'],['paste','붙여넣기'],['cell-format','셀 서식'],['text-color','글자색'],['fill-color','배경색'],['borders','테두리'],['column-filter','이 열 필터'],['validation-list','입력 목록'],['undo','실행 취소'],['redo','다시 실행'],['save','사본 저장']].map(([id,label])=>button(id,label)).join('');
   nav.className = 'android-nav';nav.setAttribute('aria-label','주요 명령');
   nav.innerHTML = button('find','찾기') + button('sheets','시트') + button('view','보기 설정') + button('mode','편집','android-primary');
   root.prepend(header,summary,tools);root.append(nav);
+  const formulaBar=document.querySelector('.formula-bar'),entryTools=document.createElement('div'),entryAddress=document.createElement('span');
+  entryTools.className='android-entry-tools';entryTools.setAttribute('aria-label','입력과 수식 바로가기');
+  entryTools.innerHTML=button('aggregate-sum','Σ 합계')+button('aggregate-average','평균')+button('function','함수')+button('keyboard','123')+button('next-cell','다음 ↓');
+  entryAddress.className='android-entry-address';formulaBar.prepend(entryAddress);formulaBar.append(entryTools);
+  const formula=document.querySelector('#formula');formula.setAttribute('enterkeyhint','enter');formula.setAttribute('autocomplete','off');formula.setAttribute('autocorrect','off');formula.setAttribute('autocapitalize','off');
+  const done=formulaBar.querySelector('[data-action=commit-edit]'),cancel=formulaBar.querySelector('[data-action=cancel-edit]');
+  done.textContent='완료';done.setAttribute('aria-label','입력 완료');cancel.textContent='취소';
+  const manifest=document.createElement('link');manifest.rel='manifest';manifest.href=new URL('android.webmanifest',document.baseURI).href;document.head.append(manifest);
+  const viewportMeta=document.querySelector('meta[name=viewport]');if(viewportMeta&&!viewportMeta.content.includes('viewport-fit'))viewportMeta.content+=', viewport-fit=cover';
+  const fullscreen=createAndroidFullscreen({onChange:active=>{
+    header.querySelector('[data-mobile=fullscreen]').textContent=active?'화면 복원':'전체화면';
+    header.querySelector('[data-mobile=fullscreen]').setAttribute('aria-pressed',String(active));
+    header.querySelector('[data-mobile=fullscreen]').hidden=!fullscreen.canToggle();
+  }});
+  void fullscreen.initialize().catch(error=>toast(error.message));
   const handles = ['start','end'].map(edge=>{
     const el=document.createElement('button');el.type='button';el.className='android-handle';el.dataset.rangeHandle=edge;
     el.setAttribute('aria-label',edge==='start'?'선택 시작 조절 · 주소 입력으로도 선택할 수 있습니다':'선택 끝 조절 · 주소 입력으로도 선택할 수 있습니다');
@@ -30,6 +46,10 @@ export function installAndroidUI(api) {
     const state=api.state(),view=state.mode==='view';
     document.body.classList.toggle('android-view',view);document.body.classList.toggle('android-edit',!view);
     document.body.classList.toggle('android-cell-editing',state.cellEditing);
+    entryAddress.textContent=state.editAddress||state.rangeLabel;
+    header.querySelector('[data-mobile=address]').textContent=state.rangeLabel;
+    entryTools.querySelector('[data-mobile=keyboard]').textContent=state.inputMode==='decimal'?'가/ABC':'123';
+    entryTools.querySelector('[data-mobile=keyboard]').setAttribute('aria-label',state.inputMode==='decimal'?'문자 키보드로 전환':'숫자 키보드로 전환');
     header.querySelector('strong').textContent=state.name;
     header.querySelector('small').textContent=(view?'보기 모드':'편집 모드')+(state.dirty?' · 저장 전 변경 있음':'');
     nav.querySelector('[data-mobile=mode]').textContent=view?'편집':'보기로';
@@ -71,7 +91,7 @@ export function installAndroidUI(api) {
   }
   function more() {
     const s=api.state();
-    modal('문서 메뉴',`<div class="android-list">${button('new','새 통합 문서')}${button('recover','미저장 문서 복구')}${button('address','셀·범위로 이동')}${button('detail','선택 셀 상세')}${button('charts','차트 목록·크게 보기')}${s.mode==='edit'?button('save','XLSX 사본 저장')+button('save-json','앱 문서 사본 저장')+button('save-csv','CSV 사본 저장')+button('ribbon','태블릿 리본 펼치기/접기'):''}${button('compatibility','파일 호환성')}${button('shortcuts','키보드 단축키')}${button('info','문서 정보')}</div>`);
+    modal('문서 메뉴',`<div class="android-list">${button('new','새 통합 문서')}${button('recover','미저장 문서 복구')}${button('find','찾기')}${button('sheets','시트')}${button('view','보기 설정')}${button('mode',s.mode==='edit'?'읽기 전용 보기로':'편집 모드로')}${button('share','공유')}${button('address','셀·범위로 이동')}${button('detail','선택 셀 상세')}${button('charts','차트 목록·크게 보기')}${s.mode==='edit'?button('save','XLSX 사본 저장')+button('save-json','앱 문서 사본 저장')+button('save-csv','CSV 사본 저장')+button('ribbon','태블릿 리본 펼치기/접기'):''}${button('compatibility','파일 호환성')}${button('shortcuts','키보드 단축키')}${button('info','문서 정보')}</div>`);
   }
   function context() {
     const edit=api.state().mode==='edit';
@@ -91,6 +111,11 @@ export function installAndroidUI(api) {
       case 'info':return modal('문서 정보',`<div class="android-detail">${escape(api.state().name)}<br>Sheet Studio ${escape(api.state().version)}<br>${escape(api.sourceName()||'새 통합 문서')}<p>이 기기의 복구 저장과 원본 파일 저장은 별개입니다. 사본 다운로드·공유 후에도 원본 파일은 바뀌지 않습니다.</p>${api.state().dirty?'<p>저장 전 변경이 있습니다. 사본 저장 또는 편집본 공유를 사용할 수 있습니다.</p>':''}</div>`);
       case 'mode':await api.changeMode();break;
       case 'edit-cell':api.editCell();break;
+      case 'aggregate-sum':await api.aggregate('SUM');break;
+      case 'aggregate-average':await api.aggregate('AVERAGE');break;
+      case 'next-cell':api.nextCell();break;
+      case 'keyboard':api.toggleKeyboard();break;
+      case 'fullscreen':await fullscreen.toggle();break;
       case 'column-filter':await api.columnFilter();break;
       case 'select-range':rangeArmed=true;break;
       case 'fit':api.fit();break;
@@ -107,6 +132,11 @@ export function installAndroidUI(api) {
     const target=event.target.closest('[data-mobile]');
     if(target){event.preventDefault();event.stopImmediatePropagation();run(()=>mobileCommand(target.dataset.mobile));return;}
     if(Date.now()-lastTouch<650&&event.target.closest('#grid-shell'))event.stopImmediatePropagation();
+  },true);
+  // Touch compatibility mousedown runs after pointerup. Its default focus can
+  // steal the input we just opened, especially after a keyboard-sized resize.
+  document.addEventListener('mousedown',event=>{
+    if(event.sourceCapabilities?.firesTouchEvents!==false&&Date.now()-lastTouch<650&&event.target.closest('#grid-shell')){event.preventDefault();event.stopImmediatePropagation();}
   },true);
   document.addEventListener('contextmenu',event=>{
     if(event.target.closest('#grid-shell')){
@@ -131,6 +161,7 @@ export function installAndroidUI(api) {
   }
   document.addEventListener('pointerdown',event=>{
     suppressClick=false;
+    if(api.state().cellEditing&&event.target.closest('.android-entry-tools button'))event.preventDefault();
     const handle=event.target.closest('[data-range-handle]');
     if(handle){event.preventDefault();event.stopImmediatePropagation();if(api.state().busy||api.state().cellEditing)return;range={id:event.pointerId,edge:handle.dataset.rangeHandle,original:api.selection(),point:{clientX:event.clientX,clientY:event.clientY}};shell.setPointerCapture(event.pointerId);dragFrame();return;}
     if(event.pointerType!=='touch'||!event.target.closest('#grid-shell')||event.target.closest('input'))return;
@@ -151,15 +182,29 @@ export function installAndroidUI(api) {
     lastTouch=Date.now();
     if(tap.chart){suppressClick=true;api.showChart(tap.chart);return;}
     if(tap.cell){const double=lastTap&&Date.now()-lastTap.time<350&&lastTap.cell.r===tap.cell.r&&lastTap.cell.c===tap.cell.c;
-      if(api.tapCell(tap.cell)===false)return;
+      if(api.tapCell(tap.cell,{edit:api.state().mode==='edit'})===false)return;
+      if(api.state().mode==='edit'){lastTap=null;rangeArmed=false;suppressClick=true;return;}
       lastTap={cell:tap.cell,time:Date.now()};if(double){lastTap=null;suppressClick=true;if(api.state().mode==='edit')api.editCell();else detail();}
     }else if(tap.col!==undefined)api.selectHeading('c',+tap.col);else if(tap.row!==undefined)api.selectHeading('r',+tap.row);
   },true);
   document.addEventListener('pointercancel',event=>{touches.delete(event.pointerId);candidate=null;if(range?.id===event.pointerId)finishRange(true);},true);
   shell.addEventListener('lostpointercapture',()=>finishRange(true));
+  let layoutWidth=window.innerWidth,layoutHeight=window.innerHeight,previousWindowHeight=window.innerHeight,keyboardMayBeOpen=false;
+  const textInput=node=>node?.tagName==='TEXTAREA'||node?.tagName==='INPUT'&&!['checkbox','radio','color','range','file','button','submit'].includes(node.type);
+  document.addEventListener('focusin',event=>{if(textInput(event.target))keyboardMayBeOpen=true;});
   function viewport() {
     candidate=null;touches.clear();finishRange(true);
     const v=window.visualViewport;
+    // Soft-keyboard height changes must not turn a portrait layout into a
+    // landscape layout. A real width change, or idle resize, updates the base.
+    const typing=api.state().cellEditing||textInput(document.activeElement)||keyboardMayBeOpen&&window.innerHeight<layoutHeight;
+    if(!typing){layoutWidth=window.innerWidth;layoutHeight=window.innerHeight;keyboardMayBeOpen=false;}
+    else if(window.innerWidth!==layoutWidth){
+      const swapped=Math.abs(window.innerWidth-layoutHeight)<Math.max(32,layoutHeight*.15),obscured=Math.max(0,layoutHeight-previousWindowHeight);
+      layoutHeight=swapped?Math.max(layoutWidth,window.innerHeight):window.innerHeight+obscured;layoutWidth=window.innerWidth;
+    }
+    previousWindowHeight=window.innerHeight;
+    document.body.classList.toggle('android-landscape',layoutWidth>layoutHeight);
     document.body.style.setProperty('--android-height',(v?.height||window.innerHeight)+'px');
     refresh();
   }
@@ -180,7 +225,7 @@ export function installAndroidUI(api) {
   window.addEventListener('sheet-studio-android-back',event=>{
     if(api.state().busy){event.preventDefault();api.cancelBusy();return;}
     const el=document.querySelector('.backdrop');
-    if(el){el.querySelector('[data-close]')?.click();event.preventDefault();return;}
+    if(el){el.querySelector('[data-close],[data-function-close]')?.click();event.preventDefault();return;}
     if(document.querySelector('.filter-popup')){api.closeFilter();event.preventDefault();return;}
     if(api.state().cellEditing){api.cancelOrKeepDraft();event.preventDefault();return;}
     if(api.state().mode==='edit'){run(()=>api.changeMode());event.preventDefault();return;}
