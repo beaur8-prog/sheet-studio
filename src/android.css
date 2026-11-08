@@ -46,7 +46,7 @@ body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-
 .sheet-android .format-presets,.sheet-android .format-edge-buttons { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px }
 .sheet-android .color-swatches { grid-template-columns:repeat(auto-fit,minmax(48px,1fr));gap:8px }
 .sheet-android .color-swatches button { width:100%;height:48px }
-.sheet-android .menu { position:fixed;left:8px!important;right:8px;top:auto!important;bottom:8px;width:auto;min-width:0;max-height:calc(var(--android-height,100dvh) - 32px);overflow:auto;font-size:14px }
+.sheet-android:not(.android-desktop-input) .menu { position:fixed;left:8px!important;right:8px;top:auto!important;bottom:8px;width:auto;min-width:0;max-height:calc(var(--android-height,100dvh) - 32px);overflow:auto;font-size:14px }
 .sheet-android .menu button { min-height:48px;white-space:normal }
 .sheet-android .android-list { display:grid;gap:8px }
 .sheet-android .android-list button { text-align:left;border:1px solid var(--line);padding:8px 12px;white-space:normal }
@@ -173,3 +173,7 @@ body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-
 .sheet-android.android-desktop-editor .fill-handle { display:block!important }
 .sheet-android.android-desktop-editor .fill-handle[hidden] { display:none!important }
 .sheet-android.android-desktop-editor .tabs [data-action^=updates-],.sheet-android.android-desktop-editor [data-action=vba],.sheet-android.android-desktop-editor [data-action=print] { display:none }
+
+/* Mouse operations in wide Android windows use the existing desktop engine. */
+.sheet-android.android-desktop-input:not(.viewer-mode) .col-resize,.sheet-android.android-desktop-input:not(.viewer-mode) .row-resize,.sheet-android.android-desktop-input:not(.viewer-mode) .chart-resize,.sheet-android.android-desktop-input:not(.viewer-mode) .chart-delete,.sheet-android.android-desktop-input:not(.viewer-mode) .chart-settings { display:block!important }
+.sheet-android.android-desktop-input:not(.viewer-mode) .filter-arrow,.sheet-android.android-desktop-input:not(.viewer-mode) .validation-list-button { visibility:visible;pointer-events:auto }

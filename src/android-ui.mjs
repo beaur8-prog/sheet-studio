@@ -32,7 +32,7 @@ export function installAndroidUI(api) {
   done.textContent='완료';done.setAttribute('aria-label','입력 완료');cancel.textContent='취소';
   const manifest=document.createElement('link');manifest.rel='manifest';manifest.href=new URL('android.webmanifest',document.baseURI).href;document.head.append(manifest);
   const viewportMeta=document.querySelector('meta[name=viewport]');if(viewportMeta&&!viewportMeta.content.includes('viewport-fit'))viewportMeta.content+=', viewport-fit=cover';
-  let hostInsets=null,hostInsetMessage=null,viewportFrame=0,changingMode=false,fullscreenBeforeViewer=true,hardwareConnected=false,editorPreference=localStorage.getItem('sheet-studio.android-editor-layout')||'auto';
+  let hostInsets=null,hostInsetMessage=null,viewportFrame=0,changingMode=false,viewer=false,fullscreenBeforeViewer=true,hardwareConnected=false,editorPreference=localStorage.getItem('sheet-studio.android-editor-layout')||'auto';
   const rail=createViewerRail({mobile:true,onEdit:()=>run(()=>setMode('edit')),onMenu:more});
   function headerCutout(active,width){
     const layout=active?androidHeaderCutout(hostInsetMessage,width):null;
@@ -49,7 +49,7 @@ export function installAndroidUI(api) {
   const fullscreen=createAndroidFullscreen({onChange:active=>{
     document.body.classList.toggle('android-fullscreen',active);safeAreas(active);
     headerCutout(active,androidViewportFrame(window).width);
-    if(!active&&api.state().mode==='view'&&!changingMode&&api.state().canEditFile)run(()=>setMode('edit'));
+    if(!active&&viewer&&!changingMode)run(()=>setMode('edit'));
     scheduleViewport();
   }});
   const handles = ['start','end'].map(edge=>{
@@ -59,33 +59,35 @@ export function installAndroidUI(api) {
   });
   let touches=new Map(), candidate=null, range=null, rangeFrame=0, lastTap=null, lastTouch=0, rangeArmed=false, suppressClick=false;
   const run = operation => Promise.resolve().then(operation).catch(error=>toast(error.message));
+  // Viewer is a layout choice; workbook permissions remain unchanged.
   async function setMode(mode){
-    if(changingMode||api.state().busy)return false;
-    if(mode===api.state().mode)return true;
+    const next=mode==='view';
+    if(changingMode||api.state().busy||api.state().composing)return false;
+    if(next===viewer)return true;
     changingMode=true;
     try{
-      if(mode==='view')fullscreenBeforeViewer=fullscreen.active();
-      await api.changeMode(mode);if(api.state().mode!==mode)return false;if(mode==='edit'&&hardwareConnected)api.hardware(true);
-      try{if(mode==='view')await fullscreen.set(true);else if(!fullscreenBeforeViewer)await fullscreen.set(false);}catch(error){toast(error.message);}
-      refresh();return true;
+      if(next)fullscreenBeforeViewer=fullscreen.active();
+      viewer=next;refresh();
+      try{if(next)await fullscreen.set(true);else if(!fullscreenBeforeViewer)await fullscreen.set(false);}catch(error){toast(error.message);}
+      refresh();api.layoutChanged();return true;
     }finally{changingMode=false;}
   }
   function refresh() {
-    const state=api.state(),view=state.mode==='view';
-    const desktop=androidEditorLayout({preference:editorPreference,width:layoutWidth,height:layoutHeight,finePointer:window.matchMedia('(any-pointer: fine)').matches,keyboard:state.hardware||hardwareConnected})==='desktop'&&!view;
-    const enteringDesktop=desktop&&!document.body.classList.contains('android-desktop-editor');document.body.classList.toggle('android-desktop-editor',desktop);if(desktop)document.body.classList.remove('android-ribbon-open');if(enteringDesktop&&!state.cellEditing&&document.activeElement.id==='grid')api.hardware(true);
-    document.body.classList.toggle('viewer-mode',view);rail.refresh(view);rail.setEditable(state.canEditFile);
-    document.body.classList.toggle('android-view',view);document.body.classList.toggle('android-edit',!view);
+    const state=api.state(),view=viewer;
+    const desktop=androidEditorLayout({preference:editorPreference,width:layoutWidth,height:layoutHeight,finePointer:window.matchMedia('(any-pointer: fine)').matches,keyboard:state.hardware||hardwareConnected})==='desktop';
+    const enteringDesktop=desktop&&!document.body.classList.contains('android-desktop-input');document.body.classList.toggle('android-desktop-input',desktop);document.body.classList.toggle('android-desktop-editor',desktop&&!view);if(desktop)document.body.classList.remove('android-ribbon-open');if(enteringDesktop&&!state.cellEditing&&document.activeElement.id==='grid')api.hardware(true);
+    document.body.classList.toggle('viewer-mode',view);rail.refresh(view);rail.setEditable(true);
+    document.body.classList.toggle('android-view',state.mode==='view');document.body.classList.toggle('android-edit',state.mode==='edit');
     document.body.classList.toggle('android-cell-editing',state.cellEditing);
     entryAddress.textContent=state.editAddress||state.rangeLabel;
     header.querySelector('[data-mobile=address]').textContent=state.rangeLabel;
     entryTools.querySelector('[data-mobile=keyboard]').textContent=state.inputMode==='decimal'?'가/ABC':'123';
     entryTools.querySelector('[data-mobile=keyboard]').setAttribute('aria-label',state.inputMode==='decimal'?'문자 키보드로 전환':'숫자 키보드로 전환');
     header.querySelector('strong').textContent=state.name;
-    header.querySelector('small').textContent=(view?'보기 모드':'편집 모드')+(state.dirty?' · 저장 전 변경 있음':'');
+    header.querySelector('small').textContent=(state.mode==='view'?'읽기 전용':view?'전체화면 편집':'편집 모드')+(state.dirty?' · 저장 전 변경 있음':'');
     for(const control of [header.querySelector('[data-mobile=mode]')]){control.innerHTML=modeIcon(view?'edit':'view')+'<span>'+(view?'편집':'뷰어')+'</span>';control.setAttribute('aria-label',view?'편집 모드로 전환':'전체화면 뷰어 모드');control.setAttribute('aria-pressed',String(view));}
     const titleMode=document.querySelector('[data-action=viewer-toggle]');titleMode.innerHTML=modeIcon(view?'edit':'view');titleMode.title=titleMode.ariaLabel=view?'편집 모드로 전환 (Esc)':'전체화면 뷰어 모드';titleMode.setAttribute('aria-pressed',String(view));
-    tools.hidden=view||state.cellEditing;
+    tools.hidden=view||state.mode==='view'||state.cellEditing;
     summary.hidden=state.cellEditing;
     const address=summary.querySelector('[data-mobile=address]'),detail=summary.querySelector('[data-mobile=detail]'),text=state.display||'빈 셀 · 상세 보기';
     if(address.textContent!==state.rangeLabel)address.textContent=state.rangeLabel;
@@ -96,7 +98,7 @@ export function installAndroidUI(api) {
     const rects=api.selectionRects(),first=rects[0],last=rects.at(-1);
     handles.forEach((el,i)=>{
       const q=i?last:first,selection=api.selection(),multiple=selection.r!==selection.r2||selection.c!==selection.c2;
-      el.hidden=!q||state.cellEditing||state.chartSheet||!multiple&&!rangeArmed;
+      el.hidden=desktop||!q||state.cellEditing||state.chartSheet||!multiple&&!rangeArmed;
       if(q){el.style.left=Math.max(24,Math.min(shell.clientWidth-24,q.x+(i?q.w:0)))+'px';el.style.top=Math.max(24,Math.min(shell.clientHeight-24,q.y+(i?q.h:0)))+'px';}
     });
   }
@@ -123,11 +125,11 @@ export function installAndroidUI(api) {
   }
   function more() {
     const s=api.state();
-    modal('문서 메뉴',`<div class="android-list">${button('open','파일 열기')}${button('new','새 통합 문서')}${button('recover','미저장 문서 복구')}${button('find','찾기')}${button('sheets','시트')}${button('view','보기 설정')}${button('mode',s.mode==='edit'?'전체화면 뷰어':'편집 모드로')}${button('share','공유')}${button('address','셀·범위로 이동')}${button('detail','선택 셀 상세')}${button('charts','차트 목록·크게 보기')}${s.mode==='edit'?button('save','XLSX 사본 저장')+button('save-json','앱 문서 사본 저장')+button('save-csv','CSV 사본 저장')+button('editor-layout','편집 화면: '+({auto:'자동',touch:'터치',desktop:'데스크톱'}[editorPreference]||'자동'))+button('ribbon','태블릿 리본 펼치기/접기'):''}${fullscreen.canToggle()?button('fullscreen',fullscreen.active()?'시스템 전체화면 복원':'시스템 전체화면'):''}${button('compatibility','파일 호환성')}${button('shortcuts','키보드 단축키')}${button('info','문서 정보')}</div>`);
+    modal('문서 메뉴',`<div class="android-list">${button('open','파일 열기')}${button('new','새 통합 문서')}${button('recover','미저장 문서 복구')}${button('find','찾기')}${button('sheets','시트')}${button('view','보기 설정')}${button('mode',viewer?'편집 화면으로':'전체화면 뷰어')+button('read-only',s.mode==='edit'?'읽기 전용으로 전환':'편집 허용')}${button('share','공유')}${button('address','셀·범위로 이동')}${button('detail','선택 셀 상세')}${button('charts','차트 목록·크게 보기')}${s.mode==='edit'?button('save','XLSX 사본 저장')+button('save-json','앱 문서 사본 저장')+button('save-csv','CSV 사본 저장')+button('editor-layout','편집 화면: '+({auto:'자동',touch:'터치',desktop:'데스크톱'}[editorPreference]||'자동'))+button('ribbon','태블릿 리본 펼치기/접기'):''}${fullscreen.canToggle()?button('fullscreen',fullscreen.active()?'시스템 전체화면 복원':'시스템 전체화면'):''}${button('compatibility','파일 호환성')}${button('shortcuts','키보드 단축키')}${button('info','문서 정보')}</div>`);
   }
   function context() {
     const edit=api.state().mode==='edit';
-    modal('선택 영역 · '+escape(api.state().rangeLabel),`<div class="android-list">${button('copy','복사')}${button('detail','셀 상세')}${button('select-range','손잡이로 범위 선택')}${button('address','범위 주소로 선택')}${edit?button('edit-cell','셀 입력')+button('paste','붙여넣기')+button('cell-format','셀 서식')+button('text-color','글자색')+button('borders','테두리'):button('mode','편집 모드로 전환')}</div>`);
+    modal('선택 영역 · '+escape(api.state().rangeLabel),`<div class="android-list">${button('copy','복사')}${button('detail','셀 상세')}${button('select-range','손잡이로 범위 선택')}${button('address','범위 주소로 선택')}${edit?button('edit-cell','셀 입력')+button('paste','붙여넣기')+button('cell-format','셀 서식')+button('text-color','글자색')+button('borders','테두리'):button('read-only','편집 허용')}</div>`);
   }
   const panels=new Set(['more','view','sheets','detail','address','info']);
   async function mobileCommand(id) {
@@ -141,7 +143,8 @@ export function installAndroidUI(api) {
         el.addEventListener('click',event=>{const target=event.target.closest('[data-mobile-chart]');if(target){el.remove();api.showChart(charts[+target.dataset.mobileChart].id);}});return;
       }
       case 'info':return modal('문서 정보',`<div class="android-detail">${escape(api.state().name)}<br>Sheet Studio ${escape(api.state().version)}<br>${escape(api.sourceName()||'새 통합 문서')}<p>이 기기의 복구 저장과 원본 파일 저장은 별개입니다. 사본 다운로드·공유 후에도 원본 파일은 바뀌지 않습니다.</p>${api.state().dirty?'<p>저장 전 변경이 있습니다. 사본 저장 또는 편집본 공유를 사용할 수 있습니다.</p>':''}</div>`);
-      case 'mode':await setMode(api.state().mode==='view'?'edit':'view');break;
+      case 'mode':await setMode(viewer?'edit':'view');break;
+      case 'read-only':await api.changeMode(api.state().mode==='view'?'edit':'view');break;
       case 'editor-layout':{
         const dialog=modal('편집 화면','<p>작은 창에서는 터치 입력을 유지합니다. 충분히 넓은 창의 자동 배치는 마우스·외부 키보드에 맞춥니다.</p><div class="android-list">'+['auto','touch','desktop'].map(key=>'<button data-editor-layout="'+key+'">'+({auto:'자동',touch:'터치 편집',desktop:'데스크톱 편집'})[key]+'</button>').join('')+'</div>');
         dialog.addEventListener('click',event=>{const b=event.target.closest('[data-editor-layout]');if(b){editorPreference=b.dataset.editorLayout;localStorage.setItem('sheet-studio.android-editor-layout',editorPreference);dialog.remove();refresh();}});return;
@@ -176,6 +179,7 @@ export function installAndroidUI(api) {
   },true);
   document.addEventListener('contextmenu',event=>{
     if(event.target.closest('#grid-shell')){
+      if(document.body.classList.contains('android-desktop-input'))return;
       event.preventDefault();event.stopImmediatePropagation();
       candidate=null;suppressClick=true;
       const cell=event.target.closest('.cell');if(cell){const r=+cell.dataset.r,c=+cell.dataset.c,b=api.selection();if(r<Math.min(b.r,b.r2)||r>Math.max(b.r,b.r2)||c<Math.min(b.c,b.c2)||c>Math.max(b.c,b.c2))if(api.tapCell({r,c})===false)return;}
@@ -197,10 +201,11 @@ export function installAndroidUI(api) {
   }
   document.addEventListener('pointerdown',event=>{
     suppressClick=false;
-    if(event.pointerType==='mouse'&&document.body.classList.contains('android-desktop-editor')&&event.target.closest('#grid-shell'))api.hardware(true);
+    if(event.pointerType==='mouse'&&document.body.classList.contains('android-desktop-input')&&event.target.closest('#grid-shell'))api.hardware(true);
     if(api.state().cellEditing&&event.target.closest('.android-entry-tools button'))event.preventDefault();
     const handle=event.target.closest('[data-range-handle]');
     if(handle){event.preventDefault();event.stopImmediatePropagation();if(api.state().busy||api.state().cellEditing)return;range={id:event.pointerId,edge:handle.dataset.rangeHandle,original:api.selection(),point:{clientX:event.clientX,clientY:event.clientY}};shell.setPointerCapture(event.pointerId);dragFrame();return;}
+    if(document.body.classList.contains('android-desktop-input')&&event.target.closest('[data-resize-col],[data-resize-row],[data-chart-resize]'))return;
     if(event.pointerType!=='touch'||!event.target.closest('#grid-shell')||event.target.closest('input'))return;
     event.stopPropagation();lastTouch=Date.now();touches.set(event.pointerId,true);
     if(range){candidate=null;finishRange(true);return;}
@@ -219,8 +224,9 @@ export function installAndroidUI(api) {
     lastTouch=Date.now();
     if(tap.chart){suppressClick=true;api.showChart(tap.chart);return;}
     if(tap.cell){const double=lastTap&&Date.now()-lastTap.time<350&&lastTap.cell.r===tap.cell.r&&lastTap.cell.c===tap.cell.c;
-      if(api.tapCell(tap.cell,{edit:api.state().mode==='edit'})===false)return;
-      if(api.state().mode==='edit'){lastTap=null;rangeArmed=false;suppressClick=true;return;}
+      const desktop=document.body.classList.contains('android-desktop-input');
+      if(api.tapCell(tap.cell,{edit:api.state().mode==='edit'&&!desktop})===false)return;
+      if(api.state().mode==='edit'&&!desktop){lastTap=null;rangeArmed=false;suppressClick=true;return;}
       lastTap={cell:tap.cell,time:Date.now()};if(double){lastTap=null;suppressClick=true;if(api.state().mode==='edit')api.editCell();else detail();}
     }else if(tap.col!==undefined)api.selectHeading('c',+tap.col);else if(tap.row!==undefined)api.selectHeading('r',+tap.row);
   },true);
@@ -258,22 +264,23 @@ export function installAndroidUI(api) {
   window.addEventListener('blur',()=>{candidate=null;touches.clear();finishRange(true);});
   document.addEventListener('keydown',event=>{
     if(event.isComposing||event.keyCode===229||event.defaultPrevented)return;
-    if(event.key==='Escape'&&api.state().mode==='view'&&!document.querySelector('.backdrop,.filter-popup')&&!api.state().busy){event.preventDefault();event.stopImmediatePropagation();run(()=>setMode('edit'));return;}
+    if(event.key==='Escape'&&viewer&&!document.querySelector('.backdrop,.filter-popup,.menu')&&!api.state().busy&&!api.state().composing){event.preventDefault();event.stopImmediatePropagation();run(()=>setMode('edit'));return;}
     if(range&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();finishRange(true);return;}
     if(event.key==='Enter'&&event.target.id==='grid'&&api.state().mode==='view'){event.preventDefault();event.stopImmediatePropagation();detail();return;}
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','F2'].includes(event.key)&&['grid','editor'].includes(event.target.id)&&api.state().mode==='edit'&&!api.state().cellEditing)api.hardware(true);
   },true);
+  window.addEventListener('sheet-studio-android-escape',event=>{event.preventDefault();(document.activeElement||document).dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true,cancelable:true}));});
   window.addEventListener('sheet-studio-android-back',event=>{
     if(api.state().busy){event.preventDefault();api.cancelBusy();return;}
     const el=document.querySelector('.backdrop');
     if(el){el.querySelector('[data-close],[data-function-close]')?.click();event.preventDefault();return;}
     if(document.querySelector('.filter-popup')){api.closeFilter();event.preventDefault();return;}
-    if(api.state().mode==='view'&&api.state().canEditFile){event.preventDefault();run(()=>setMode('edit'));return;}
+    if(viewer){event.preventDefault();run(()=>setMode('edit'));return;}
     if(api.state().cellEditing){api.cancelOrKeepDraft();event.preventDefault();return;}
     event.preventDefault();run(()=>api.requestExit());
   });
   viewport();
   // Register inset listeners before a native host can synchronously reply.
   void fullscreen.initialize().catch(error=>toast(error.message));
-  return {refresh, detail, context,setMode, cancelGesture:()=>{candidate=null;touches.clear();finishRange(true);}};
+  return {refresh, detail, context,setMode,isViewer:()=>viewer, cancelGesture:()=>{candidate=null;touches.clear();finishRange(true);}};
 }
