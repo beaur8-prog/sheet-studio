@@ -1011,6 +1011,9 @@ function guard(callback) {
 }
 function detailedGuard(callback){try{return {value:publicValue(callback()),error:null};}catch(error){const code=error instanceof CalculationLimit?'#NUM!':error instanceof FormulaError?error.code:'#VALUE!',result={value:code,error:code};if(error.cacheSource)Object.defineProperty(result,CACHE_SOURCE,{value:error.cacheSource});return result;}}
 
+// The renderer may show literals without waiting for the calculation worker.
+export function cellLiteralResult(raw){return detailedGuard(()=>literal(raw));}
+
 export function evaluateCell(workbook, sheetId, ref) {
   return createEvaluator(workbook,sheetId)(ref);
 }

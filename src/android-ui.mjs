@@ -32,7 +32,7 @@ export function installAndroidUI(api) {
   done.textContent='완료';done.setAttribute('aria-label','입력 완료');cancel.textContent='취소';
   const manifest=document.createElement('link');manifest.rel='manifest';manifest.href=new URL('android.webmanifest',document.baseURI).href;document.head.append(manifest);
   const viewportMeta=document.querySelector('meta[name=viewport]');if(viewportMeta&&!viewportMeta.content.includes('viewport-fit'))viewportMeta.content+=', viewport-fit=cover';
-  let hostInsets=null,hostInsetMessage=null,viewportFrame=0,changingMode=false,viewer=false,fullscreenBeforeViewer=true,hardwareConnected=false,editorPreference=localStorage.getItem('sheet-studio.android-editor-layout')||'auto';
+  let hostInsets=null,hostInsetMessage=null,viewportFrame=0,changingMode=false,exitViewerRequested=false,viewer=false,fullscreenBeforeViewer=true,hardwareConnected=false,editorPreference=localStorage.getItem('sheet-studio.android-editor-layout')||'auto';
   const rail=createViewerRail({mobile:true,onEdit:()=>run(()=>setMode('edit')),onMenu:more});
   function headerCutout(active,width){
     const layout=active?androidHeaderCutout(hostInsetMessage,width):null;
@@ -62,15 +62,16 @@ export function installAndroidUI(api) {
   // Viewer is a layout choice; workbook permissions remain unchanged.
   async function setMode(mode){
     const next=mode==='view';
-    if(changingMode||api.state().busy||api.state().composing)return false;
+    if(changingMode){if(!next)exitViewerRequested=true;return false;}
+    if(api.state().busy||api.state().composing)return false;
     if(next===viewer)return true;
     changingMode=true;
     try{
       if(next)fullscreenBeforeViewer=fullscreen.active();
-      viewer=next;refresh();
+      viewer=next;refresh();await api.viewerChanged?.(viewer);
       try{if(next)await fullscreen.set(true);else if(!fullscreenBeforeViewer)await fullscreen.set(false);}catch(error){toast(error.message);}
       refresh();api.layoutChanged();return true;
-    }finally{changingMode=false;}
+    }finally{changingMode=false;if(exitViewerRequested){exitViewerRequested=false;if(viewer)run(()=>setMode('edit'));}}
   }
   function refresh() {
     const state=api.state(),view=viewer;
@@ -142,7 +143,7 @@ export function installAndroidUI(api) {
         const el=modal('차트 목록','<div class="android-list">'+charts.map((chart,i)=>'<button data-mobile-chart="'+i+'">'+escape(chart.title||'차트 '+(i+1))+'</button>').join('')+'</div>');
         el.addEventListener('click',event=>{const target=event.target.closest('[data-mobile-chart]');if(target){el.remove();api.showChart(charts[+target.dataset.mobileChart].id);}});return;
       }
-      case 'info':return modal('문서 정보',`<div class="android-detail">${escape(api.state().name)}<br>Sheet Studio ${escape(api.state().version)}<br>${escape(api.sourceName()||'새 통합 문서')}<p>이 기기의 복구 저장과 원본 파일 저장은 별개입니다. 사본 다운로드·공유 후에도 원본 파일은 바뀌지 않습니다.</p>${api.state().dirty?'<p>저장 전 변경이 있습니다. 사본 저장 또는 편집본 공유를 사용할 수 있습니다.</p>':''}</div>`);
+      case 'info':return modal('문서 정보',`<div class="android-detail">${escape(api.state().name)}<br>Sheet Studio ${escape(api.state().nativeVersion||api.state().version)}${api.state().nativeVersion?'<br>편집 엔진 '+escape(api.state().version):''}<br>${escape(api.sourceName()||'새 통합 문서')}<p>이 기기의 복구 저장과 원본 파일 저장은 별개입니다. 사본 다운로드·공유 후에도 원본 파일은 바뀌지 않습니다.</p>${api.state().dirty?'<p>저장 전 변경이 있습니다. 사본 저장 또는 편집본 공유를 사용할 수 있습니다.</p>':''}</div>`);
       case 'mode':await setMode(viewer?'edit':'view');break;
       case 'read-only':await api.changeMode(api.state().mode==='view'?'edit':'view');break;
       case 'editor-layout':{
@@ -279,7 +280,7 @@ export function installAndroidUI(api) {
     if(api.state().cellEditing){api.cancelOrKeepDraft();event.preventDefault();return;}
     event.preventDefault();run(()=>api.requestExit());
   });
-  viewport();
+  viewport();void Promise.resolve(api.viewerChanged?.(viewer)).catch(error=>toast(error.message));
   // Register inset listeners before a native host can synchronously reply.
   void fullscreen.initialize().catch(error=>toast(error.message));
   return {refresh, detail, context,setMode,isViewer:()=>viewer, cancelGesture:()=>{candidate=null;touches.clear();finishRange(true);}};
