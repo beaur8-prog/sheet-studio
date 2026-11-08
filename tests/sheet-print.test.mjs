@@ -30,3 +30,9 @@ test('selected and chart-only printing avoid large data ranges and use a shared 
   const print=buildSheetPrintDocument(snapshot,s.id,{scope:'selection',selection:{r1:0,r2:0,c1:0,c2:0},evaluate});assert.equal(print.dataCells,1);assert.ok(print.html.includes(formatValue(result.value,{},book)));assert.equal(evaluate('A1'),result.value);
   const hidden=createWorkbook(),hs=hidden.sheets[0];hs.cells.A1={raw:'hidden'};hs.rowHeights={0:0};const empty=buildSheetPrintDocument(hidden,hs.id);assert.equal(empty.dataCells,0);assert.match(empty.html,/인쇄할 표시 셀이 없습니다/);assert.doesNotMatch(empty.html,/>hidden</);
 });
+
+test('print output reports paper geometry and limits numeric print metadata to Android output',()=>{
+ const b=createWorkbook(),s=b.sheets[0];s.cells.A1={raw:'123456789',style:{numberFormat:'0'}};
+ const normal=buildSheetPrintDocument(b,s.id),android=buildSheetPrintDocument(b,s.id,{android:true});
+ assert.deepEqual(normal.paper,{name:'A4',width:210,height:297});assert.doesNotMatch(normal.html,/data-print-number=/);assert.match(android.html,/data-print-number="123456789"/);
+});

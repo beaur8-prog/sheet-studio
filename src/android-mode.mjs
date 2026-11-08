@@ -11,9 +11,9 @@ const viewCommands = new Set([
   'open', 'new', 'recover', 'copy', 'find', 'select-all', 'sheet-prev', 'sheet-next',
   'theme', 'toggle-grid', 'show-formulas', 'zoom-in', 'zoom-out', 'zoom-reset',
   'freeze-menu', 'freeze-selection', 'freeze-first-row', 'freeze-first-col', 'freeze-none',
-  'compatibility', 'about', 'shortcuts', 'cancel-edit',
+  'compatibility', 'about', 'shortcuts', 'cancel-edit', 'print',
 ]);
-const unavailable = new Set(['vba', 'save-xlsm', 'print', 'page-setup', 'updates-check', 'updates-manual', 'updates-status']);
+const unavailable = new Set(['vba', 'save-xlsm', 'page-setup', 'updates-check', 'updates-manual', 'updates-status']);
 export function androidCommandAllowed(name, mode) {
   if (unavailable.has(name)) return false;
   return mode === 'edit' || viewCommands.has(name);

@@ -31,3 +31,7 @@ test('returning to view retains edits and undo while rejecting late writes and o
   assert.throws(()=>{delete history.book.sheets[0].cells.A1;},/보기 모드/);assert.equal(history.undo(),false);
   session.setMode('edit');assert.equal(history.undo(),true);assert.equal(history.book.sheets[0].cells.A1,undefined);
 });
+
+test('Android printing is available in edit and explicit read-only modes',()=>{
+ for(const mode of ['view','edit']){assert.equal(androidCommandAllowed('print',mode),true);assert.equal(androidCommandAllowed('page-setup',mode),false);assert.equal(androidCommandAllowed('vba',mode),false);}
+});

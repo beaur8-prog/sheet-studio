@@ -163,3 +163,9 @@ Android의 셀 렌더링은 `number-display.mjs`에서 실제 글꼴/확대 배�
 ## 0.7.48 평균 범위 제안
 
 넓은 Android 화면의 `func-average`는 `startAutoSum('AVERAGE')`를 통해 범위를 찾고 실제 편집기의 참조 부분을 선택한다. `auto-sum` 작업은 검증한 SUM/AVERAGE 이름을 받아 기존 범위 계획을 재사용한다. 평균의 공통 결과 모서리는 원본 사각 범위를 직접 참조해 열별 숫자 개수가 달라도 전체 평균을 유지한다. 스마트폰의 집계 대화상자와 데스크톱 앱의 기존 입력 UI는 유지한다. [검증 기록](releases/v0.7.48.md).
+
+## 0.7.49 인쇄 / PDF
+
+`print`는 Android 편집/읽기 전용의 출력 명령이다. 더보기·파일 메뉴·Ctrl+P에서 기존 시트 인쇄 옵션을 열며 페이지 설정 저장 권한과 분리한다. 출력 HTML만 `androidPrintPayload`로 정리해 `sheetStudioAndroid.printDocument`에 전달한다. 수식의 현재 값·페이지 나눔·반복 제목·머리글/바닥글·차트/그림은 기존 작업 스레드 인쇄 엔진을 사용한다. 좁은 숫자는 출력 폭과 글꼴에 맞춰 표시하되 원본은 유지한다.
+
+호스트는 `sheetPrint` 전송 토큰을 받아 별도 PrintDocumentAdapter/WebView로 Android PrintManager를 호출한다. 시스템 용지/여백이 바뀌면 원래 페이지를 인쇄 가능 영역에 맞추며 프레임워크의 레이아웃/쓰기/취소 콜백을 전달한다. 출력 뷰에는 JavaScript·네트워크·파일/콘텐츠 접근·브리지가 없고 작업 종료 시 잠금과 뷰를 정리한다. 구형 호스트는 업데이트 안내를 표시하며 앱 화면 인쇄로 대체하지 않는다. [검증 기록](releases/v0.7.49.md).

@@ -31,7 +31,7 @@ function printRange(sheet,selection,spills=[],objects=[]){
   for(const ref of sheet.merges||[]){const b=tableBounds(ref);if(b&&b.r1<=range.r2&&b.r2>=range.r1&&b.c1<=range.c2&&b.c2>=range.c1)include(b);}
   return range;
 }
-function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,evaluate}){
+function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,evaluate,numberMetadata=false}){
   if(!rows.length||!cols.length)return {html:'<p>인쇄할 표시 셀이 없습니다.</p>',count:0};
   const merges=new Map();
   for(const ref of sheet.merges||[]){
@@ -50,7 +50,8 @@ function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,
       // A fixed inner box clips text to the saved row height. Leave room for
       // collapsed borders so they cannot grow every row beyond the page plan.
       const continuation=merge&&(!rows.includes(allRows.find(r=>r>=merge.r1&&r<=merge.r2))||!cols.includes(allCols.find(c=>c>=merge.c1&&c<=merge.c2)));
-      return '<td data-ref="'+ref+'"'+(merge?' rowspan="'+merge.rowspan+'" colspan="'+merge.colspan+'"':'')+' style="'+esc(css)+'"><div class="print-cell" style="height:'+Math.max(0,height-border*2)+'px">'+(continuation?'':esc(formatValue(value,style,{...book,error:result.error})))+'</div></td>';
+      const numeric=numberMetadata&&typeof value==='number'&&Number.isFinite(value)&&!result.error?' data-print-number="'+value+'" data-print-number-format="'+esc(JSON.stringify({format:style.format,numberFormat:style.numberFormat,decimals:style.decimals}))+'"':'';
+      return '<td data-ref="'+ref+'"'+numeric+(merge?' rowspan="'+merge.rowspan+'" colspan="'+merge.colspan+'"':'')+' style="'+esc(css)+'"><div class="print-cell" style="height:'+Math.max(0,height-border*2)+'px">'+(continuation?'':esc(formatValue(value,style,{...book,error:result.error})))+'</div></td>';
     }).join('');
     return '<tr data-row="'+r+'" style="height:'+printRowHeight(sheet,r)+'px">'+td+'</tr>';
   }).join('');
@@ -60,7 +61,7 @@ function gridHTML(book,sheet,{rows,cols,allRows,allCols,scale},{gridLines=false,
 }
 /** Immutable output using one calculation session. Drawings can retain their
  * worksheet positions or print on individual object pages. */
-export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation,gridLines,ignorePrintArea=false,includeCharts=true,includeImages=true,objectLayout='sheet',evaluate,now=new Date()}={}){
+export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,orientation,gridLines,ignorePrintArea=false,includeCharts=true,includeImages=true,objectLayout='sheet',evaluate,android=false,now=new Date()}={}){
   const sheet=book.sheets.find(s=>s.id===sheetId);if(!sheet)throw Error('인쇄할 시트를 찾을 수 없습니다.');
   const settings=readPrintSettings(book,sheet,{orientation,ignorePrintArea:ignorePrintArea||scope!=='sheet',ignorePrintTitles:scope!=='sheet'});orientation=settings.orientation;gridLines??=settings.gridLines;
   if(!['sheet','selection','charts'].includes(scope)||!['portrait','landscape'].includes(orientation)||!['sheet','pages'].includes(objectLayout))throw Error('인쇄 설정이 올바르지 않습니다.');
@@ -80,7 +81,7 @@ export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,or
   if(!positioned&&plan.pages.length+objects.length>MAX_PRINT_PAGES)throw Error('차트·이미지를 포함한 인쇄 페이지가 500개를 넘습니다. 인쇄 대상을 줄이세요.');
   let cachedCount=0;
   const pages=plan.pages.map(page=>{
-    const grid=gridHTML(book,sheet,positioned?{...page,scale:1}:page,{gridLines,evaluate:calculate});cachedCount+=grid.cachedCount||0;if(!positioned)return {html:grid.html,scale:page.scale};
+    const grid=gridHTML(book,sheet,positioned?{...page,scale:1}:page,{gridLines,evaluate:calculate,numberMetadata:android});cachedCount+=grid.cachedCount||0;if(!positioned)return {html:grid.html,scale:page.scale};
     const fragments=objects.map((item,index)=>({item,index})).sort((a,b)=>(a.item.kind==='chart')-(b.item.kind==='chart')).map(({item,index})=>printObjectFragments(item.rect,page,axes).map(f=>{const html=fullObjectHTML(item);acceptObject(html);printedObjects.add(index);return '<div class="print-object-clip" data-object="'+index+'" style="left:'+f.x+'px;top:'+f.y+'px;width:'+f.width+'px;height:'+f.height+'px"><div style="position:absolute;left:'+f.contentX+'px;top:'+f.contentY+'px">'+html+'</div></div>';}).join('')).join('');
     return {html:'<div class="print-sheet" style="zoom:'+page.scale+';width:'+page.cols.reduce((n,c)=>n+printColWidth(sheet,c),0)+'px;height:'+page.rows.reduce((n,r)=>n+printRowHeight(sheet,r),0)+'px">'+grid.html+fragments+'</div>',scale:page.scale};
   });
@@ -101,5 +102,5 @@ export function buildSheetPrintDocument(book,sheetId,{scope='sheet',selection,or
     ,'.print-header,.print-footer{position:absolute;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;'+headerSide+'}.print-header{top:'+m.header+'mm;height:'+Math.max(0,(m.top-m.header)*mmToPx)+'px;align-items:start}.print-footer{bottom:'+m.footer+'mm;height:'+Math.max(0,(m.bottom-m.footer)*mmToPx)+'px;align-items:end}.print-header-cell{font-size:0;white-space:pre;max-height:100%;overflow:hidden;line-height:1.15}.print-header-cell.center{text-align:center}.print-header-cell.right{text-align:right}@media print{.print-notes{display:none}}'
   ].join('');
   const content=printed.join('')+(notes.length?'<aside class="print-notes">'+notes.map(note=>'<p class="print-note">'+esc(note)+'</p>').join('')+'</aside>':'');
-  return {html:'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:"><title>'+esc(book.name)+' · '+esc(sheet.name)+'</title><style>'+style+'</style></head><body>'+content+'</body></html>',dataCells:plan.dataCells,pageCount:bodies.length,chartCount:[...printedObjects].filter(i=>objects[i].kind==='chart').length,imageCount:[...printedObjects].filter(i=>objects[i].kind==='image').length,notes};
+  return {html:'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:"><title>'+esc(book.name)+' · '+esc(sheet.name)+'</title><style>'+style+'</style></head><body>'+content+'</body></html>',paper:{...settings.paper},dataCells:plan.dataCells,pageCount:bodies.length,chartCount:[...printedObjects].filter(i=>objects[i].kind==='chart').length,imageCount:[...printedObjects].filter(i=>objects[i].kind==='image').length,notes};
 }
