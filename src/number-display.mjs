@@ -8,7 +8,8 @@ export function fitNumberDisplay(value,display,style,width,measure){
   if(typeof value!=='number'||!Number.isFinite(value)||!display)return display;
   const kind=numericDisplayFormat(value,style);
   if(kind==='text')return display;
-  const fits=text=>measure(text)<=width;
+  // Numeric cells use nowrap; literal newlines/tabs collapse to spaces in CSS.
+  const fits=text=>measure(text.replace(/[\t\n\r\f ]+/g,' '))<=width;
   const hashes=()=> '#'.repeat(Math.max(1,Math.min(512,Math.floor(Math.max(0,width)/Math.max(1,measure('#'))))));
   if(/^#+$/.test(display))return hashes();
   if(kind!=='general')return fits(display)?display:hashes();

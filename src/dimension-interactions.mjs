@@ -52,7 +52,7 @@ export function installDimensionInteractions({host,grid,getSheet,getZoom,getBoun
     g.value=value;g.previewed=true;if(deferResize)queueGuide();else{g.sheet[g.property][g.index]=value;preview();showGuide();}
   }
   document.addEventListener('pointermove',move);
-  document.addEventListener('pointerup',event=>{if(event.pointerId===gesture?.pointerId){if(deferResize)move(event);finish();}});
+  document.addEventListener('pointerup',event=>{if(event.pointerId===gesture?.pointerId){if(deferResize&&gesture.previewed&&!host.hasPointerCapture(event.pointerId)){finish(true);return;}if(deferResize)move(event);finish();}});
   host.addEventListener('pointercancel',()=>finish(true));
   host.addEventListener('lostpointercapture',()=>finish(true));
   host.addEventListener('wheel',event=>{if(gesture)event.preventDefault();},{passive:false});

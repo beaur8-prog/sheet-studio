@@ -31,3 +31,9 @@ test('display measuring caches by font and text, bounds memory and honors multil
  assert.equal(width('123','bold 20px serif'),60);assert.equal(width('1\n123','10px sans-serif'),30);
  for(let i=0;i<4100;i++)width(String(i),'10px sans-serif');const before=calls;width('1\n123','10px sans-serif');assert.ok(calls>before);
 });
+
+test('literal newlines in numeric formats fit the actual nowrap line, not separate fragments',()=>{
+ const multiline=text=>Math.max(...text.split('\n').map(line=>line.length*10));
+ assert.equal(fitNumberDisplay(1,'12345\n6789',{numberFormat:'0"2345\n6789"'},60,multiline),'######');
+ assert.equal(fitNumberDisplay(1,'12345\n6789',{numberFormat:'0"2345\n6789"'},100,multiline),'12345\n6789');
+});
