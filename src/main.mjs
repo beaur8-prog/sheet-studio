@@ -980,7 +980,7 @@ function initializeAndroid(){
   scrollAt:point=>{const rect=$('#grid').getBoundingClientRect(),g=$('#grid');if(point.clientY>rect.bottom-30)verticalScroll.setTop(verticalScroll.top()+25);if(point.clientY<rect.top+HEADER_H+30)verticalScroll.setTop(verticalScroll.top()-25);if(point.clientX>rect.right-30)g.scrollLeft+=25;if(point.clientX<rect.left+HEADER_W+30)g.scrollLeft=Math.max(0,g.scrollLeft-25);},
   tapCell:(p,{edit=false}={})=>{
    if(editSession?.composing)return false;
-   const slot=edit&&pointMode&&currentReferenceSlot();
+   const slot=pointMode&&currentReferenceSlot();
    if(slot){pickReference({r1:p.r,r2:p.r,c1:p.c,c2:p.c},$('#editor').value,slot);editInput.focus({preventScroll:true});return true;}
    if(commitEdit(null,false,false,{keepInputFocus:edit})===false)return false;
    androidHardware=document.body.classList.contains('android-desktop-input');androidEnterHandled=false;select(p.r,p.c);
