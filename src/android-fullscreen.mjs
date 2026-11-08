@@ -19,6 +19,13 @@ export function createAndroidFullscreen({document:doc=document,window:win=window
     // Native hosts can hide the status bar on launch. Browser fullscreen must
     // instead be entered from the user's button press, with user activation.
     async initialize(){await setNative(true);changed();},
+    async set(enabled){
+      if(enabled===active())return;
+      if(await setNative(enabled))return;
+      if(enabled){if(!doc.documentElement.requestFullscreen)throw Error('이 환경에서는 시스템 전체화면을 지원하지 않습니다.');await doc.documentElement.requestFullscreen({navigationUI:'hide'});}
+      else if(doc.fullscreenElement)await doc.exitFullscreen();
+      changed();
+    },
     async toggle(){
       const next=!active();if(await setNative(next))return;
       if(next){if(!doc.documentElement.requestFullscreen)throw Error('이 환경에서는 시스템 전체화면을 지원하지 않습니다.');await doc.documentElement.requestFullscreen({navigationUI:'hide'});}

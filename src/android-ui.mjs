@@ -1,6 +1,8 @@
 import './android.css';
 import {createAndroidFullscreen} from './android-fullscreen.mjs';
 import {androidInsets,androidViewportFrame,androidHeaderCutout} from './android-viewport.mjs';
+import {createViewerRail,modeIcon} from './viewer-ui.mjs';
+import {androidEditorLayout} from './editor-layout.mjs';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const button = (id, label, cls = '') => `<button type="button" data-mobile="${id}" class="${cls}">${label}</button>`;
@@ -12,15 +14,15 @@ export function installAndroidUI(api) {
   const root = document.querySelector('#app'), shell = document.querySelector('#grid-shell');
   const header = document.createElement('header'), summary = document.createElement('div'), nav = document.createElement('nav'), tools = document.createElement('div');
   header.className = 'android-header';
-  header.innerHTML = '<div class="android-header-start">'+button('open','열기') + '<button class="android-title" data-mobile="info"><strong></strong><small></small></button></div><div class="android-header-end">' + button('address','A1','android-header-address') + button('fullscreen','전체화면') + button('more','더보기')+'</div>';
+  header.innerHTML = '<div class="android-header-start">'+button('open','열기') + '<button class="android-title" data-mobile="info"><strong></strong><small></small></button></div><div class="android-header-end">' + button('address','A1','android-header-address') + button('mode',modeIcon('view')+'<span>뷰어</span>') + button('more','더보기')+'</div>';
   summary.className = 'android-selection';
   summary.setAttribute('role','status');summary.setAttribute('aria-live','polite');
   summary.innerHTML = '<button class="android-address" data-mobile="address" aria-label="셀 주소 또는 범위로 이동"></button><button data-mobile="detail" aria-label="선택 셀 상세 보기"></button>';
   tools.className = 'android-tools';tools.setAttribute('aria-label','편집 도구');
-  tools.innerHTML = [['aggregate-sum','Σ 합계'],['aggregate-average','평균'],['function','함수'],['edit-cell','셀 입력'],['copy','복사'],['paste','붙여넣기'],['cell-format','셀 서식'],['text-color','글자색'],['fill-color','배경색'],['borders','테두리'],['column-filter','이 열 필터'],['validation-list','입력 목록'],['undo','실행 취소'],['redo','다시 실행'],['save','사본 저장']].map(([id,label])=>button(id,label)).join('');
+  tools.innerHTML = [['select-range','범위 선택'],['aggregate-sum','Σ 합계'],['aggregate-average','평균'],['function','함수'],['edit-cell','셀 입력'],['bold','굵게'],['align-center','가운데 맞춤'],['copy','복사'],['paste','붙여넣기'],['cell-format','셀 서식'],['text-color','글자색'],['fill-color','배경색'],['borders','테두리'],['column-filter','이 열 필터'],['validation-list','입력 목록'],['undo','실행 취소'],['redo','다시 실행'],['save','사본 저장']].map(([id,label])=>button(id,label)).join('');
   nav.className = 'android-nav';nav.setAttribute('aria-label','주요 명령');
-  nav.innerHTML = button('find','찾기') + button('sheets','시트') + button('view','보기 설정') + button('mode','편집','android-primary');
-  root.prepend(header,summary,tools);root.append(nav);
+  nav.innerHTML = button('find','찾기') + button('sheets','시트') + button('view','보기 설정') + button('select-range','범위 선택','android-primary');
+  root.prepend(header,summary,tools);root.append(nav);document.querySelector('.titlebar').insertAdjacentHTML('beforeend',button('more','⋯','android-desktop-more'));
   const formulaBar=document.querySelector('.formula-bar'),entryTools=document.createElement('div'),entryAddress=document.createElement('span');
   entryTools.className='android-entry-tools';entryTools.setAttribute('aria-label','입력과 수식 바로가기');
   entryTools.innerHTML=button('aggregate-sum','Σ 합계')+button('aggregate-average','평균')+button('function','함수')+button('keyboard','123')+button('next-cell','다음 ↓');
@@ -30,7 +32,8 @@ export function installAndroidUI(api) {
   done.textContent='완료';done.setAttribute('aria-label','입력 완료');cancel.textContent='취소';
   const manifest=document.createElement('link');manifest.rel='manifest';manifest.href=new URL('android.webmanifest',document.baseURI).href;document.head.append(manifest);
   const viewportMeta=document.querySelector('meta[name=viewport]');if(viewportMeta&&!viewportMeta.content.includes('viewport-fit'))viewportMeta.content+=', viewport-fit=cover';
-  let hostInsets=null,hostInsetMessage=null,viewportFrame=0;
+  let hostInsets=null,hostInsetMessage=null,viewportFrame=0,changingMode=false,fullscreenBeforeViewer=true,hardwareConnected=false,editorPreference=localStorage.getItem('sheet-studio.android-editor-layout')||'auto';
+  const rail=createViewerRail({mobile:true,onEdit:()=>run(()=>setMode('edit')),onMenu:more});
   function headerCutout(active,width){
     const layout=active?androidHeaderCutout(hostInsetMessage,width):null;
     header.classList.toggle('android-header-cutout',!!layout);
@@ -46,9 +49,7 @@ export function installAndroidUI(api) {
   const fullscreen=createAndroidFullscreen({onChange:active=>{
     document.body.classList.toggle('android-fullscreen',active);safeAreas(active);
     headerCutout(active,androidViewportFrame(window).width);
-    header.querySelector('[data-mobile=fullscreen]').textContent=active?'화면 복원':'전체화면';
-    header.querySelector('[data-mobile=fullscreen]').setAttribute('aria-pressed',String(active));
-    header.querySelector('[data-mobile=fullscreen]').hidden=!fullscreen.canToggle();
+    if(!active&&api.state().mode==='view'&&!changingMode&&api.state().canEditFile)run(()=>setMode('edit'));
     scheduleViewport();
   }});
   const handles = ['start','end'].map(edge=>{
@@ -58,8 +59,22 @@ export function installAndroidUI(api) {
   });
   let touches=new Map(), candidate=null, range=null, rangeFrame=0, lastTap=null, lastTouch=0, rangeArmed=false, suppressClick=false;
   const run = operation => Promise.resolve().then(operation).catch(error=>toast(error.message));
+  async function setMode(mode){
+    if(changingMode||api.state().busy)return false;
+    if(mode===api.state().mode)return true;
+    changingMode=true;
+    try{
+      if(mode==='view')fullscreenBeforeViewer=fullscreen.active();
+      await api.changeMode(mode);if(api.state().mode!==mode)return false;if(mode==='edit'&&hardwareConnected)api.hardware(true);
+      try{if(mode==='view')await fullscreen.set(true);else if(!fullscreenBeforeViewer)await fullscreen.set(false);}catch(error){toast(error.message);}
+      refresh();return true;
+    }finally{changingMode=false;}
+  }
   function refresh() {
     const state=api.state(),view=state.mode==='view';
+    const desktop=androidEditorLayout({preference:editorPreference,width:layoutWidth,height:layoutHeight,finePointer:window.matchMedia('(any-pointer: fine)').matches,keyboard:state.hardware||hardwareConnected})==='desktop'&&!view;
+    const enteringDesktop=desktop&&!document.body.classList.contains('android-desktop-editor');document.body.classList.toggle('android-desktop-editor',desktop);if(desktop)document.body.classList.remove('android-ribbon-open');if(enteringDesktop&&!state.cellEditing&&document.activeElement.id==='grid')api.hardware(true);
+    document.body.classList.toggle('viewer-mode',view);rail.refresh(view);rail.setEditable(state.canEditFile);
     document.body.classList.toggle('android-view',view);document.body.classList.toggle('android-edit',!view);
     document.body.classList.toggle('android-cell-editing',state.cellEditing);
     entryAddress.textContent=state.editAddress||state.rangeLabel;
@@ -68,7 +83,8 @@ export function installAndroidUI(api) {
     entryTools.querySelector('[data-mobile=keyboard]').setAttribute('aria-label',state.inputMode==='decimal'?'문자 키보드로 전환':'숫자 키보드로 전환');
     header.querySelector('strong').textContent=state.name;
     header.querySelector('small').textContent=(view?'보기 모드':'편집 모드')+(state.dirty?' · 저장 전 변경 있음':'');
-    nav.querySelector('[data-mobile=mode]').textContent=view?'편집':'보기로';
+    for(const control of [header.querySelector('[data-mobile=mode]')]){control.innerHTML=modeIcon(view?'edit':'view')+'<span>'+(view?'편집':'뷰어')+'</span>';control.setAttribute('aria-label',view?'편집 모드로 전환':'전체화면 뷰어 모드');control.setAttribute('aria-pressed',String(view));}
+    const titleMode=document.querySelector('[data-action=viewer-toggle]');titleMode.innerHTML=modeIcon(view?'edit':'view');titleMode.title=titleMode.ariaLabel=view?'편집 모드로 전환 (Esc)':'전체화면 뷰어 모드';titleMode.setAttribute('aria-pressed',String(view));
     tools.hidden=view||state.cellEditing;
     summary.hidden=state.cellEditing;
     const address=summary.querySelector('[data-mobile=address]'),detail=summary.querySelector('[data-mobile=detail]'),text=state.display||'빈 셀 · 상세 보기';
@@ -107,7 +123,7 @@ export function installAndroidUI(api) {
   }
   function more() {
     const s=api.state();
-    modal('문서 메뉴',`<div class="android-list">${button('new','새 통합 문서')}${button('recover','미저장 문서 복구')}${button('find','찾기')}${button('sheets','시트')}${button('view','보기 설정')}${button('mode',s.mode==='edit'?'읽기 전용 보기로':'편집 모드로')}${button('share','공유')}${button('address','셀·범위로 이동')}${button('detail','선택 셀 상세')}${button('charts','차트 목록·크게 보기')}${s.mode==='edit'?button('save','XLSX 사본 저장')+button('save-json','앱 문서 사본 저장')+button('save-csv','CSV 사본 저장')+button('ribbon','태블릿 리본 펼치기/접기'):''}${button('compatibility','파일 호환성')}${button('shortcuts','키보드 단축키')}${button('info','문서 정보')}</div>`);
+    modal('문서 메뉴',`<div class="android-list">${button('open','파일 열기')}${button('new','새 통합 문서')}${button('recover','미저장 문서 복구')}${button('find','찾기')}${button('sheets','시트')}${button('view','보기 설정')}${button('mode',s.mode==='edit'?'전체화면 뷰어':'편집 모드로')}${button('share','공유')}${button('address','셀·범위로 이동')}${button('detail','선택 셀 상세')}${button('charts','차트 목록·크게 보기')}${s.mode==='edit'?button('save','XLSX 사본 저장')+button('save-json','앱 문서 사본 저장')+button('save-csv','CSV 사본 저장')+button('editor-layout','편집 화면: '+({auto:'자동',touch:'터치',desktop:'데스크톱'}[editorPreference]||'자동'))+button('ribbon','태블릿 리본 펼치기/접기'):''}${fullscreen.canToggle()?button('fullscreen',fullscreen.active()?'시스템 전체화면 복원':'시스템 전체화면'):''}${button('compatibility','파일 호환성')}${button('shortcuts','키보드 단축키')}${button('info','문서 정보')}</div>`);
   }
   function context() {
     const edit=api.state().mode==='edit';
@@ -125,7 +141,11 @@ export function installAndroidUI(api) {
         el.addEventListener('click',event=>{const target=event.target.closest('[data-mobile-chart]');if(target){el.remove();api.showChart(charts[+target.dataset.mobileChart].id);}});return;
       }
       case 'info':return modal('문서 정보',`<div class="android-detail">${escape(api.state().name)}<br>Sheet Studio ${escape(api.state().version)}<br>${escape(api.sourceName()||'새 통합 문서')}<p>이 기기의 복구 저장과 원본 파일 저장은 별개입니다. 사본 다운로드·공유 후에도 원본 파일은 바뀌지 않습니다.</p>${api.state().dirty?'<p>저장 전 변경이 있습니다. 사본 저장 또는 편집본 공유를 사용할 수 있습니다.</p>':''}</div>`);
-      case 'mode':await api.changeMode();break;
+      case 'mode':await setMode(api.state().mode==='view'?'edit':'view');break;
+      case 'editor-layout':{
+        const dialog=modal('편집 화면','<p>작은 창에서는 터치 입력을 유지합니다. 충분히 넓은 창의 자동 배치는 마우스·외부 키보드에 맞춥니다.</p><div class="android-list">'+['auto','touch','desktop'].map(key=>'<button data-editor-layout="'+key+'">'+({auto:'자동',touch:'터치 편집',desktop:'데스크톱 편집'})[key]+'</button>').join('')+'</div>');
+        dialog.addEventListener('click',event=>{const b=event.target.closest('[data-editor-layout]');if(b){editorPreference=b.dataset.editorLayout;localStorage.setItem('sheet-studio.android-editor-layout',editorPreference);dialog.remove();refresh();}});return;
+      }
       case 'edit-cell':api.editCell();break;
       case 'aggregate-sum':await api.aggregate('SUM');break;
       case 'aggregate-average':await api.aggregate('AVERAGE');break;
@@ -177,6 +197,7 @@ export function installAndroidUI(api) {
   }
   document.addEventListener('pointerdown',event=>{
     suppressClick=false;
+    if(event.pointerType==='mouse'&&document.body.classList.contains('android-desktop-editor')&&event.target.closest('#grid-shell'))api.hardware(true);
     if(api.state().cellEditing&&event.target.closest('.android-entry-tools button'))event.preventDefault();
     const handle=event.target.closest('[data-range-handle]');
     if(handle){event.preventDefault();event.stopImmediatePropagation();if(api.state().busy||api.state().cellEditing)return;range={id:event.pointerId,edge:handle.dataset.rangeHandle,original:api.selection(),point:{clientX:event.clientX,clientY:event.clientY}};shell.setPointerCapture(event.pointerId);dragFrame();return;}
@@ -230,13 +251,14 @@ export function installAndroidUI(api) {
     hostInsetMessage=event.detail;hostInsets=androidInsets(event.detail);safeAreas(fullscreen.active());
     viewport();
   });
-  window.addEventListener('sheet-studio-android-input',event=>{if(typeof event.detail?.hardwareKeyboard==='boolean')api.hardware(event.detail.hardwareKeyboard);});
+  window.addEventListener('sheet-studio-android-input',event=>{if(typeof event.detail?.hardwareKeyboard==='boolean'){hardwareConnected=event.detail.hardwareKeyboard;api.hardware(hardwareConnected,{focus:false});refresh();}});
   window.addEventListener('resize',scheduleViewport);window.visualViewport?.addEventListener('resize',scheduleViewport);
   window.visualViewport?.addEventListener('scroll',scheduleViewport);
   window.addEventListener('pageshow',scheduleViewport);window.screen.orientation?.addEventListener('change',scheduleViewport);
   window.addEventListener('blur',()=>{candidate=null;touches.clear();finishRange(true);});
   document.addEventListener('keydown',event=>{
     if(event.isComposing||event.keyCode===229||event.defaultPrevented)return;
+    if(event.key==='Escape'&&api.state().mode==='view'&&!document.querySelector('.backdrop,.filter-popup')&&!api.state().busy){event.preventDefault();event.stopImmediatePropagation();run(()=>setMode('edit'));return;}
     if(range&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();finishRange(true);return;}
     if(event.key==='Enter'&&event.target.id==='grid'&&api.state().mode==='view'){event.preventDefault();event.stopImmediatePropagation();detail();return;}
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','F2'].includes(event.key)&&['grid','editor'].includes(event.target.id)&&api.state().mode==='edit'&&!api.state().cellEditing)api.hardware(true);
@@ -246,11 +268,12 @@ export function installAndroidUI(api) {
     const el=document.querySelector('.backdrop');
     if(el){el.querySelector('[data-close],[data-function-close]')?.click();event.preventDefault();return;}
     if(document.querySelector('.filter-popup')){api.closeFilter();event.preventDefault();return;}
+    if(api.state().mode==='view'&&api.state().canEditFile){event.preventDefault();run(()=>setMode('edit'));return;}
     if(api.state().cellEditing){api.cancelOrKeepDraft();event.preventDefault();return;}
     event.preventDefault();run(()=>api.requestExit());
   });
   viewport();
   // Register inset listeners before a native host can synchronously reply.
   void fullscreen.initialize().catch(error=>toast(error.message));
-  return {refresh, detail, context, cancelGesture:()=>{candidate=null;touches.clear();finishRange(true);}};
+  return {refresh, detail, context,setMode, cancelGesture:()=>{candidate=null;touches.clear();finishRange(true);}};
 }

@@ -1,0 +1,16 @@
+.sheet-android.viewer-mode #app { height:100dvh }
+.sheet-android.viewer-mode .titlebar,.sheet-android.viewer-mode .tabs,.sheet-android.viewer-mode .ribbon,.sheet-android.viewer-mode .formula-bar,.sheet-android.viewer-mode .sheetbar,.sheet-android.viewer-mode .statusbar,.sheet-android.viewer-mode .pivot-bar,.sheet-android.viewer-mode .table-bar,
+.sheet-android.viewer-mode .android-header,.sheet-android.viewer-mode .android-selection,.sheet-android.viewer-mode .android-tools,.sheet-android.viewer-mode .android-nav { display:none!important }
+.sheet-android.viewer-mode .grid-shell { flex:1;min-height:0;margin-top:0!important;margin-bottom:0!important }
+.sheet-android.viewer-mode .cell-editor,.sheet-android.viewer-mode .fill-handle,.sheet-android.viewer-mode .col-resize,.sheet-android.viewer-mode .row-resize,.sheet-android.viewer-mode .chart-resize,.sheet-android.viewer-mode .chart-delete,.sheet-android.viewer-mode .chart-settings,.sheet-android.viewer-mode .filter-arrow,.sheet-android.viewer-mode .validation-list-button { display:none!important }
+.sheet-android .viewer-rail { position:fixed;z-index:24;top:calc(var(--android-viewport-top,0px) + max(8px,var(--android-safe-top,0px)));right:max(8px,var(--android-safe-right,0px));display:flex;align-items:center;gap:4px;padding:4px;background:#252525e8;color:#fff;border:1px solid #777;border-radius:9px;box-shadow:0 2px 12px #0004;opacity:0;pointer-events:none;transition:opacity .15s }
+.sheet-android .viewer-rail[hidden] { display:none!important }
+.sheet-android .viewer-rail.viewer-controls-visible,.sheet-android .viewer-rail:focus-within { opacity:1;pointer-events:auto }
+.sheet-android .viewer-rail button { display:flex;align-items:center;justify-content:center;gap:6px;min-width:40px;min-height:40px;padding:4px 10px;color:inherit;font:14px system-ui,sans-serif;border:0 }
+.sheet-android .viewer-rail button svg,.sheet-android [data-mobile=mode] svg { width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8 }
+.sheet-android .viewer-escape-hint { font:11px system-ui,sans-serif;color:#ddd;padding:0 4px }
+.sheet-android .viewer-rail button { min-width:48px;min-height:48px }
+.sheet-android .viewer-escape-hint { display:none }
+.sheet-android [data-mobile=mode] { display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap }
+.sheet-android .android-title small { max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+@media(prefers-reduced-motion:reduce){.sheet-android .viewer-rail{transition:none}}

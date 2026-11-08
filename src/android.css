@@ -146,3 +146,30 @@ body.sheet-android { font-family:system-ui,sans-serif;font-size:14px;overscroll-
  .sheet-android .tab-right,.sheet-android [data-tab="개발 도구"],.sheet-android [data-tab="페이지 레이아웃"],.sheet-android [data-action^="updates-"],.sheet-android [data-action="print"],.sheet-android [data-action="vba"],.sheet-android [data-action="save-xlsm"] { display:none }
  .sheet-android .backdrop { align-items:center;justify-content:center }
 }
+/* Wide Android windows with keyboard/mouse can use the desktop editing chrome.
+   A small/split window always falls back to the 48px touch interface. */
+.sheet-android .android-desktop-more { display:none }
+.sheet-android.android-desktop-editor .android-header,.sheet-android.android-desktop-editor .android-selection,.sheet-android.android-desktop-editor .android-tools,.sheet-android.android-desktop-editor .android-nav { display:none!important }
+.sheet-android.android-desktop-editor .titlebar { display:flex!important;order:0;height:calc(34px + var(--android-safe-top,0px));min-height:calc(34px + var(--android-safe-top,0px));padding:var(--android-safe-top,0px) max(8px,var(--android-safe-right,0px)) 0 max(8px,var(--android-safe-left,0px)) }
+.sheet-android.android-desktop-editor .tabs { display:flex!important;order:1;height:30px;min-height:30px;overflow:auto;padding:0 4px }
+.sheet-android.android-desktop-editor .ribbon { display:flex!important;order:2;height:118px;min-height:118px;max-height:152px;padding:4px 6px;overflow-x:auto }
+.sheet-android.android-desktop-editor .group-content { height:88px;min-height:88px }
+.sheet-android.android-desktop-editor .group-label { font-size:10px }
+.sheet-android.android-desktop-editor .small-btn,.sheet-android.android-desktop-editor .icon-btn,.sheet-android.android-desktop-editor .tab,.sheet-android.android-desktop-editor .style-chip { height:auto;min-height:28px!important }
+.sheet-android.android-desktop-editor button,.sheet-android.android-desktop-editor select,.sheet-android.android-desktop-editor input:not(#editor) { min-height:28px!important;min-width:28px!important }
+.sheet-android.android-desktop-editor .formula-bar { display:flex!important;order:4;flex-wrap:nowrap;height:32px;min-height:32px;max-height:32px;padding:0 4px }
+.sheet-android.android-desktop-editor .formula-input { order:4;min-height:28px;height:28px;font-size:16px }
+.sheet-android.android-desktop-editor .formula-bar .name-box { display:block;width:90px;font-size:13px }
+.sheet-android.android-desktop-editor .formula-fx { display:block;order:3 }
+.sheet-android.android-desktop-editor .formula-bar>[data-action=cancel-edit] { order:1 }
+.sheet-android.android-desktop-editor .formula-bar>[data-action=commit-edit] { order:2 }
+.sheet-android.android-desktop-editor .android-entry-tools,.sheet-android.android-desktop-editor .android-entry-address { display:none!important }
+.sheet-android.android-desktop-editor .grid-shell { order:5;margin-top:0!important;margin-bottom:0!important }
+.sheet-android.android-desktop-editor .sheetbar { display:flex!important;order:6;min-height:30px;height:30px }
+.sheet-android.android-desktop-editor .statusbar { display:flex!important;order:7;min-height:25px;height:25px;font-size:11px }
+.sheet-android.android-desktop-editor .android-desktop-more { display:block;font-size:20px }
+.sheet-android.android-desktop-editor .search-command { width:190px }
+.sheet-android.android-desktop-editor .titlebar .title-info { max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.sheet-android.android-desktop-editor .fill-handle { display:block!important }
+.sheet-android.android-desktop-editor .fill-handle[hidden] { display:none!important }
+.sheet-android.android-desktop-editor .tabs [data-action^=updates-],.sheet-android.android-desktop-editor [data-action=vba],.sheet-android.android-desktop-editor [data-action=print] { display:none }
