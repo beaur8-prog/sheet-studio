@@ -45,3 +45,20 @@ test('spill references keep their operator during reference picking and F4 lock 
 test('AutoSum includes derived spill followers and reserves the next genuinely empty row',()=>{
  const [s,e]=fixture({A1:'=SEQUENCE(1000)'});assert.deepEqual(autoSumPlan(s,at(1000,0),e),[{r:1000,c:0,raw:'=SUM(A1:A1000)'}]);assert.deepEqual(autoSumPlan(s,at(0,0,999,0),e),[{r:1000,c:0,raw:'=SUM(A1:A1000)'}]);
 });
+
+test('AutoAverage proposes above/left numeric runs and explicit selected ranges without mutating cells',()=>{
+ const [s,e]=fixture({B1:'구분',B2:10,B3:20,B4:'=B2+B3',A7:4,B7:8}),before=JSON.stringify(s);
+ assert.deepEqual(autoSumPlan(s,at(4,1),e,'AVERAGE'),[{r:4,c:1,raw:'=AVERAGE(B2:B4)'}]);
+ assert.deepEqual(autoSumPlan(s,at(6,2),e,'AVERAGE'),[{r:6,c:2,raw:'=AVERAGE(A7:B7)'}]);
+ assert.deepEqual(autoSumPlan(s,at(1,1,3,1),e,'AVERAGE'),[{r:4,c:1,raw:'=AVERAGE(B2:B4)'}]);
+ assert.equal(autoSumPlan(s,at(0,0),e,'AVERAGE')[0].raw,'=AVERAGE()');
+ assert.throws(()=>autoSumPlan(s,at(0,0),e,'AVERAGE) + 1'),/함수/);assert.equal(JSON.stringify(s),before);
+});
+test('AutoAverage matrix corner uses the source rectangle rather than averages of unequal numeric counts',()=>{
+ const [s,e]=fixture({A1:1,A2:3,B1:100,B2:'메모'});
+ const plan=autoSumPlan(s,at(0,0,2,2),e,'AVERAGE');assert.equal(plan.length,5);
+ assert.deepEqual(plan.at(-1),{r:2,c:2,raw:'=AVERAGE(A1:B2)'});
+ for(const edit of plan)s.cells[String.fromCharCode(65+edit.c)+(edit.r+1)]={raw:edit.raw};
+ assert.ok(Math.abs(e('C3')-104/3)<1e-10);
+ const [blocked,be]=fixture({A1:1,A2:2,A3:'keep'});assert.throws(()=>autoSumPlan(blocked,at(0,0,1,0),be,'AVERAGE'),/평균 위치.*데이터/);assert.equal(blocked.cells.A3.raw,'keep');
+});

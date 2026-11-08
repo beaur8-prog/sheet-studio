@@ -62,29 +62,36 @@ export function completeFormula(formula){
   return !quote&&depth>0&&depth<=32?formula+')'.repeat(depth):formula;
 }
 
-export function autoSumPlan(sheet,selection,evaluate){
+export function autoSumPlan(sheet,selection,evaluate,functionName='SUM'){
+  if(!['SUM','AVERAGE'].includes(functionName))throw Error('지원하는 자동 집계 함수를 선택하세요.');
+  const label=functionName==='AVERAGE'?'평균':'합계';
   const r1=Math.min(selection.r,selection.r2),r2=Math.max(selection.r,selection.r2),c1=Math.min(selection.c,selection.c2),c2=Math.max(selection.c,selection.c2);
-  if((r2-r1+1)*(c2-c1+1)>100000)throw Error('자동 합계는 한 번에 최대 100,000개 셀을 선택하세요.');
+  if((r2-r1+1)*(c2-c1+1)>100000)throw Error(`자동 ${label}${functionName==='AVERAGE'?'은':'는'} 한 번에 최대 100,000개 셀을 선택하세요.`);
   const occupied=(r,c)=>!!sheet.cells[address(r,c)]?.raw||!!evaluate.isComputed?.(address(r,c)),numeric=(r,c)=>{if(!occupied(r,c))return false;const value=evaluate(address(r,c));return typeof value==='number'&&Number.isFinite(value);};
   const edits=[];
   const add=(r,c,a,b)=>{
-    if(r>=LIMIT_ROWS||c>=LIMIT_COLS)throw Error('합계를 넣을 빈 셀이 시트 끝을 벗어납니다.');
-    if(occupied(r,c))throw Error('합계 위치에 데이터가 있습니다. 빈 합계 셀을 선택하세요.');
-    edits.push({r,c,raw:`=SUM(${a}:${b})`});
+    if(r>=LIMIT_ROWS||c>=LIMIT_COLS)throw Error(`${label}${functionName==='AVERAGE'?'을':'를'} 넣을 빈 셀이 시트 끝을 벗어납니다.`);
+    if(occupied(r,c))throw Error(`${label} 위치에 데이터가 있습니다. 빈 ${label} 셀을 선택하세요.`);
+    edits.push({r,c,raw:`=${functionName}(${a}:${b})`});
   };
   if(r1===r2&&c1===c2){
     for(const [dr,dc] of [[-1,0],[0,-1]]){
       let r=r1+dr,c=c1+dc;if(r<0||c<0||!numeric(r,c))continue;
       const last=address(r,c);let first=last,steps=0;
-      while(r>=0&&c>=0&&numeric(r,c)){if(steps++>=100000)throw Error('자동 합계 범위는 최대 100,000개 셀입니다.');first=address(r,c);r+=dr;c+=dc;}
-      return [{r:r1,c:c1,raw:`=SUM(${first}:${last})`}];
+      while(r>=0&&c>=0&&numeric(r,c)){if(steps++>=100000)throw Error(`자동 ${label} 범위는 최대 100,000개 셀입니다.`);first=address(r,c);r+=dr;c+=dc;}
+      return [{r:r1,c:c1,raw:`=${functionName}(${first}:${last})`}];
     }
-    return [{r:r1,c:c1,raw:'=SUM()'}];
+    return [{r:r1,c:c1,raw:`=${functionName}()`}];
   }
   if(r1===r2){const target=!occupied(r1,c2)?c2:c2+1;add(r1,target,address(r1,c1),address(r1,target-1));return edits;}
   const bottomBlank=Array.from({length:c2-c1+1},(_,i)=>!occupied(r2,c1+i)).every(Boolean);
   const rightBlank=c2>c1&&Array.from({length:r2-r1+1},(_,i)=>!occupied(r1+i,c2)).every(Boolean);
   if(bottomBlank||!rightBlank){const target=bottomBlank?r2:r2+1,lastCol=rightBlank?c2-1:c2;for(let c=c1;c<=lastCol;c++)add(target,c,address(r1,c),address(target-1,c));}
-  if(rightBlank)for(let r=r1;r<=r2;r++)add(r,c2,address(r,c1),address(r,c2-1));
+  if(rightBlank)for(let r=r1;r<=r2;r++){
+    // Average the original values at the shared result corner. Averaging the
+    // column averages weights unequal numeric counts incorrectly.
+    if(functionName==='AVERAGE'&&bottomBlank&&r===r2)add(r,c2,address(r1,c1),address(r2-1,c2-1));
+    else add(r,c2,address(r,c1),address(r,c2-1));
+  }
   return edits;
 }

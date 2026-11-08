@@ -1,6 +1,6 @@
 {
   "name": "lattice-sheet-studio",
-  "version": "0.7.47",
+  "version": "0.7.48",
   "description": "Independent local spreadsheet editor with formulas and XLSX exchange",
   "author": "Sheet Studio",
   "private": true,
@@ -28,7 +28,8 @@
     "test:interop:libreoffice": "node tests/libreoffice-interop.mjs",
     "docs:functions": "node scripts/sync-function-docs.mjs",
     "docs:check": "node scripts/sync-function-docs.mjs --check",
-    "test:android:width": "npm run build && node tests/android-number-width.mjs"
+    "test:android:width": "npm run build && node tests/android-number-width.mjs",
+    "test:android:average": "npm run build && node tests/android-average-range.mjs"
   },
   "dependencies": {
     "@formulajs/formulajs": "4.6.1",
