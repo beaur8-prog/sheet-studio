@@ -26,6 +26,8 @@ test('Android preserves the layout viewport during pinch zoom so the document ca
 test('Android header uses space beside camera holes instead of adding a blank row',()=>{
  assert.deepEqual(androidHeaderCutout({displayCutoutRects:[{top:0,bottom:30,left:195,right:217}]},412),{mode:'split',left:183,gap:38,height:48});
  assert.equal(androidHeaderCutout({displayCutoutRects:[{top:0,bottom:32,left:0,right:30}]},412).mode,'left');
+ assert.equal(androidHeaderCutout({displayCutout:{top:30},displayCutoutRects:[{top:6,bottom:30,left:195,right:217}]},412).mode,'split');
+ assert.equal(androidHeaderCutout({displayCutout:{top:0,left:30},displayCutoutRects:[{top:0,bottom:180,left:0,right:30}]},915),null);
  assert.equal(androidHeaderCutout({consumedByWebView:true,displayCutoutRects:[{top:0,bottom:30,left:195,right:217}]},412),null);
  assert.equal(androidHeaderCutout({displayCutoutRects:[{top:0,bottom:30,left:0,right:410}]},412),null);
 });
