@@ -32,7 +32,7 @@ try{
   await boot(platform);await scroll();const point=await pointer(),before=await sample(point),original=await snap(),chrome=await page.locator('.ribbon').boundingBox();
   await wheel(-100,point);assert.ok(await zoom()>100);samePoint(before,await sample(point));assert.deepEqual(await snap(),original);assert.equal(await page.evaluate(()=>visualViewport.scale),1);assert.equal((await page.locator('.ribbon').boundingBox()).height,chrome.height);
   await wheel(100,point);assert.ok(Math.abs(await zoom()-100)<=1);assert.deepEqual(await snap(),original);
-  const normal=await page.locator('#grid').evaluate(el=>el.scrollTop);await wheel(150,point,false);assert.ok(await page.locator('#grid').evaluate(el=>el.scrollTop)>normal);assert.ok(Math.abs(await zoom()-100)<=1);
+  const normal=await page.locator('#grid').evaluate(el=>el.scrollTop);await wheel(150,point,false);assert.ok(await page.locator('#grid').evaluate(el=>el.scrollTop)>normal);assert.ok(Math.abs(await zoom()-100)<=1);const scrolledPoint=await sample(point);await wheel(-100,point);samePoint(scrolledPoint,await sample(point));assert.deepEqual(await snap(),original);
   console.log('PASS '+platform+' shared runtime: trusted Ctrl+wheel, pointer anchor, normal scroll, fixed UI scale and unchanged document/selection/history');
  }
  await boot('mac');await scroll();const point=await pointer(),beforePinch=await zoom(),origin=await snap(),p0=await sample(point);

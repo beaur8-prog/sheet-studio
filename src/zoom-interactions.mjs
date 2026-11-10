@@ -18,7 +18,7 @@ export function rescaleLayout(layout,ratio){
   for(const axis of [layout.rows,layout.cols])for(let i=1;i<axis.length;i++)axis[i]*=ratio;
 }
 
-export function installZoomInteractions({root,host,getZoom,setZoom,getContext,canZoom,captureAnchor=p=>p,nativeAndroid=false}){
+export function installZoomInteractions({root,host,getZoom,setZoom,getContext,canZoom,captureAnchor=p=>p,getViewport=()=>'',nativeAndroid=false}){
   const win=root.defaultView;
   let frame=0,pending=null,wheel=null,gesture=null;
   const point=event=>{
@@ -29,12 +29,12 @@ export function installZoomInteractions({root,host,getZoom,setZoom,getContext,ca
   function cancel(){win.cancelAnimationFrame(frame);frame=0;pending=null;wheel=null;gesture=null;}
   function flush(){
     frame=0;const next=pending;pending=null;
-    if(!next||!canZoom()||next.context!==getContext()||next.base!==getZoom()){wheel=null;return;}
+    if(!next||!canZoom()||next.context!==getContext()||next.base!==getZoom()||next.viewport!==getViewport()){wheel=null;return;}
     setZoom(Math.round(next.value),next.point);
-    if(wheel)wheel.actual=getZoom();
+    if(wheel){wheel.actual=getZoom();wheel.viewport=getViewport();}
   }
   function queue(value,anchor){
-    pending={value:clampZoom(value),point:anchor,context:getContext(),base:getZoom()};
+    pending={value:clampZoom(value),point:anchor,context:getContext(),base:getZoom(),viewport:getViewport()};
     if(!frame)frame=win.requestAnimationFrame(flush);
   }
   function onWheel(event){
@@ -44,8 +44,8 @@ export function installZoomInteractions({root,host,getZoom,setZoom,getContext,ca
     event.preventDefault();
     if(gesture)return;
     if(!event.cancelable||event.buttons||!canZoom()){cancel();return;}
-    const now=win.performance.now(),context=getContext(),actual=getZoom();
-    if(!wheel||now-wheel.time>250||wheel.context!==context||wheel.actual!==actual)wheel={value:actual,actual,context,time:now};
+    const now=win.performance.now(),context=getContext(),actual=getZoom(),viewport=getViewport();
+    if(!wheel||now-wheel.time>250||wheel.context!==context||wheel.actual!==actual||wheel.viewport!==viewport)wheel={value:actual,actual,context,viewport,time:now};
     wheel.time=now;wheel.value=wheelZoom(wheel.value,event,host.clientHeight);
     const at=point(event);
     if(!wheel.anchor||wheel.anchor.clientX!==at.clientX||wheel.anchor.clientY!==at.clientY)wheel.anchor=captureAnchor(at);
