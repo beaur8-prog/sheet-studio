@@ -70,11 +70,24 @@ export function installZoomInteractions({root,host,getZoom,setZoom,getContext,ca
   win.addEventListener('blur',cancel);
   win.addEventListener('pagehide',cancel);
   win.addEventListener('resize',cancel);
-  if(nativeAndroid)win.addEventListener('sheet-studio-android-wheel',event=>{
-    const d=event.detail;if(!d||d.ctrlKey!==true||![d.deltaY,d.x,d.y].every(Number.isFinite)||d.x<0||d.x>1||d.y<0||d.y>1)return;
-    const v=win.visualViewport;
-    onWheel({ctrlKey:true,deltaY:d.deltaY,deltaMode:0,buttons:d.buttons||0,cancelable:true,defaultPrevented:false,preventDefault(){},clientX:(v?.offsetLeft||0)+d.x*(v?.width||win.innerWidth),clientY:(v?.offsetTop||0)+d.y*(v?.height||win.innerHeight)});
-  });
+  if(nativeAndroid){
+    const nativePoint=d=>{
+      if(!d||![d.x,d.y].every(Number.isFinite)||d.x<0||d.x>1||d.y<0||d.y>1)return null;
+      const v=win.visualViewport;
+      return {clientX:(v?.offsetLeft||0)+d.x*(v?.width||win.innerWidth),clientY:(v?.offsetTop||0)+d.y*(v?.height||win.innerHeight),preventDefault(){}};
+    };
+    win.addEventListener('sheet-studio-android-wheel',event=>{
+      const d=event.detail,at=nativePoint(d);if(!at||d.ctrlKey!==true||!Number.isFinite(d.deltaY))return;
+      onWheel({...at,ctrlKey:true,deltaY:d.deltaY,deltaMode:0,buttons:d.buttons||0,cancelable:true,defaultPrevented:false});
+    });
+    win.addEventListener('sheet-studio-android-pinch',event=>{
+      const d=event.detail,at=nativePoint(d);if(!at||!Number.isFinite(d.scale)||d.scale<=0)return;
+      if(d.phase==='start')onGestureStart(at);
+      else if(d.phase==='change')onGestureChange({...at,scale:d.scale});
+      else if(d.phase==='end')onGestureEnd(at);
+      else if(d.phase==='cancel')cancel();
+    });
+  }
   root.addEventListener('visibilitychange',()=>{if(root.hidden)cancel();});
   return {cancel};
 }

@@ -28,7 +28,8 @@ function harness(nativeAndroid=false){
   const control=installZoomInteractions({root,host:{clientHeight:600,getBoundingClientRect:()=>({left:0,top:0,right:900,bottom:600,width:900,height:600})},getZoom:()=>zoom,setZoom:value=>{zoom=value;calls++;},getContext:()=>context,canZoom:()=>allowed,nativeAndroid});
   const event=(name,props={})=>{const e=new Event(name,{cancelable:true});Object.assign(e,{clientX:200,clientY:200,ctrlKey:true,deltaY:-1,deltaMode:0,buttons:0,...props});root.dispatchEvent(e);return e;};
   const flush=()=>{const f=[...frames.values()];frames.clear();f.forEach(fn=>fn());time+=16;};
-  return {event,flush,control,native:detail=>{const e=new Event('sheet-studio-android-wheel');e.detail=detail;win.dispatchEvent(e);},blur:()=>win.dispatchEvent(new Event('blur')),pagehide:()=>win.dispatchEvent(new Event('pagehide')),get zoom(){return zoom;},get calls(){return calls;},set context(v){context=v;},set allowed(v){allowed=v;}};
+  const native=(type,detail)=>{const e=new Event(type);e.detail=detail;win.dispatchEvent(e);};
+  return {event,flush,control,native:d=>native('sheet-studio-android-wheel',d),pinch:d=>native('sheet-studio-android-pinch',d),blur:()=>win.dispatchEvent(new Event('blur')),pagehide:()=>win.dispatchEvent(new Event('pagehide')),get zoom(){return zoom;},get calls(){return calls;},set context(v){context=v;},set allowed(v){allowed=v;}};
 }
 test('high-rate wheel is coalesced and sub-percent trackpad deltas accumulate across frames',()=>{
   const h=harness();for(let i=0;i<100;i++)h.event('wheel',{deltaY:-.1});h.flush();assert.equal(h.zoom,111);assert.equal(h.calls,1);
@@ -47,8 +48,12 @@ test('WebKit cumulative gesture scale does not multiply updates or duplicate Ctr
   h.event('gesturechange',{scale:1.1});h.event('gestureend');h.flush();assert.equal(h.zoom,110);
 });
 
-test('Android native Ctrl-wheel uses the common zoom and rejects other sources or invalid coordinates',()=>{
+test('Android native Ctrl-wheel and cumulative trackpad pinch use common zoom with guarded coordinates',()=>{
  const a=harness(true),detail={ctrlKey:true,deltaY:-100,x:.5,y:.5,buttons:0};a.native(detail);a.flush();assert.equal(a.zoom,110);
  a.native({...detail,ctrlKey:false});a.flush();assert.equal(a.zoom,110);a.native({...detail,x:NaN});a.flush();assert.equal(a.zoom,110);
  const desktop=harness();desktop.native(detail);desktop.flush();assert.equal(desktop.zoom,100);
+ const p=harness(true),at={x:.5,y:.5,scale:1};p.pinch({...at,phase:'start'});p.pinch({...at,phase:'change',scale:1.25});p.flush();assert.equal(p.zoom,125);
+ p.pinch({...at,phase:'change',scale:1.1});p.pinch({...at,phase:'end'});p.flush();assert.equal(p.zoom,110);
+ p.pinch({...at,phase:'start'});p.pinch({...at,phase:'change',scale:1.4});p.pinch({...at,phase:'cancel'});p.flush();assert.equal(p.zoom,110);
+ desktop.pinch({...at,phase:'start'});desktop.pinch({...at,phase:'change',scale:1.5});desktop.flush();assert.equal(desktop.zoom,100);
 });
