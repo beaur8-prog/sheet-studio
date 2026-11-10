@@ -16,7 +16,7 @@ try{
  const original=await snapshot(),toolbar=await page.locator('.ribbon').boundingBox(),grid=await page.locator('#grid').boundingBox(),point={x:grid.x+350,y:grid.y+215};
  await page.evaluate(()=>{window.nativeWheels=[];window.addEventListener('wheel',e=>nativeWheels.push({ctrl:e.ctrlKey,trusted:e.isTrusted,prevented:e.defaultPrevented}),{passive:true});});
  await page.mouse.move(point.x,point.y);await page.keyboard.down('Control');await page.mouse.wheel(0,-100);await page.keyboard.up('Control');await idle();assert.equal(await scale(),110);
- const cdp=await page.context().newCDPSession(page);await cdp.send('Input.synthesizePinchGesture',{...point,scaleFactor:1.2,relativeSpeed:800,gestureSourceType:'mouse'});await idle();assert.ok(await scale()>110);
+ const cdp=await page.context().newCDPSession(page);await cdp.send('Input.synthesizePinchGesture',{...point,scaleFactor:1.2,relativeSpeed:200,gestureSourceType:'mouse'});await idle();assert.ok(Math.abs((await scale())/110-1.2)<.06);
  assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.getZoomFactor()),1);assert.equal(await page.evaluate(()=>visualViewport.scale),1);assert.equal((await page.locator('.ribbon').boundingBox()).height,toolbar.height);assert.equal(await snapshot(),original);assert.ok(await page.evaluate(()=>nativeWheels.some(e=>e.ctrl&&e.trusted&&e.prevented)));
  await fs.mkdir(path.join(root,'test-results/zoom-gestures'),{recursive:true});await page.screenshot({path:path.join(root,'test-results/zoom-gestures/electron-pinch.png')});assert.deepEqual(errors,[]);
  console.log('PASS actual isolated Electron: trusted Ctrl+wheel and touchpad pinch, sheet scale changes, webContents/page scale stays 1, toolbar/document/selection/history unchanged');
