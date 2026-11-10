@@ -121,7 +121,7 @@ export function installAndroidUI(api) {
   }
   function view() {
     const s=api.state();
-    const el=modal('보기 설정',`<div class="android-list">${button('zoom-out','− 축소')}${button('zoom-in','＋ 확대')}${button('zoom-reset','100%')}${button('fit','선택 영역 너비 맞춤')}${button('toggle-grid','눈금선 표시 전환')}${button('show-formulas','수식 표시 전환')}${button('freeze-first-row','첫 행 고정')}${button('freeze-first-col','첫 열 고정')}${button('freeze-none','틀 고정 해제')}${button('theme','화면 테마 전환')}</div><p class="android-help">시트 배율 ${s.zoom}%. 손가락으로 밀어 스크롤하고 확대 버튼으로 글자를 키울 수 있습니다.</p>${s.mode==='edit'?'<label class="worksheet-check"><input id="android-hardware" type="checkbox" '+(s.hardware?'checked':'')+'>외부 키보드 바로 입력</label><p class="android-help">외부 키보드에서 첫 한글부터 받도록 입력 대상을 준비합니다. 터치 입력은 셀 입력 버튼을 사용하세요.</p>':''}`);
+    const el=modal('보기 설정',`<p class="android-help">터치패드 핀치 또는 Ctrl+마우스 휠로도 시트를 확대·축소할 수 있습니다.</p><div class="android-list">${button('zoom-out','− 축소')}${button('zoom-in','＋ 확대')}${button('zoom-reset','100%')}${button('fit','선택 영역 너비 맞춤')}${button('toggle-grid','눈금선 표시 전환')}${button('show-formulas','수식 표시 전환')}${button('freeze-first-row','첫 행 고정')}${button('freeze-first-col','첫 열 고정')}${button('freeze-none','틀 고정 해제')}${button('theme','화면 테마 전환')}</div><p class="android-help">시트 배율 ${s.zoom}%. 손가락으로 밀어 스크롤하고 확대 버튼으로 글자를 키울 수 있습니다.</p>${s.mode==='edit'?'<label class="worksheet-check"><input id="android-hardware" type="checkbox" '+(s.hardware?'checked':'')+'>외부 키보드 바로 입력</label><p class="android-help">외부 키보드에서 첫 한글부터 받도록 입력 대상을 준비합니다. 터치 입력은 셀 입력 버튼을 사용하세요.</p>':''}`);
     el.querySelector('#android-hardware')?.addEventListener('change',event=>api.hardware(event.target.checked));
   }
   function more() {

@@ -1,6 +1,6 @@
 {
   "name": "lattice-sheet-studio",
-  "version": "0.7.49",
+  "version": "0.7.50",
   "description": "Independent local spreadsheet editor with formulas and XLSX exchange",
   "author": "Sheet Studio",
   "private": true,
@@ -30,7 +30,8 @@
     "docs:check": "node scripts/sync-function-docs.mjs --check",
     "test:android:width": "npm run build && node tests/android-number-width.mjs",
     "test:android:average": "npm run build && node tests/android-average-range.mjs",
-    "test:android:print": "npm run build && node tests/android-print.mjs"
+    "test:android:print": "npm run build && node tests/android-print.mjs",
+    "test:zoom": "npm run build && node tests/zoom-gestures.mjs"
   },
   "dependencies": {
     "@formulajs/formulajs": "4.6.1",
